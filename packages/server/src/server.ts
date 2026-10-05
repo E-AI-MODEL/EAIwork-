@@ -254,30 +254,30 @@ export function makeServer(cfg: Config) {
         const eventId = `ev${store.next()}`;
         let event: EaiEvent;
 
-        if (raw.type === "answer.proposed") {
-          const value = requiredString(raw.value, "answer value", 256);
-          const allowed = optionsFor(atomDef);
-          if (!allowed.includes(value)) return reject(`value must be one of ${allowed.join(", ")}`);
-          const probabilities = normalizeProbabilities(raw.probabilities, allowed);
-          event = { id: eventId, at: today(), actor, type: "answer.proposed", atom: raw.atom, value, ...(probabilities ? { probabilities } : {}) };
-        } else if (raw.type === "evidence.attached") {
-          try {
+        try {
+          if (raw.type === "answer.proposed") {
+            const value = requiredString(raw.value, "answer value", 256);
+            const allowed = optionsFor(atomDef);
+            if (!allowed.includes(value)) return reject(`value must be one of ${allowed.join(", ")}`);
+            const probabilities = normalizeProbabilities(raw.probabilities, allowed);
+            event = { id: eventId, at: today(), actor, type: "answer.proposed", atom: raw.atom, value, ...(probabilities ? { probabilities } : {}) };
+          } else if (raw.type === "evidence.attached") {
             event = { id: eventId, at: today(), actor, type: "evidence.attached", atom: raw.atom, evidence: canonicalEvidence(raw.evidence, actor, eventId) };
-          } catch (e) {
-            if (e instanceof HttpError) return reject(e.message);
-            throw e;
+          } else if (raw.type === "confidence.lowered") {
+            event = { id: eventId, at: today(), actor, type: "confidence.lowered", atom: raw.atom, reason: requiredString(raw.reason, "reason") };
+          } else if (raw.type === "flag.raised") {
+            event = { id: eventId, at: today(), actor, type: "flag.raised", atom: raw.atom, message: requiredString(raw.message, "flag message") };
+          } else if (raw.type === "flag.dismissed") {
+            event = {
+              id: eventId, at: today(), actor, type: "flag.dismissed", atom: raw.atom,
+              flag: requiredString(raw.flag, "flag id", 256), reason: requiredString(raw.reason, "reason"),
+            };
+          } else {
+            event = { id: eventId, at: today(), actor, type: "status.raised", atom: raw.atom, to: raw.to };
           }
-        } else if (raw.type === "confidence.lowered") {
-          event = { id: eventId, at: today(), actor, type: "confidence.lowered", atom: raw.atom, reason: requiredString(raw.reason, "reason") };
-        } else if (raw.type === "flag.raised") {
-          event = { id: eventId, at: today(), actor, type: "flag.raised", atom: raw.atom, message: requiredString(raw.message, "flag message") };
-        } else if (raw.type === "flag.dismissed") {
-          event = {
-            id: eventId, at: today(), actor, type: "flag.dismissed", atom: raw.atom,
-            flag: requiredString(raw.flag, "flag id", 256), reason: requiredString(raw.reason, "reason"),
-          };
-        } else {
-          event = { id: eventId, at: today(), actor, type: "status.raised", atom: raw.atom, to: raw.to };
+        } catch (e) {
+          if (e instanceof HttpError) return reject(e.message);
+          throw e;
         }
 
         const v = validate(event, currentSnapshot().state);
