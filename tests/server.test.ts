@@ -124,6 +124,17 @@ test("only a registered server-side deterministic check can create proven status
   assert.ok(ex.evidence.some((e: any) => e.lineage === "check:budget-approved" && e.deterministic === true));
 });
 
+test("a model cannot replace an answer once non-model evidence exists", async () => {
+  const before = await get(PERSON_TOKEN, "/state");
+  assert.equal(before.atoms["a.fin.017"].status, "proven");
+  const r = await post(MODEL_TOKEN, { type: "answer.proposed", atom: "a.fin.017", value: "no" });
+  assert.equal(r.status, 422);
+  assert.match((await r.json() as any).reason, /cannot replace an answer that has non-model evidence/);
+  const after = await get(PERSON_TOKEN, "/state");
+  assert.equal(after.atoms["a.fin.017"].value, "yes");
+  assert.equal(after.atoms["a.fin.017"].status, "proven");
+});
+
 test("values must be allowed options; unknown atoms and event types are rejected", async () => {
   assert.equal((await post(PERSON_TOKEN, { type: "answer.proposed", atom: "a.plan.003", value: "maybe" })).status, 422);
   assert.equal((await post(PERSON_TOKEN, { type: "answer.proposed", atom: "a.nope", value: "yes" })).status, 422);
