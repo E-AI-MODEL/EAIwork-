@@ -143,6 +143,17 @@ test("values must be allowed options; unknown atoms and event types are rejected
   assert.match((await unknown.json() as any).reason, /unknown event type/);
 });
 
+test("field-validation failures are recorded in the rejection audit", async () => {
+  const before = store.rejections.length;
+  const badAnswer = await post(MODEL_TOKEN, { type: "answer.proposed", atom: "a.fin.017" });
+  assert.equal(badAnswer.status, 422);
+  const badFlag = await post(MODEL_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: "" });
+  assert.equal(badFlag.status, 422);
+  assert.equal(store.rejections.length, before + 2);
+  assert.match(store.rejections.at(-2)!.reason, /answer value/);
+  assert.match(store.rejections.at(-1)!.reason, /flag message/);
+});
+
 test("oversized request bodies are rejected before event processing", async () => {
   const huge = "x".repeat(70 * 1024);
   const r = await post(MODEL_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: huge });
