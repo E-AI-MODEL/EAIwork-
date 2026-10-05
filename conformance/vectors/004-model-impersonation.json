@@ -1,0 +1,6 @@
+{"name":"A model attaches evidence in the name of a person: rejected","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
+  {"id":"e2","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"evidence.attached","atom":"a.fin.017",
+   "evidence":{"id":"ev1","source":"x","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:finance","supports":true}}],
+ "expect":{"a.fin.017":"assumption"},"expectRejected":[1]}

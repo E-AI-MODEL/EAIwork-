@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use this, please cite it as below."
+title: "EAI work"
+version: 0.1.0
+type: software
+authors:
+  - name: "EAI work maintainers"
+# Set date-released, repository-code and license before first publication.

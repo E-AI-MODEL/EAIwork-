@@ -1,0 +1,15 @@
+{
+  "name": "eai-work",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18" },
+  "bin": { "eai": "packages/cli/src/eai.ts" },
+  "scripts": {
+    "test": "node --test \"tests/*.test.ts\" && node conformance/run.ts",
+    "conformance": "node conformance/run.ts",
+    "lint:pack": "node packages/cli/src/eai.ts lint-pack packs/sow-demo/pack.json",
+    "replay:demo": "EAI_NOW=2026-10-05 node packages/cli/src/eai.ts replay packs/sow-demo/pack.json examples/demo/events.jsonl",
+    "serve": "node packages/server/src/server.ts"
+  }
+}

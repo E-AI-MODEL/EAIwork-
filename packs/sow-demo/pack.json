@@ -1,0 +1,29 @@
+{
+  "pack": "sow-demo",
+  "version": "0.1.0",
+  "domain": "school onboarding trajectory (invented demo data)",
+  "clusters": [
+    {"id": "c.fin.budget", "title": "Budget", "atoms": ["a.fin.016", "a.fin.017"]},
+    {"id": "c.plan", "title": "Planning", "atoms": ["a.plan.003"]}
+  ],
+  "atoms": [
+    {"id": "a.fin.016", "question": "Is a budget request filed?", "type": "yesno"},
+    {"id": "a.fin.017", "question": "Is the budget approved by the budget holder?", "type": "yesno",
+     "depends_on": ["a.fin.016"], "valid_for_days": 90},
+    {"id": "a.plan.003", "question": "Is the start date fixed?", "type": "yesno"}
+  ],
+  "rules": [
+    {
+      "id": "R-uncertain-fixed",
+      "when": {"all": [
+        {"atom": "a.plan.003", "value": "yes"},
+        {"atom": "a.fin.017", "status": {"lte": "claim"}}
+      ]},
+      "then": {
+        "flag": "warning",
+        "message": "The start date is fixed but the budget is not yet confirmed.",
+        "suggest": ["attach evidence to a.fin.017"]
+      }
+    }
+  ]
+}

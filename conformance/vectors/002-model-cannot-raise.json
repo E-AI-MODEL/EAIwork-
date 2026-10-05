@@ -1,0 +1,5 @@
+{"name":"A model tries to raise status directly: rejected","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
+  {"id":"e2","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"status.raised","atom":"a.fin.017","to":"proven"}],
+ "expect":{"a.fin.017":"assumption"},"expectRejected":[1]}

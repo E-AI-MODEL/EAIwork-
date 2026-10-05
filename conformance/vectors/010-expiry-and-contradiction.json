@@ -1,0 +1,11 @@
+{"name":"Expired evidence stops supporting; contradiction caps at claim","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-01-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.one","value":"yes"},
+  {"id":"e2","at":"2026-01-01","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.one",
+   "evidence":{"id":"ev1","source":"old form","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:a","supports":true,"valid_until":"2026-06-30"}},
+  {"id":"e3","at":"2026-01-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.two","value":"yes"},
+  {"id":"e4","at":"2026-01-01","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.two",
+   "evidence":{"id":"ev2","source":"form","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:b","supports":true}},
+  {"id":"e5","at":"2026-01-02","actor":{"kind":"system","id":"system:register"},"type":"evidence.attached","atom":"a.two",
+   "evidence":{"id":"ev3","source":"register says no","observer":{"kind":"system","id":"system:register"},"mode":"observed","lineage":"origin:c","supports":false}}],
+ "expect":{"a.one":"assumption","a.two":"claim"},"expectRejected":[]}

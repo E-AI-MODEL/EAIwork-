@@ -1,0 +1,6 @@
+{"name":"A person reports it: claim","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
+  {"id":"e2","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.fin.017",
+   "evidence":{"id":"ev1","source":"mail 2026-09-30","observer":{"kind":"person","id":"person:jan"},"mode":"reported","lineage":"origin:finance","supports":true}}],
+ "expect":{"a.fin.017":"claim"},"expectRejected":[]}

@@ -1,0 +1,6 @@
+{"name":"A check that is not deterministic is rejected","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
+  {"id":"e2","at":"2026-10-02","actor":{"kind":"check","id":"check:calc"},"type":"check.passed","atom":"a.fin.017",
+   "evidence":{"id":"ev2","source":"llm review","observer":{"kind":"check","id":"check:calc"},"mode":"observed","lineage":"origin:calc","supports":true,"deterministic":false}}],
+ "expect":{"a.fin.017":"assumption"},"expectRejected":[1]}

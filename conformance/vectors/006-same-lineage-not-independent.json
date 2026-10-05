@@ -1,0 +1,8 @@
+{"name":"Two items from the same origin are one source: not checked","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
+  {"id":"e2","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.fin.017",
+   "evidence":{"id":"ev1","source":"sheet","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:sheet","supports":true}},
+  {"id":"e3","at":"2026-10-02","actor":{"kind":"system","id":"system:register"},"type":"evidence.attached","atom":"a.fin.017",
+   "evidence":{"id":"ev2","source":"mail quoting the sheet","observer":{"kind":"system","id":"system:register"},"mode":"reported","lineage":"origin:sheet","supports":true}}],
+ "expect":{"a.fin.017":"observed"},"expectRejected":[]}

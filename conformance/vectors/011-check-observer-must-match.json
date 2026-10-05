@@ -1,0 +1,32 @@
+{
+  "name": "A deterministic check cannot attach evidence under another check identity: rejected",
+  "now": "2026-10-05",
+  "events": [
+    {
+      "id": "e1",
+      "at": "2026-10-01",
+      "actor": {"kind": "model", "id": "model:x"},
+      "type": "answer.proposed",
+      "atom": "a.fin.017",
+      "value": "yes"
+    },
+    {
+      "id": "e2",
+      "at": "2026-10-02",
+      "actor": {"kind": "check", "id": "check:calc"},
+      "type": "check.passed",
+      "atom": "a.fin.017",
+      "evidence": {
+        "id": "ev2",
+        "source": "recomputed total",
+        "observer": {"kind": "check", "id": "check:other"},
+        "mode": "observed",
+        "lineage": "origin:calc",
+        "supports": true,
+        "deterministic": true
+      }
+    }
+  ],
+  "expect": {"a.fin.017": "assumption"},
+  "expectRejected": [1]
+}
