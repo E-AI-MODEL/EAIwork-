@@ -6,10 +6,8 @@
 
 **Split work into the smallest checkable questions. Keep evidence and its origin visible. Derive status instead of editing it.**
 
-EAI work is an experimental evidence-first workbench. AI may propose an answer, flag a problem or lower confidence. It may not raise the status of its own output. Stronger status comes from person-attached evidence, independent origins or deterministic non-LLM checks.
+EAI work is an evidence-first workbench. AI may propose an answer, flag a problem or lower confidence. It may not raise the status of its own output. Stronger status comes from person-attached evidence, independent origins or deterministic non-LLM checks.
 
-> [!IMPORTANT]
-> **Research status:** v0.1 is a working skeleton, not a validated method. The central claim that bottom-up assembly from verified atoms is more reliable or inspectable than top-down generation is still untested. Research claims and our own design claims are separated in `evidence/bibliography.yaml`.
 
 ## What it looks like
 

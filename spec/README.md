@@ -1,7 +1,5 @@
 # EAI work specification (v0.1 draft)
 
-Labels used everywhere: **[research]**, **[our design]**, **[untested]**.
-
 1. **Atoms.** One question, one typed answer (yes/no, fixed choice, short score), answerable by one observer. "unknown" is always allowed.
 2. **Status ladder.** unknown < assumption < claim < observed < checked < proven. Status is derived from current evidence, never edited.
 3. **Evidence.** Each item has observer, mode (reported/observed), lineage, supports flag, optional validity.

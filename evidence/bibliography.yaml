@@ -44,7 +44,3 @@
   claim: Typed judgments with calibrated probabilities over fixed options, fast and cheap.
   ref: "TypeSafe / Jev (vendor material)"
   type: vendor-claim
-- id: eai-central-claim
-  claim: Bottom-up assembly from verified atoms is more reliable and inspectable than top-down generation.
-  ref: "Not yet tested. Milestone M8."
-  type: our-own
