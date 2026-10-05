@@ -32,7 +32,9 @@ Status follows this ladder:
 
 `unknown → assumption → claim → observed → checked → proven`
 
-The transition is asymmetric. A model answer can create an assumption. A person report can create a claim. First-hand observation can create observed status. Independent origins can create checked status. A deterministic check can create proven status. Status is recalculated from the event log and current evidence each time.
+The transition is asymmetric. A model answer can create an assumption. A person report can create a claim. First-hand observation can create observed status. Independent trusted actors can create checked status. A deterministic server-registered check can create proven status. Status is recalculated from the event log and current evidence each time.
+
+In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
 
 ## System shape
 
@@ -60,10 +62,12 @@ npm test
 npm run lint:pack
 npm run replay:demo
 cp tokens.example.json tokens.json
+# Replace every REPLACE_... key with a random secret, for example:
+# openssl rand -hex 32
 EAI_TOKENS=tokens.json npm run serve
 ```
 
-Open `http://localhost:8787` and use one of the development tokens from `tokens.example.json`.
+Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. Set `EAI_HOST` only when you deliberately want to expose it on another interface.
 
 Useful CLI commands:
 
@@ -96,8 +100,8 @@ eai verify-log <data-dir>
 
 - **Derived status:** no actor edits status directly.
 - **Model asymmetry:** models may not raise status or impersonate a person.
-- **Lineage-aware independence:** duplicate origins do not count as independent confirmation.
-- **Deterministic proof:** `proven` requires a deterministic check path.
+- **Server-controlled independence:** public clients cannot mint extra evidence origins; person/system lineage is derived from trusted actor identity.
+- **Deterministic proof:** `proven` requires a server-registered deterministic check; public clients cannot submit `check.passed`.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
 - **Review wording:** no flags means “not detected”, not “safe”.

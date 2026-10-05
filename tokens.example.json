@@ -1,5 +1,5 @@
 {
-  "dev-token-jan":   {"kind": "person", "id": "person:jan"},
-  "dev-token-model": {"kind": "model",  "id": "model:demo"},
-  "dev-token-check": {"kind": "check",  "id": "check:calc"}
+  "REPLACE_WITH_RANDOM_64_HEX_PERSON_TOKEN": {"kind": "person", "id": "person:jan"},
+  "REPLACE_WITH_RANDOM_64_HEX_MODEL_TOKEN":  {"kind": "model",  "id": "model:demo"},
+  "REPLACE_WITH_RANDOM_64_HEX_CHECK_TOKEN":  {"kind": "check",  "id": "check:calc"}
 }
