@@ -29,6 +29,13 @@ export function validate(e: EaiEvent | any, state: State): Verdict {
 
   if (!ALLOWED[e.actor.kind as ActorKind].has(e.type)) return no(`${e.actor.kind} cannot emit ${e.type}`);
 
+  if (e.type === "answer.proposed" && e.actor.kind === "model") {
+    const existing = state[e.atom];
+    if (existing?.evidence.some((item) => item.observer.kind !== "model")) {
+      return no("model cannot replace an answer that has non-model evidence");
+    }
+  }
+
   if (e.type === "check.passed") {
     if (!e.evidence || typeof e.evidence !== "object") return no("check.passed needs evidence");
     if (e.evidence.observer?.kind !== "check" || e.evidence.observer?.id !== e.actor.id) {
