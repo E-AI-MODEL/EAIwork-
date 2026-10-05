@@ -65,6 +65,19 @@ test("values must be allowed options; unknown atoms are rejected", async () => {
   assert.equal((await post("tj", { type: "answer.proposed", atom: "a.nope", value: "yes" })).status, 422);
 });
 
+test("actor-raised flags are visible and a person can dismiss them", async () => {
+  assert.equal((await post("tj", { type: "answer.proposed", atom: "a.fin.016", value: "yes" })).status, 201);
+  assert.equal((await post("tm", { type: "flag.raised", atom: "a.fin.016", message: "model concern" })).status, 201);
+  const state = await get("tj", "/state");
+  const flag = state.flags.find((x: any) => x.message === "model concern");
+  assert.ok(flag);
+  const explanation = await get("tj", "/explain/a.fin.016");
+  assert.ok(explanation.flags.some((x: any) => x.message === "model concern" && !x.dismissed));
+  assert.equal((await post("tj", { type: "flag.dismissed", atom: "a.fin.016", flag: flag.rule, reason: "reviewed" })).status, 201);
+  const after = await get("tj", "/state");
+  assert.ok(!after.flags.some((x: any) => x.message === "model concern"));
+});
+
 test("gateway: provider output is clamped to fixed options and routed", async () => {
   const atom = pack.atoms.find((a: any) => a.id === "a.plan.003");
   const res = await ask(
@@ -80,12 +93,22 @@ test("gateway: provider output is clamped to fixed options and routed", async ()
 test("log hash chain verifies, and detects tampering", async () => {
   assert.deepEqual(await get("tj", "/log/verify"), { ok: true });
   const file = join(dir, "events.jsonl");
-  const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
-  const first = JSON.parse(lines[0]); first.event.value = "no"; lines[0] = JSON.stringify(first);
-  writeFileSync(file, lines.join("\n") + "\n");
+  const original = readFileSync(file, "utf8");
+  const originalLines = original.split("\n").filter(Boolean);
+
+  const tampered = [...originalLines];
+  const first = JSON.parse(tampered[0]); first.event.value = "no"; tampered[0] = JSON.stringify(first);
+  writeFileSync(file, tampered.join("\n") + "\n");
   assert.equal(store.verify().ok, false);
   const { Store } = await import("../packages/server/src/store.ts");
   assert.equal(new Store(dir).verify().ok, false);
+
+  writeFileSync(file, original);
+  assert.equal(new Store(dir).verify().ok, true);
+
+  writeFileSync(file, originalLines.slice(0, -1).join("\n") + "\n");
+  assert.equal(new Store(dir).verify().ok, false);
+  writeFileSync(file, original);
 });
 
 

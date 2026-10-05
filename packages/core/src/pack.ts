@@ -1,3 +1,4 @@
+import { LADDER } from "./types.ts";
 export interface PackAtom {
   id: string; question: string; type: "yesno" | "choice" | "score";
   options?: string[]; depends_on?: string[]; valid_for_days?: number; impact?: "low" | "high";
@@ -45,9 +46,22 @@ export function lintPack(p: Pack): string[] {
     state.set(id, 2);
   };
   for (const id of ids) visit(id, []);
-  // rules may only name known atoms
-  const walk = (c: any): string[] => !c ? [] : c.all ? c.all.flatMap(walk) : c.any ? c.any.flatMap(walk) : c.not ? walk(c.not) : c.atom ? [c.atom] : [];
-  for (const r of p.rules ?? []) for (const a of walk(r.when)) if (!ids.has(a)) err.push(`rule ${r.id}: unknown atom ${a}`);
+  // Rules may only name known atoms and real status values.
+  const validStatuses = new Set<string>(LADDER);
+  const walk = (c: any, ruleId: string): string[] => {
+    if (!c) return [];
+    if (c.all) return c.all.flatMap((x: any) => walk(x, ruleId));
+    if (c.any) return c.any.flatMap((x: any) => walk(x, ruleId));
+    if (c.not) return walk(c.not, ruleId);
+    if (!c.atom) return [];
+    for (const [op, value] of Object.entries(c.status ?? {})) {
+      if (!validStatuses.has(String(value))) err.push(`rule ${ruleId}: invalid status ${op} ${value}`);
+    }
+    return [c.atom];
+  };
+  for (const r of p.rules ?? []) {
+    for (const a of walk(r.when, r.id)) if (!ids.has(a)) err.push(`rule ${r.id}: unknown atom ${a}`);
+  }
   return err;
 }
 

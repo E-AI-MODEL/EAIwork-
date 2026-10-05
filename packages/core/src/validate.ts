@@ -22,7 +22,7 @@ export function validate(e: EaiEvent, state: State): Verdict {
     }
     if (e.actor.kind === "check") return no("check evidence must use check.passed");
   }
-  if (e.type === "flag.dismissed" && e.actor.kind === "model") return no("only a person dismisses flags");
+  if (e.type === "flag.dismissed" && e.actor.kind !== "person") return no("only a person dismisses flags");
   if (e.type === "confidence.lowered" && !e.reason) return no("lowering confidence needs a reason");
   if (e.type !== "answer.proposed" && !(e.atom in state)) return no(`unknown atom ${e.atom}`);
   return { ok: true };

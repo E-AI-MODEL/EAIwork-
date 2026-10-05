@@ -19,10 +19,10 @@ test("lint finds duplicates, unknown deps, cycles, orphans, bad rules", () => {
       { id: "a.one", question: "dup", type: "yesno" },
       { id: "a.orphan", question: "q", type: "choice" },
     ],
-    rules: [{ id: "R", when: { atom: "a.nope" }, then: {} }],
+    rules: [{ id: "R", when: { atom: "a.nope", status: { gte: "prove" } }, then: {} }],
   };
   const e = lintPack(bad).join("\n");
-  for (const needle of ["duplicate atom id a.one", "unknown atom a.ghost", "dependency cycle", "in no cluster", "at least 2 options", "rule R: unknown atom a.nope"])
+  for (const needle of ["duplicate atom id a.one", "unknown atom a.ghost", "dependency cycle", "in no cluster", "at least 2 options", "rule R: unknown atom a.nope", "rule R: invalid status gte prove"])
     assert.match(e, new RegExp(needle));
 });
 

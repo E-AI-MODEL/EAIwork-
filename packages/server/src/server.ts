@@ -31,6 +31,12 @@ export function makeServer(cfg: Config) {
 
   const view = () => {
     const r = replay(store.events, today(), validFor);
+    const ruleFlags = runRules(cfg.pack.rules ?? [], r.state, r.derived);
+    const actorFlags = Object.entries(r.state).flatMap(([atom, atomState]) =>
+      atomState.flags
+        .filter((flag) => !flag.dismissed)
+        .map((flag) => ({ rule: flag.id, flag: "info", message: flag.message, atom, by: flag.by })),
+    );
     return {
       r,
       body: {
@@ -47,7 +53,7 @@ export function makeServer(cfg: Config) {
         }])),
         clusters: cfg.pack.clusters,
         distribution: distribution(cfg.pack, r.derived),
-        flags: runRules(cfg.pack.rules ?? [], r.state, r.derived),
+        flags: [...ruleFlags, ...actorFlags],
         shaky: propagate(cfg.pack, r.derived),
         coverage: coverage(cfg.pack, r.state, r.derived),
         checksum: r.checksum,
@@ -94,7 +100,12 @@ export function makeServer(cfg: Config) {
         const id = decodeURIComponent(url.pathname.slice(9));
         const { r } = view();
         if (!atoms.has(id)) return json(res, 404, { error: "unknown atom" });
-        return json(res, 200, { atom: id, ...derive(r.state[id], today(), { validForDays: validFor[id] }), evidence: r.state[id]?.evidence ?? [] });
+        return json(res, 200, {
+          atom: id,
+          ...derive(r.state[id], today(), { validForDays: validFor[id] }),
+          evidence: r.state[id]?.evidence ?? [],
+          flags: r.state[id]?.flags ?? [],
+        });
       }
       if (req.method === "GET" && url.pathname === "/weakest") {
         const goals = (url.searchParams.get("goal") ?? "").split(",").filter(Boolean);
