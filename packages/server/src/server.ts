@@ -51,6 +51,7 @@ export function makeServer(cfg: Config) {
         shaky: propagate(cfg.pack, r.derived),
         coverage: coverage(cfg.pack, r.state, r.derived),
         checksum: r.checksum,
+        rejectedAttempts: store.rejections.length,
         note: "Nothing flagged means not detected, not safe.",
       },
     };
@@ -64,24 +65,27 @@ export function makeServer(cfg: Config) {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         return res.end(readFileSync(new URL("../../client/index.html", import.meta.url)));
       }
-      const actor = cfg.tokens[(req.headers.authorization ?? "").replace(/^Bearer /, "")];
+      const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
+      const actor = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
       if (!actor) return json(res, 401, { error: "missing or unknown token" });
 
       if (req.method === "POST" && url.pathname === "/events") {
         const raw = JSON.parse((await readBody(req)) || "{}");
+        const attempted = { ...raw, actor, at: today() };
+        const reject = (reason: string) => {
+          store.recordRejection({ at: today(), actor, attempted, reason });
+          return json(res, 422, { rejected: true, reason });
+        };
         const atomDef = atoms.get(raw.atom);
-        if (!atomDef) return json(res, 422, { rejected: true, reason: `unknown atom ${raw.atom}` });
+        if (!atomDef) return reject(`unknown atom ${raw.atom}`);
         // Identity, id and time are set by the server. Whatever the client sent for them is ignored.
         const event = { ...raw, actor, id: `ev${store.next()}`, at: today() } as EaiEvent;
         if (event.type === "answer.proposed" && !optionsFor(atomDef).includes(event.value)) {
-          return json(res, 422, { rejected: true, reason: `value must be one of ${optionsFor(atomDef).join(", ")}` });
+          return reject(`value must be one of ${optionsFor(atomDef).join(", ")}`);
         }
         const { r } = view();
         const v = validate(event, r.state);
-        if (!v.ok) {
-          // Rejections are part of the record: attempts to bypass the rules must be visible.
-          return json(res, 422, { rejected: true, reason: v.reason });
-        }
+        if (!v.ok) return reject(v.reason);
         const line = store.append(event);
         return json(res, 201, { seq: line.seq, hash: line.hash });
       }

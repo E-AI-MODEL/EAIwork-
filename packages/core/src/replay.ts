@@ -7,7 +7,11 @@ export function apply(state: State, e: EaiEvent): State {
   const s: State = structuredClone(state);
   const a = (s[e.atom] ??= { evidence: [], flags: [], lowered: [] });
   switch (e.type) {
-    case "answer.proposed": a.value = e.value; if (e.probabilities) a.probabilities = e.probabilities; break;
+    case "answer.proposed":
+      if (a.value !== undefined && a.value !== e.value) a.evidence = [];
+      a.value = e.value;
+      a.probabilities = e.probabilities;
+      break;
     case "evidence.attached":
     case "check.passed": a.evidence.push({ ...e.evidence, attached_at: e.at }); break;
     case "confidence.lowered": a.lowered.push(e.reason); break;

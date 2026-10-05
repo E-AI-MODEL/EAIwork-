@@ -25,13 +25,17 @@ const post = (token: string, body: unknown) =>
   fetch(base + "/events", { method: "POST", headers: { authorization: "Bearer " + token }, body: JSON.stringify(body) });
 const get = async (token: string, path: string) => (await fetch(base + path, { headers: { authorization: "Bearer " + token } })).json() as any;
 
-test("no token: 401", async () => assert.equal((await fetch(base + "/state")).status, 401));
+test("no token or inherited object property: 401", async () => {
+  assert.equal((await fetch(base + "/state")).status, 401);
+  assert.equal((await fetch(base + "/state", { headers: { authorization: "Bearer constructor" } })).status, 401);
+});
 
 test("a model proposes; its attempt to raise status is rejected", async () => {
   assert.equal((await post("tm", { type: "answer.proposed", atom: "a.fin.017", value: "yes" })).status, 201);
   const raise = await post("tm", { type: "status.raised", atom: "a.fin.017", to: "proven" });
   assert.equal(raise.status, 422);
   assert.match((await raise.json() as any).reason, /model cannot raise status/);
+  assert.match(store.rejections.at(-1)!.reason, /model cannot raise status/);
   assert.equal((await get("tj", "/state")).atoms["a.fin.017"].status, "assumption");
 });
 
@@ -79,6 +83,7 @@ test("log hash chain verifies, and detects tampering", async () => {
   const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
   const first = JSON.parse(lines[0]); first.event.value = "no"; lines[0] = JSON.stringify(first);
   writeFileSync(file, lines.join("\n") + "\n");
+  assert.equal(store.verify().ok, false);
   const { Store } = await import("../packages/server/src/store.ts");
   assert.equal(new Store(dir).verify().ok, false);
 });

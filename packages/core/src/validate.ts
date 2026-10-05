@@ -16,11 +16,11 @@ export function validate(e: EaiEvent, state: State): Verdict {
     }
     if (e.evidence.deterministic !== true) return no("check must be deterministic (non-LLM)");
   }
-  if (e.type === "evidence.attached" && e.actor.kind === "model" && e.evidence.observer.kind !== "model") {
-    return no("model cannot attach evidence under another observer");
-  }
-  if (e.type === "evidence.attached" && e.evidence.observer.id !== e.actor.id) {
-    return no("evidence observer must match the actor");
+  if (e.type === "evidence.attached") {
+    if (e.evidence.observer.kind !== e.actor.kind || e.evidence.observer.id !== e.actor.id) {
+      return no("evidence observer must match the actor kind and id");
+    }
+    if (e.actor.kind === "check") return no("check evidence must use check.passed");
   }
   if (e.type === "flag.dismissed" && e.actor.kind === "model") return no("only a person dismisses flags");
   if (e.type === "confidence.lowered" && !e.reason) return no("lowering confidence needs a reason");
