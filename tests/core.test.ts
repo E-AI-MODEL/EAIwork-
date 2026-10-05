@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  agreement, coverage, derive, distribution, lintPack, propagate, replay, weakestLink, type Pack,
+  agreement, coverage, derive, distribution, fitTemperature, lintPack, propagate, replay, route, temperatureScale, weakestLink, type Pack,
 } from "../packages/core/src/index.ts";
 
 const pack: Pack = JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json", import.meta.url), "utf8"));
@@ -71,8 +71,23 @@ test("agreement: kappa 1 for identical, low for disagreement", () => {
   assert.ok(diff.kappa < 0.5);
 });
 
+test("temperature scaling softens, fit finds T>1 for an overconfident model", () => {
+  const p = { yes: 0.9, no: 0.05, unknown: 0.05 };
+  assert.ok(temperatureScale(p, 2).yes < 0.9);
+  const sum = Object.values(temperatureScale(p, 2)).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - 1) < 1e-9);
+  // Model says 90% yes but is right only 5 of 10 times.
+  const samples = Array.from({ length: 10 }, (_, i) => ({ probabilities: p, truth: i < 5 ? "yes" : "no" }));
+  assert.ok(fitTemperature(samples) > 1);
+});
 
+test("routing: unknown, low confidence and high impact go to a person; nothing auto-raises", () => {
+  assert.equal(route({ yes: 0.95, no: 0.03, unknown: 0.02 }, "low"), "accept-as-assumption");
+  assert.equal(route({ yes: 0.95, no: 0.03, unknown: 0.02 }, "high"), "ask-person");
+  assert.equal(route({ yes: 0.5, no: 0.2, unknown: 0.3 }, "low"), "ask-person");
+  assert.equal(route({ yes: 0.1, no: 0.1, unknown: 0.8 }, "low"), "ask-person");
+});
 
 test("derive: unknown answer is its own status", () => {
-  assert.equal(derive({ value: "unknown", evidence: [], flags: [] }, "2026-10-05").status, "unknown");
+  assert.equal(derive({ value: "unknown", evidence: [], flags: [], lowered: [] }, "2026-10-05").status, "unknown");
 });

@@ -17,9 +17,10 @@ export interface Evidence {
 }
 
 export type EaiEvent =
-  | { id: string; at: string; actor: Actor; type: "answer.proposed"; atom: string; value: string }
+  | { id: string; at: string; actor: Actor; type: "answer.proposed"; atom: string; value: string; probabilities?: Record<string, number> }
   | { id: string; at: string; actor: Actor; type: "evidence.attached"; atom: string; evidence: Evidence }
   | { id: string; at: string; actor: Actor; type: "check.passed"; atom: string; evidence: Evidence }
+  | { id: string; at: string; actor: Actor; type: "confidence.lowered"; atom: string; reason: string }
   | { id: string; at: string; actor: Actor; type: "flag.raised"; atom: string; message: string }
   | { id: string; at: string; actor: Actor; type: "flag.dismissed"; atom: string; flag: string; reason: string }
   | { id: string; at: string; actor: Actor; type: "status.raised"; atom: string; to: Status };
@@ -28,6 +29,8 @@ export interface AtomState {
   value?: string;
   evidence: Evidence[];
   flags: { id: string; message: string; by: Actor; dismissed?: boolean }[];
+  lowered: string[];
+  probabilities?: Record<string, number>;
 }
 export type State = Record<string, AtomState>;
 

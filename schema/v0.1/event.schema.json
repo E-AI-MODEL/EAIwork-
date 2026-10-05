@@ -16,7 +16,7 @@
       }
     },
     "type": {"enum": ["answer.proposed", "evidence.attached", "check.passed",
-                       "flag.raised", "flag.dismissed", "status.raised"]},
+                       "confidence.lowered", "flag.raised", "flag.dismissed", "status.raised"]},
     "atom": {"type": "string", "pattern": "^a\\.[a-z0-9.]+$"}
   }
 }
