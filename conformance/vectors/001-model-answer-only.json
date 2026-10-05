@@ -1,0 +1,3 @@
+{"name":"A model answer without evidence stays an assumption","now":"2026-10-05",
+ "events":[{"id":"e1","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"}],
+ "expect":{"a.fin.017":"assumption"},"expectRejected":[]}

@@ -1,0 +1,4 @@
+{"id":"e1","at":"2026-09-20","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.plan.003","value":"yes"}
+{"id":"e2","at":"2026-09-21","actor":{"kind":"model","id":"model:x"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"}
+{"id":"e3","at":"2026-09-21","actor":{"kind":"model","id":"model:x"},"type":"status.raised","atom":"a.fin.017","to":"proven"}
+{"id":"e4","at":"2026-09-30","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.fin.017","evidence":{"id":"ev1","source":"mail 2026-09-30","observer":{"kind":"person","id":"person:jan"},"mode":"reported","lineage":"origin:finance-dept","supports":true,"valid_until":"2026-12-31"}}

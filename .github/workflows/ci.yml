@@ -1,0 +1,29 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Unit, server and gateway tests
+        run: node --test "tests/*.test.ts"
+      - name: Conformance vectors (asymmetry guard, determinism)
+        run: npm run conformance
+      - name: Packs must lint clean
+        run: |
+          for p in packs/*/pack.json; do node packages/cli/src/eai.ts lint-pack "$p"; done
+      - name: Demo replay must reject the model's status raise
+        run: |
+          npm run --silent replay:demo | tee out.txt
+          grep -q "REJECTED event e3: model cannot raise status" out.txt
+      - name: Core must not use the network
+        run: "! grep -rnE \"fetch\\(|node:http|node:https|node:net\" packages/core/src"
+      - name: Bibliography has a type for every source
+        run: "! grep -n 'type: *$' evidence/bibliography.yaml"

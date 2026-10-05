@@ -1,0 +1,4 @@
+/schema/                 @eai-work/maintainers
+/packages/core/src/validate.ts  @eai-work/maintainers @eai-work/security
+/conformance/            @eai-work/maintainers
+/spec/                   @eai-work/maintainers

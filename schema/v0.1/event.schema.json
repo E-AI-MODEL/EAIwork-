@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.org/eai/schema/v0.1/event.schema.json",
+  "title": "EAI event",
+  "type": "object",
+  "required": ["id", "at", "actor", "type", "atom"],
+  "properties": {
+    "id": {"type": "string"},
+    "at": {"type": "string", "format": "date"},
+    "actor": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {"enum": ["person", "system", "model", "check"]},
+        "id": {"type": "string"}
+      }
+    },
+    "type": {"enum": ["answer.proposed", "evidence.attached", "check.passed",
+                       "confidence.lowered", "flag.raised", "flag.dismissed", "status.raised"]},
+    "atom": {"type": "string", "pattern": "^a\\.[a-z0-9.]+$"}
+  }
+}

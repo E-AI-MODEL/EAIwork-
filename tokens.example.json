@@ -1,0 +1,5 @@
+{
+  "dev-token-jan":   {"kind": "person", "id": "person:jan"},
+  "dev-token-model": {"kind": "model",  "id": "model:demo"},
+  "dev-token-check": {"kind": "check",  "id": "check:calc"}
+}
