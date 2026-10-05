@@ -289,6 +289,7 @@ export function makeServer(cfg: Config) {
 
       if (req.method === "POST" && url.pathname.startsWith("/checks/")) {
         requireWritableIntegrity();
+        await readBody(req, maxBodyBytes);
         if (actor.kind !== "check") return json(res, 403, { error: "check runner token required" });
         const id = decodeURIComponent(url.pathname.slice("/checks/".length));
         const check = cfg.checks?.[id];
