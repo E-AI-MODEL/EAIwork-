@@ -1,6 +1,6 @@
-{"name":"Evidence written by a model never raises status","now":"2026-10-05",
+{"name":"A model cannot attach evidence","now":"2026-10-05",
  "events":[
   {"id":"e1","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"answer.proposed","atom":"a.fin.017","value":"yes"},
   {"id":"e2","at":"2026-10-01","actor":{"kind":"model","id":"model:x"},"type":"evidence.attached","atom":"a.fin.017",
    "evidence":{"id":"ev1","source":"summary of budget.pdf","observer":{"kind":"model","id":"model:x"},"mode":"observed","lineage":"origin:finance","supports":true}}],
- "expect":{"a.fin.017":"assumption"},"expectRejected":[]}
+ "expect":{"a.fin.017":"assumption"},"expectRejected":[1]}

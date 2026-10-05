@@ -1,0 +1,5 @@
+{"name":"Unknown event types are rejected","now":"2026-10-05",
+ "events":[
+  {"id":"e1","at":"2026-10-01","actor":{"kind":"person","id":"person:jan"},"type":"future.magic","atom":"a.fin.017","value":"yes"}
+ ],
+ "expect":{},"expectRejected":[0]}
