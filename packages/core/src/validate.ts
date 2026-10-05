@@ -11,6 +11,9 @@ export function validate(e: EaiEvent, state: State): Verdict {
   }
   if (e.type === "check.passed") {
     if (e.actor.kind !== "check") return no("check.passed must come from a check runner");
+    if (e.evidence.observer.kind !== "check" || e.evidence.observer.id !== e.actor.id) {
+      return no("check evidence observer must match the check runner");
+    }
     if (e.evidence.deterministic !== true) return no("check must be deterministic (non-LLM)");
   }
   if (e.type === "evidence.attached" && e.actor.kind === "model" && e.evidence.observer.kind !== "model") {
