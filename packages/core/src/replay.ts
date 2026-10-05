@@ -4,8 +4,9 @@ import { validate } from "./validate.ts";
 import { deriveAll } from "./derive.ts";
 
 export function apply(state: State, e: EaiEvent): State {
-  const s: State = structuredClone(state);
-  const a = (s[e.atom] ??= { evidence: [], flags: [], lowered: [] });
+  const previous = state[e.atom] ?? { evidence: [], flags: [], lowered: [] };
+  const a = structuredClone(previous);
+  const s: State = { ...state, [e.atom]: a };
   switch (e.type) {
     case "answer.proposed":
       if (a.value !== undefined && a.value !== e.value) a.evidence = [];
@@ -27,7 +28,7 @@ export function replay(events: EaiEvent[], now: string, validForDays: Record<str
   events.forEach((e, index) => {
     const v = validate(e, state);
     if (v.ok) state = apply(state, e);
-    else rejected.push({ index, id: e.id, reason: v.reason });
+    else rejected.push({ index, id: e?.id ?? `index-${index}`, reason: v.reason });
   });
   const derived = deriveAll(state, now, validForDays);
   const checksum = createHash("sha256")
