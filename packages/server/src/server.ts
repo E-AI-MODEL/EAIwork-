@@ -9,7 +9,7 @@ import { Store } from "./store.ts";
 export interface DeterministicCheck {
   atom: string;
   source: string;
-  allowedActorId?: string;
+  allowedActorId: string;
   run(input: { pack: Pack; state: State }): boolean;
 }
 
@@ -136,7 +136,7 @@ export function makeServer(cfg: Config) {
 
   const atoms = new Map(cfg.pack.atoms.map((a) => [a.id, a]));
   for (const [id, check] of Object.entries(cfg.checks ?? {})) {
-    if (!id.trim() || !atoms.has(check.atom) || typeof check.run !== "function" || !check.source?.trim()) {
+    if (!id.trim() || !atoms.has(check.atom) || typeof check.run !== "function" || !check.source?.trim() || !check.allowedActorId?.trim()) {
       throw new Error(`invalid deterministic check configuration: ${id}`);
     }
   }
@@ -294,7 +294,7 @@ export function makeServer(cfg: Config) {
         const id = decodeURIComponent(url.pathname.slice("/checks/".length));
         const check = cfg.checks?.[id];
         if (!check) return json(res, 404, { error: "unknown deterministic check" });
-        if (check.allowedActorId && check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
+        if (check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
 
         const r = currentSnapshot();
         let passed = false;
