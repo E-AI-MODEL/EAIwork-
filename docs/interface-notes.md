@@ -35,9 +35,9 @@ The browser client no longer looks like a generic card list. Its major regions c
 - review signals;
 - event-log integrity.
 
-### 4. No confidence theatre
+### 4. Statuses stay separate
 
-There is no gauge, percentage-complete score or “AI confidence” headline. EAI work keeps all six statuses separate. Counts are allowed; one aggregate score is not.
+There is no gauge, percentage-complete score or aggregate progress headline. EAI work keeps all six statuses separate. Counts are allowed; one aggregate score is not.
 
 ### 5. Evidence gets a dedicated reading surface
 

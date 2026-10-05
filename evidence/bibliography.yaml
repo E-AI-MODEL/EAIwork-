@@ -20,14 +20,6 @@
   claim: Many judges give few effective votes.
   ref: "arXiv 2605.29800 (single author)"
   type: preprint
-- id: guo-2017
-  claim: Temperature scaling calibrates neural network confidence.
-  ref: "Guo et al., arXiv 1706.04599 (ICML 2017)"
-  type: peer-reviewed
-- id: abstentionbench-2025
-  claim: Models are weak at abstaining when they should.
-  ref: "arXiv 2506.09038"
-  type: preprint
 - id: maker-2025
   claim: Extreme decomposition into minimal steps with voting can run over a million steps without error; decomposition was given by humans.
   ref: "arXiv 2511.09030"
@@ -40,10 +32,6 @@
   claim: People over-rely on AI suggestions even when explanations are given.
   ref: "Bansal et al., arXiv 2006.14779"
   type: peer-reviewed
-- id: jev-typesafe
-  claim: Typed judgments with calibrated probabilities over fixed options, fast and cheap.
-  ref: "TypeSafe / Jev (vendor material)"
-  type: vendor-claim
 - id: eai-central-claim
   claim: Bottom-up assembly from verified atoms is more reliable and inspectable than top-down generation.
   ref: "Not yet tested. Milestone M8."

@@ -6,7 +6,7 @@
 
 **Split work into the smallest checkable questions. Keep evidence and its origin visible. Derive status instead of editing it.**
 
-EAI work is an experimental evidence-first workbench. AI may propose an answer, flag a problem or lower confidence. It may not raise the status of its own output. Stronger status comes from person-attached evidence, independent origins or deterministic non-LLM checks.
+EAI work is an experimental evidence-first workbench. AI may propose an answer or flag a problem. It may not raise the status of its own output. Stronger status comes from person-attached evidence, independent origins or deterministic non-LLM checks.
 
 > [!IMPORTANT]
 > **Research status:** v0.1 is a working skeleton, not a validated method. The central claim that bottom-up assembly from verified atoms is more reliable or inspectable than top-down generation is still untested. Research claims and our own design claims are separated in `evidence/bibliography.yaml`.
@@ -82,7 +82,7 @@ eai verify-log <data-dir>
 
 | Path | Purpose |
 |---|---|
-| `packages/core` | Derivation, validation, replay, rules, analysis, agreement and calibration. No network. |
+| `packages/core` | Derivation, validation, replay, rules, analysis and agreement. No network. |
 | `packages/server` | Token-derived identity, hash-chained event storage and HTTP API. |
 | `packages/client` | Dependency-free evidence-first workbench. |
 | `packages/gateway` | Typed model interface. Mock provider only in v0.1. |
@@ -101,7 +101,7 @@ eai verify-log <data-dir>
 - **Lineage-aware independence:** duplicate origins do not count as independent confirmation.
 - **Deterministic proof:** `proven` requires a deterministic check path.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.
-- **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
+- **Separate status counts:** reporting keeps atom statuses separate instead of collapsing them into one score.
 - **Review wording:** no flags means “not detected”, not “safe”.
 
 The normative behavior lives in `conformance/vectors/`. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.

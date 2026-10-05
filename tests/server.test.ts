@@ -78,16 +78,20 @@ test("actor-raised flags are visible and a person can dismiss them", async () =>
   assert.ok(!after.flags.some((x: any) => x.message === "model concern"));
 });
 
-test("gateway: provider output is clamped to fixed options and routed", async () => {
+test("gateway: provider output is clamped to fixed options", async () => {
   const atom = pack.atoms.find((a: any) => a.id === "a.plan.003");
-  const res = await ask(
-    mockProvider("model:demo", { "a.plan.003": { yes: 0.9, no: 0.05, banana: 5 } }), atom,
+  const accepted = await ask(
+    mockProvider("model:demo", { "a.plan.003": "yes" }), atom,
     { at: "2026-10-05", eventId: "g1" },
   );
-  assert.equal(res.event.type, "answer.proposed");
-  assert.equal((res.event as any).value, "yes");
-  assert.ok(!("banana" in res.probabilities));
-  assert.equal(res.route, "accept-as-assumption"); // 0.947 confidence, low impact
+  assert.equal(accepted.event.type, "answer.proposed");
+  assert.equal((accepted.event as any).value, "yes");
+
+  const invalid = await ask(
+    mockProvider("model:demo", { "a.plan.003": "banana" }), atom,
+    { at: "2026-10-05", eventId: "g2" },
+  );
+  assert.equal((invalid.event as any).value, "unknown");
 });
 
 test("log hash chain verifies, and detects tampering", async () => {
