@@ -156,9 +156,10 @@ export function makeServer(cfg: Config) {
     }
   }
 
-  const store = new Store(cfg.dir, cfg.witness);
+  const store = new Store(cfg.dir, cfg.witness, { exclusiveWriter: true });
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
+    store.close();
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
@@ -415,6 +416,7 @@ export function makeServer(cfg: Config) {
       return json(res, 500, { error: "internal server error" });
     }
   });
+  server.on("close", () => store.close());
   return { server, store };
 }
 
