@@ -192,7 +192,7 @@ Een orchestrator heeft expliciet `workers`-recht nodig:
 
 De worker-capability staat los van gewone state-toegang. Een execute-only orchestrator kan daarom een worker starten zonder `/state` te kunnen lezen en zonder gewone `/events` te kunnen schrijven.
 
-De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. De scheduler krijgt na een geslaagde run alleen de event `seq` en `hash` terug, niet de modeluitkomst of probabilities.
+De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. Een geslaagde worker-run antwoordt met HTTP `204 No Content`. De scheduler krijgt dus ook geen event-hash, modeluitkomst of probabilities terug.
 
 ## Output
 
@@ -234,6 +234,6 @@ Wijzigingen aan workers moeten blijven aantonen dat:
 - iedere uitvoering een verse modelsessie krijgt;
 - output beperkt blijft tot de vaste atomopties;
 - de orchestrator geen state hoeft te kunnen lezen of gewone events hoeft te kunnen schrijven;
-- de workerresponse de modeluitkomst niet teruglekt naar de scheduler.
+- een succesvolle workerresponse volledig bodyloos is en geen modeluitkomst of event-commitment teruglekt naar de scheduler.
 
 Deze eisen horen bij de architectuur, niet bij een specifieke provider.
