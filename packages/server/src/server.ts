@@ -1,10 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   coverage, derive, distribution, lintPack, optionsFor, propagate, replay, runRules, validate, weakestLink,
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
+import { canAudit, canRead, canRunCheck, canWrite, validatePrincipals, type Principal } from "./authz.ts";
+import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 
 export interface DeterministicCheck {
   atom: string;
@@ -16,8 +20,9 @@ export interface DeterministicCheck {
 export interface Config {
   dir: string;
   pack: Pack;
-  /** token -> actor. Tokens are secrets and must be at least 32 characters. */
-  tokens: Record<string, Actor>;
+  /** token -> principal. Access is default-deny and explicit per atom/check. */
+  tokens: Record<string, Principal>;
+  witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
@@ -84,18 +89,6 @@ const requiredString = (value: unknown, field: string, max = 4096): string => {
   return value;
 };
 
-function validateTokens(tokens: Record<string, Actor>) {
-  const entries = Object.entries(tokens);
-  if (!entries.length) throw new Error("at least one access token is required");
-  for (const [token, actor] of entries) {
-    if (token.length < 32) throw new Error("access tokens must be at least 32 characters");
-    if (/^(REPLACE_|dev-token-)/.test(token)) throw new Error("placeholder or example access tokens are not allowed");
-    if (!actor || !ACTOR_KINDS.has(actor.kind) || typeof actor.id !== "string" || !actor.id.trim()) {
-      throw new Error("every token must map to a valid actor");
-    }
-  }
-}
-
 function normalizeProbabilities(value: unknown, allowed: string[]): Record<string, number> | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new HttpError(422, "probabilities must be an object");
@@ -132,16 +125,16 @@ function canonicalEvidence(raw: any, actor: Actor, eventId: string) {
 export function makeServer(cfg: Config) {
   const problems = lintPack(cfg.pack);
   if (problems.length) throw new Error("pack is invalid:\n" + problems.join("\n"));
-  validateTokens(cfg.tokens);
-
   const atoms = new Map(cfg.pack.atoms.map((a) => [a.id, a]));
+  validatePrincipals(cfg.tokens, cfg.pack, Object.keys(cfg.checks ?? {}), ACTOR_KINDS);
+
   for (const [id, check] of Object.entries(cfg.checks ?? {})) {
     if (!id.trim() || !atoms.has(check.atom) || typeof check.run !== "function" || !check.source?.trim() || !check.allowedActorId?.trim()) {
       throw new Error(`invalid deterministic check configuration: ${id}`);
     }
   }
 
-  const store = new Store(cfg.dir);
+  const store = new Store(cfg.dir, cfg.witness);
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
@@ -168,35 +161,57 @@ export function makeServer(cfg: Config) {
     if (!integrity.ok) throw new HttpError(503, "event log integrity check failed");
   };
 
-  const view = () => {
+  const scoped = (principal: Principal) => {
     const r = currentSnapshot();
-    const ruleFlags = runRules(cfg.pack.rules ?? [], r.state, r.derived);
-    const actorFlags = Object.entries(r.state).flatMap(([atom, atomState]) =>
+    const visible = new Set(cfg.pack.atoms.filter((a) => canRead(principal, a.id)).map((a) => a.id));
+    const visibleAtoms = cfg.pack.atoms
+      .filter((a) => visible.has(a.id))
+      .map((a) => ({ ...a, depends_on: (a.depends_on ?? []).filter((id) => visible.has(id)) }));
+    const visiblePack: Pack = {
+      ...cfg.pack,
+      atoms: visibleAtoms,
+      clusters: cfg.pack.clusters
+        .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((id) => visible.has(id)) }))
+        .filter((cluster) => cluster.atoms.length > 0),
+      rules: principal.access.read === "*" ? cfg.pack.rules : [],
+    };
+    const visibleState = Object.fromEntries(Object.entries(r.state).filter(([id]) => visible.has(id)));
+    const visibleDerived = Object.fromEntries(Object.entries(r.derived).filter(([id]) => visible.has(id)));
+    const ruleFlags = runRules(visiblePack.rules ?? [], visibleState, visibleDerived);
+    const actorFlags = Object.entries(visibleState).flatMap(([atom, atomState]) =>
       atomState.flags
         .filter((flag) => !flag.dismissed)
         .map((flag) => ({ rule: flag.id, flag: "info", message: flag.message, atom, by: flag.by })),
     );
+    const checksum = createHash("sha256")
+      .update(JSON.stringify(Object.entries(visibleDerived).map(([id, d]) => [id, d.status]).sort()))
+      .digest("hex");
+
     return {
       r,
+      visible,
+      visiblePack,
+      visibleState,
+      visibleDerived,
       body: {
         asOf: snapshotDate,
         pack: { id: cfg.pack.pack, version: cfg.pack.version, domain: cfg.pack.domain ?? null },
-        atoms: Object.fromEntries(cfg.pack.atoms.map((a) => [a.id, {
+        atoms: Object.fromEntries(visibleAtoms.map((a) => [a.id, {
           question: a.question,
           type: a.type,
           dependsOn: a.depends_on ?? [],
           impact: a.impact ?? null,
           validForDays: a.valid_for_days ?? null,
-          value: r.state[a.id]?.value ?? null,
-          ...derive(r.state[a.id], snapshotDate, { validForDays: validFor[a.id] }),
+          value: visibleState[a.id]?.value ?? null,
+          ...derive(visibleState[a.id], snapshotDate, { validForDays: validFor[a.id] }),
         }])),
-        clusters: cfg.pack.clusters,
-        distribution: distribution(cfg.pack, r.derived),
+        clusters: visiblePack.clusters,
+        distribution: distribution(visiblePack, visibleDerived),
         flags: [...ruleFlags, ...actorFlags],
-        shaky: propagate(cfg.pack, r.derived),
-        coverage: coverage(cfg.pack, r.state, r.derived),
-        checksum: r.checksum,
-        rejectedAttempts: store.rejections.length,
+        shaky: propagate(visiblePack, visibleDerived),
+        coverage: coverage(visiblePack, visibleState, visibleDerived),
+        checksum,
+        ...(canAudit(principal) ? { rejectedAttempts: store.rejections.length } : {}),
         note: "Nothing flagged means not detected, not safe.",
       },
     };
@@ -219,8 +234,9 @@ export function makeServer(cfg: Config) {
       }
 
       const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
-      const actor = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
-      if (!actor) return json(res, 401, { error: "missing or unknown token" });
+      const principal = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
+      if (!principal) return json(res, 401, { error: "missing or unknown token" });
+      const actor = principal.actor;
 
       const nowMs = Date.now();
       const bucket = rate.get(token);
@@ -249,6 +265,10 @@ export function makeServer(cfg: Config) {
           return reject("unknown event type");
         }
 
+        if (!canWrite(principal, raw.atom)) {
+          store.recordRejection({ at: today(), actor, attempted, reason: "write access denied" });
+          return json(res, 403, { error: "write access denied" });
+        }
         const atomDef = atoms.get(raw.atom);
         if (!atomDef) return reject(`unknown atom ${raw.atom}`);
         const eventId = `ev${store.next()}`;
@@ -292,6 +312,7 @@ export function makeServer(cfg: Config) {
         await readBody(req, maxBodyBytes);
         if (actor.kind !== "check") return json(res, 403, { error: "check runner token required" });
         const id = decodeURIComponent(url.pathname.slice("/checks/".length));
+        if (!canRunCheck(principal, id)) return json(res, 403, { error: "check access denied" });
         const check = cfg.checks?.[id];
         if (!check) return json(res, 404, { error: "unknown deterministic check" });
         if (check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
@@ -329,11 +350,11 @@ export function makeServer(cfg: Config) {
         return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
       }
 
-      if (req.method === "GET" && url.pathname === "/state") return json(res, 200, view().body);
+      if (req.method === "GET" && url.pathname === "/state") return json(res, 200, scoped(principal).body);
       if (req.method === "GET" && url.pathname.startsWith("/explain/")) {
         const id = decodeURIComponent(url.pathname.slice(9));
-        const { r } = view();
-        if (!atoms.has(id)) return json(res, 404, { error: "unknown atom" });
+        const { r, visible } = scoped(principal);
+        if (!visible.has(id)) return json(res, 404, { error: "unknown or unavailable atom" });
         return json(res, 200, {
           atom: id,
           ...derive(r.state[id], snapshotDate, { validForDays: validFor[id] }),
@@ -343,9 +364,14 @@ export function makeServer(cfg: Config) {
       }
       if (req.method === "GET" && url.pathname === "/weakest") {
         const goals = (url.searchParams.get("goal") ?? "").split(",").filter(Boolean);
-        return json(res, 200, weakestLink(cfg.pack, currentSnapshot().derived, goals));
+        const { visiblePack, visibleDerived, visible } = scoped(principal);
+        if (goals.some((id) => !visible.has(id))) return json(res, 404, { error: "unknown or unavailable atom" });
+        return json(res, 200, weakestLink(visiblePack, visibleDerived, goals));
       }
-      if (req.method === "GET" && url.pathname === "/log/verify") return json(res, 200, store.verify());
+      if (req.method === "GET" && url.pathname === "/log/verify") {
+        if (!canAudit(principal)) return json(res, 403, { error: "audit access required" });
+        return json(res, 200, store.verify());
+      }
       return json(res, 404, { error: "not found" });
     } catch (e: any) {
       if (e instanceof HttpError) return json(res, e.status, { error: e.expose ? e.message : "internal server error" });
@@ -359,10 +385,27 @@ export function makeServer(cfg: Config) {
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").href) {
   const tokenFile = process.env.EAI_TOKENS;
   if (!tokenFile) throw new Error("EAI_TOKENS is required; the server never falls back to example credentials");
+  const witnessDir = process.env.EAI_WITNESS_DIR;
+  const privateKeyFile = process.env.EAI_WITNESS_PRIVATE_KEY;
+  const publicKeyFile = process.env.EAI_WITNESS_PUBLIC_KEY;
+  if (!witnessDir || !privateKeyFile || !publicKeyFile) {
+    throw new Error("EAI_WITNESS_DIR, EAI_WITNESS_PRIVATE_KEY and EAI_WITNESS_PUBLIC_KEY are required");
+  }
+  const dataDir = resolve(process.env.EAI_DIR ?? "./data");
+  const resolvedWitnessDir = resolve(witnessDir);
+  if (resolvedWitnessDir === dataDir || resolvedWitnessDir.startsWith(dataDir + "/")) {
+    throw new Error("EAI_WITNESS_DIR must be outside EAI_DIR");
+  }
+  const witness = new SignedFileAnchorWitness(
+    resolvedWitnessDir,
+    readFileSync(privateKeyFile, "utf8"),
+    readFileSync(publicKeyFile, "utf8"),
+  );
   const { server } = makeServer({
-    dir: process.env.EAI_DIR ?? "./data",
+    dir: dataDir,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
+    witness,
   });
   const port = Number(process.env.PORT ?? 8787);
   const host = process.env.EAI_HOST ?? "127.0.0.1";
