@@ -16,6 +16,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Atom workers receive server-built `AtomCapsule` objects only: local question, fixed options, aliased values of declared dependencies and bounded snippets from declared source handles.
 - Worker HTTP calls accept no prompt/context payload. The source broker receives only an opaque handle, never the pack or target atom.
 - Every atom execution opens a fresh single-use model session. Direct worker-to-worker messaging, shared scratchpads and swarm blackboards are outside the worker API.
+- Worker execution is a separate capability from read/write access. An execute-only scheduler can run atoms without seeing `/state` or writing `/events`; completed worker calls return bodyless 204 responses and do not reveal model output or internal acceptance/rejection.
 - Public `/events` requests cannot create `check.passed` events.
 - Person/system evidence lineage is derived by the server from actor identity. Client-supplied lineage is ignored.
 - `proven` can only be reached through a deterministic check registered inside the server process.
