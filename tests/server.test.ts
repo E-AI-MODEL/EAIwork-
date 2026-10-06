@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { appendFileSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -167,7 +167,7 @@ test("server owns the datastore writer lock and secures local permissions", () =
 
   assert.equal(statSync(dir).mode & 0o777, 0o700);
   const eventFile = join(dir, "events.jsonl");
-  if (statSync(eventFile).isFile()) assert.equal(statSync(eventFile).mode & 0o777, 0o600);
+  if (existsSync(eventFile)) assert.equal(statSync(eventFile).mode & 0o777, 0o600);
 });
 
 test("authorization is default-deny per atom and does not leak hidden metadata", async () => {
