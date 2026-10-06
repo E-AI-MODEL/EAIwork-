@@ -426,9 +426,8 @@ test("server-owned worker gets only its atom capsule and writes an assumption", 
   assert.equal(denied.status, 403);
 
   const run = await post(ORCHESTRATOR_TOKEN, {}, "/workers/a.fin.017");
-  assert.equal(run.status, 201);
-  const body = await run.json() as any;
-  assert.deepEqual(Object.keys(body).sort(), ["hash", "seq"]);
+  assert.equal(run.status, 204);
+  assert.equal(await run.text(), "");
   assert.equal((await get(PERSON_TOKEN, "/state")).atoms["a.fin.017"].status, "assumption");
 
   const orchestratorState = await fetch(base + "/state", { headers: { authorization: "Bearer " + ORCHESTRATOR_TOKEN } });
@@ -581,9 +580,8 @@ test("actor-raised flags are visible and a person can dismiss them", async () =>
 test("worker endpoint clamps provider output without exposing model result to the scheduler", async () => {
   workerAnswers["Is the start date fixed?"] = { yes: 0.9, no: 0.05, banana: 5 };
   const response = await post(ORCHESTRATOR_TOKEN, {}, "/workers/a.plan.003");
-  assert.equal(response.status, 201);
-  const body = await response.json() as any;
-  assert.deepEqual(Object.keys(body).sort(), ["hash", "seq"]);
+  assert.equal(response.status, 204);
+  assert.equal(await response.text(), "");
 
   const event = store.events.at(-1) as any;
   assert.equal(event.type, "answer.proposed");
