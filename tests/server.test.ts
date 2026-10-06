@@ -1,20 +1,36 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { makeServer } from "../packages/server/src/server.ts";
+import { SignedFileAnchorWitness } from "../packages/server/src/witness.ts";
 import { ask, mockProvider } from "../packages/gateway/src/gateway.ts";
 
 const pack = JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json", import.meta.url), "utf8"));
 const PERSON_TOKEN = "p".repeat(40);
 const MODEL_TOKEN = "m".repeat(40);
 const CHECK_TOKEN = "c".repeat(40);
+const LIMITED_TOKEN = "l".repeat(40);
 const tokens = {
-  [PERSON_TOKEN]: { kind: "person", id: "person:jan" } as const,
-  [MODEL_TOKEN]: { kind: "model", id: "model:demo" } as const,
-  [CHECK_TOKEN]: { kind: "check", id: "check:calc" } as const,
+  [PERSON_TOKEN]: {
+    actor: { kind: "person", id: "person:jan" } as const,
+    access: { read: "*" as const, write: "*" as const, audit: true },
+  },
+  [MODEL_TOKEN]: {
+    actor: { kind: "model", id: "model:demo" } as const,
+    access: { read: "*" as const, write: "*" as const },
+  },
+  [CHECK_TOKEN]: {
+    actor: { kind: "check", id: "check:calc" } as const,
+    access: { read: "*" as const, write: [], checks: ["budget-approved"] },
+  },
+  [LIMITED_TOKEN]: {
+    actor: { kind: "person", id: "person:limited" } as const,
+    access: { read: ["a.fin.017"], write: ["a.fin.017"] },
+  },
 };
 const checks = {
   "budget-approved": {
@@ -26,8 +42,13 @@ const checks = {
 };
 
 const dir = mkdtempSync(join(tmpdir(), "eai-"));
+const witnessDir = mkdtempSync(join(tmpdir(), "eai-witness-"));
+const keyPair = generateKeyPairSync("ed25519");
+const privateKeyPem = keyPair.privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const publicKeyPem = keyPair.publicKey.export({ format: "pem", type: "spki" }).toString();
+const witness = new SignedFileAnchorWitness(witnessDir, privateKeyPem, publicKeyPem);
 const { server, store } = makeServer({
-  dir, pack, today: () => "2026-10-05", tokens, checks,
+  dir, pack, today: () => "2026-10-05", tokens, checks, witness,
 });
 await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -38,20 +59,66 @@ const post = (token: string, body: unknown, path = "/events") =>
 const get = async (token: string, path: string) =>
   (await fetch(base + path, { headers: { authorization: "Bearer " + token } })).json() as any;
 
-test("weak or placeholder tokens are rejected at startup", () => {
+test("weak, placeholder, or unscoped principals are rejected at startup", () => {
+  const actor = { kind: "person", id: "person:x" } as const;
+  const access = { read: "*" as const, write: "*" as const };
   assert.throws(
-    () => makeServer({ dir: mkdtempSync(join(tmpdir(), "eai-weak-")), pack, tokens: { short: { kind: "person", id: "person:x" } } }),
+    () => makeServer({
+      dir: mkdtempSync(join(tmpdir(), "eai-weak-")), pack,
+      tokens: { short: { actor, access } }, witness,
+    }),
     /at least 32 characters/,
   );
   assert.throws(
-    () => makeServer({ dir: mkdtempSync(join(tmpdir(), "eai-placeholder-")), pack, tokens: { REPLACE_WITH_RANDOM_TOKEN_1234567890: { kind: "person", id: "person:x" } } }),
+    () => makeServer({
+      dir: mkdtempSync(join(tmpdir(), "eai-placeholder-")), pack,
+      tokens: { REPLACE_WITH_RANDOM_TOKEN_1234567890: { actor, access } }, witness,
+    }),
     /placeholder or example/,
+  );
+  assert.throws(
+    () => makeServer({
+      dir: mkdtempSync(join(tmpdir(), "eai-unscoped-")), pack,
+      tokens: { ["u".repeat(40)]: { actor } as any }, witness,
+    }),
+    /access policy/,
   );
 });
 
 test("no token or inherited object property: 401", async () => {
   assert.equal((await fetch(base + "/state")).status, 401);
   assert.equal((await fetch(base + "/state", { headers: { authorization: "Bearer constructor" } })).status, 401);
+});
+
+test("authorization is default-deny per atom and does not leak hidden metadata", async () => {
+  const before = await get(LIMITED_TOKEN, "/state");
+  assert.deepEqual(Object.keys(before.atoms), ["a.fin.017"]);
+  assert.deepEqual(before.clusters, [{ id: "c.fin.budget", title: "Budget", atoms: ["a.fin.017"] }]);
+  assert.deepEqual(before.atoms["a.fin.017"].dependsOn, []);
+  assert.equal("rejectedAttempts" in before, false);
+  assert.equal(JSON.stringify(before).includes("a.fin.016"), false);
+  assert.equal(JSON.stringify(before).includes("a.plan.003"), false);
+
+  const hiddenExplain = await fetch(base + "/explain/a.fin.016", { headers: { authorization: "Bearer " + LIMITED_TOKEN } });
+  assert.equal(hiddenExplain.status, 404);
+  const hiddenWeakest = await fetch(base + "/weakest?goal=a.fin.016", { headers: { authorization: "Bearer " + LIMITED_TOKEN } });
+  assert.equal(hiddenWeakest.status, 404);
+
+  const denied = await post(LIMITED_TOKEN, { type: "answer.proposed", atom: "a.fin.016", value: "yes" });
+  assert.equal(denied.status, 403);
+
+  const checksumBefore = before.checksum;
+  assert.equal((await post(MODEL_TOKEN, { type: "answer.proposed", atom: "a.plan.003", value: "yes" })).status, 201);
+  const after = await get(LIMITED_TOKEN, "/state");
+  assert.equal(after.checksum, checksumBefore);
+});
+
+test("audit endpoints require explicit audit permission", async () => {
+  const denied = await fetch(base + "/log/verify", { headers: { authorization: "Bearer " + MODEL_TOKEN } });
+  assert.equal(denied.status, 403);
+  const allowed = await fetch(base + "/log/verify", { headers: { authorization: "Bearer " + PERSON_TOKEN } });
+  assert.equal(allowed.status, 200);
+  assert.equal((await allowed.json() as any).ok, true);
 });
 
 test("a model proposes; its attempt to raise status is rejected", async () => {
@@ -196,16 +263,29 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   writeFileSync(file, tampered.join("\n") + "\n");
   assert.equal(store.verify().ok, false);
   const { Store } = await import("../packages/server/src/store.ts");
-  assert.equal(new Store(dir).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks }), /integrity check failed/);
+  assert.equal(new Store(dir, witness).verify().ok, false);
+  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
 
   writeFileSync(file, original);
-  assert.equal(new Store(dir).verify().ok, true);
+  assert.equal(new Store(dir, witness).verify().ok, true);
 
   writeFileSync(file, originalLines.slice(0, -1).join("\n") + "\n");
-  assert.equal(new Store(dir).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks }), /integrity check failed/);
+  assert.equal(new Store(dir, witness).verify().ok, false);
+  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
   writeFileSync(file, original);
+
+  const headFile = join(dir, "events.head");
+  const originalHead = readFileSync(headFile, "utf8");
+  const rollback = originalLines.slice(0, -1);
+  const rollbackLast = JSON.parse(rollback.at(-1)!);
+  writeFileSync(file, rollback.join("\n") + "\n");
+  writeFileSync(headFile, JSON.stringify({ seq: rollback.length, hash: rollbackLast.hash }) + "\n");
+  const witnessedRollback = new Store(dir, witness).verify();
+  assert.equal(witnessedRollback.ok, false);
+  assert.match(witnessedRollback.reason ?? "", /external witness/);
+  writeFileSync(file, original);
+  writeFileSync(headFile, originalHead);
+  assert.equal(new Store(dir, witness).verify().ok, true);
 });
 
 test("state exposes pack and dependency metadata for the workbench", async () => {
