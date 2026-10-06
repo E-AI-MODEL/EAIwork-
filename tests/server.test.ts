@@ -445,6 +445,72 @@ test("server-owned worker gets only its atom capsule and writes an assumption", 
   }
 });
 
+test("worker result is discarded when a declared input changes during generation", async () => {
+  const raceDir = mkdtempSync(join(tmpdir(), "eai-worker-race-"));
+  const raceWitnessDir = mkdtempSync(join(tmpdir(), "eai-worker-race-witness-"));
+  const raceWitness = new SignedFileAnchorWitness(raceWitnessDir, privateKeyPem, publicKeyPem);
+
+  let release!: () => void;
+  const releasePromise = new Promise<void>((resolve) => { release = resolve; });
+  let started!: () => void;
+  const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+
+  const raceWorkers = {
+    default: {
+      provider: {
+        id: "model:slow",
+        openSession: () => ({
+          answer: async () => {
+            started();
+            await releasePromise;
+            return { yes: 1, no: 0, unknown: 0 };
+          },
+        }),
+      },
+      broker: { read: async () => ["budget holder approved"] },
+    },
+  };
+
+  const isolated = makeServer({
+    dir: raceDir,
+    pack,
+    today: () => "2026-10-05",
+    tokens,
+    workers: raceWorkers,
+    witness: raceWitness,
+  });
+  await new Promise<void>((resolve) => isolated.server.listen(0, "127.0.0.1", resolve));
+  const isolatedBase = `http://127.0.0.1:${(isolated.server.address() as AddressInfo).port}`;
+
+  const workerRequest = fetch(isolatedBase + "/workers/a.fin.017", {
+    method: "POST",
+    headers: { authorization: "Bearer " + ORCHESTRATOR_TOKEN },
+    body: "{}",
+  });
+  await startedPromise;
+
+  const changedInput = await fetch(isolatedBase + "/events", {
+    method: "POST",
+    headers: { authorization: "Bearer " + PERSON_TOKEN },
+    body: JSON.stringify({ type: "answer.proposed", atom: "a.fin.016", value: "yes" }),
+  });
+  assert.equal(changedInput.status, 201);
+
+  release();
+  const workerResponse = await workerRequest;
+  assert.equal(workerResponse.status, 204);
+
+  const state = await (
+    await fetch(isolatedBase + "/state", { headers: { authorization: "Bearer " + PERSON_TOKEN } })
+  ).json() as any;
+  assert.equal(state.atoms["a.fin.017"].value, null);
+  assert.match(isolated.store.rejections.at(-1)!.reason, /worker inputs changed during execution/);
+
+  await new Promise<void>((resolve, reject) =>
+    isolated.server.close((err) => err ? reject(err) : resolve()),
+  );
+});
+
 test("public API tokens cannot represent model actors", () => {
   const modelToken = "z".repeat(40);
   const modelDir = mkdtempSync(join(tmpdir(), "eai-model-token-"));
