@@ -15,8 +15,8 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Person/system evidence lineage is derived by the server from actor identity. Client-supplied lineage is ignored.
 - `proven` can only be reached through a deterministic check registered inside the server process.
 - The server refuses to start when its event log fails integrity verification.
-- Event and rejection heads are signed with Ed25519 and checked against a witness outside the datastore. Rewriting both a log and its local head is not sufficient to hide rollback.
-- The signing private key must not live in the datastore or witness directory. A host-level attacker with access to the signing key remains outside this threat model.
+- Event and rejection heads are signed with Ed25519 and appended to witness journals outside the datastore. Rewriting both a log and its local head is not sufficient to hide rollback while the witness store itself is not rolled back.
+- The signing private key must not live in the datastore or witness directory. The witness store should be on separate, rollback-resistant storage. A host-level attacker with the signing key or control of both rollback domains remains outside this threat model.
 - Direct server startup requires an explicit token file and binds to `127.0.0.1` unless `EAI_HOST` is set deliberately.
 
 Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits and injection through evidence text.
