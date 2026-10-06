@@ -184,6 +184,15 @@ export function makeServer(cfg: Config) {
     if (!integrity.ok) throw new HttpError(503, "event log integrity check failed");
   };
 
+  const appendStateEvent = (event: EaiEvent) => {
+    const before = store.events.length;
+    try {
+      return store.append(event);
+    } finally {
+      if (store.events.length !== before) refreshSnapshot();
+    }
+  };
+
   const scoped = (principal: Principal) => {
     const r = currentSnapshot();
     const visible = new Set(cfg.pack.atoms.filter((a) => canRead(principal, a.id)).map((a) => a.id));
@@ -325,8 +334,7 @@ export function makeServer(cfg: Config) {
 
         const v = validate(event, currentSnapshot().state);
         if (!v.ok) return reject(v.reason);
-        const line = store.append(event);
-        refreshSnapshot();
+        const line = appendStateEvent(event);
         return json(res, 201, { seq: line.seq, hash: line.hash });
       }
 
@@ -383,8 +391,7 @@ export function makeServer(cfg: Config) {
         };
         const v = validate(event, r.state);
         if (!v.ok) throw new HttpError(500, v.reason, false);
-        const line = store.append(event);
-        refreshSnapshot();
+        const line = appendStateEvent(event);
         return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
       }
 
