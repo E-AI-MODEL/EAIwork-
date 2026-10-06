@@ -6,14 +6,50 @@ on:
       - main
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
+  verify:
     if: startsWith(github.event.head_commit.message, 'Release v0.1.0')
     runs-on: ubuntu-latest
     steps:
       - name: Check out release commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Unit, server and gateway tests
+        run: node --test "tests/*.test.ts"
+
+      - name: Conformance vectors
+        run: npm run conformance
+
+      - name: Packs must lint clean
+        run: |
+          for p in packs/*/pack.json; do node packages/cli/src/eai.ts lint-pack "$p"; done
+
+      - name: Demo replay must reject the model's status raise
+        run: |
+          npm run --silent replay:demo | tee out.txt
+          grep -q "REJECTED event e3: model cannot raise status" out.txt
+
+      - name: Core must not use the network
+        run: "! grep -rnE \"fetch\\(|node:http|node:https|node:net\" packages/core/src"
+
+      - name: Bibliography has a type for every source
+        run: "! grep -n 'type: *$' evidence/bibliography.yaml"
+
+  release:
+    if: startsWith(github.event.head_commit.message, 'Release v0.1.0')
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out verified release commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Create v0.1.0 release
@@ -26,4 +62,8 @@ jobs:
             exit 0
           fi
 
-          gh release create v0.1.0             --repo "$GH_REPO"             --target "$GITHUB_SHA"             --title "EAI work v0.1.0"             --notes-file docs/releases/v0.1.0.md
+          gh release create v0.1.0 \
+            --repo "$GH_REPO" \
+            --target "$GITHUB_SHA" \
+            --title "EAI work v0.1.0" \
+            --notes-file docs/releases/v0.1.0.md
