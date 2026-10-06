@@ -13,6 +13,7 @@ const pack = JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json", impo
 const PERSON_TOKEN = "p".repeat(40);
 const MODEL_TOKEN = "m".repeat(40);
 const CHECK_TOKEN = "c".repeat(40);
+const BLIND_CHECK_TOKEN = "b".repeat(40);
 const LIMITED_TOKEN = "l".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
@@ -26,6 +27,10 @@ const tokens = {
   [CHECK_TOKEN]: {
     actor: { kind: "check", id: "check:calc" } as const,
     access: { read: "*" as const, write: [], checks: ["budget-approved"] },
+  },
+  [BLIND_CHECK_TOKEN]: {
+    actor: { kind: "check", id: "check:calc" } as const,
+    access: { read: [], write: [], checks: ["budget-approved"] },
   },
   [LIMITED_TOKEN]: {
     actor: { kind: "person", id: "person:limited" } as const,
@@ -187,6 +192,12 @@ test("public clients cannot submit check.passed", async () => {
   assert.equal(r.status, 422);
   assert.match((await r.json() as any).reason, /server-generated only/);
   assert.equal((await get(PERSON_TOKEN, "/state")).atoms["a.fin.017"].status, "observed");
+});
+
+test("check permission alone cannot probe a hidden atom", async () => {
+  const r = await post(BLIND_CHECK_TOKEN, {}, "/checks/budget-approved");
+  assert.equal(r.status, 403);
+  assert.match((await r.json() as any).error, /target read access denied/);
 });
 
 test("only a registered server-side deterministic check can create proven status", async () => {
