@@ -7,7 +7,8 @@ import {
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
-import { canAudit, canRead, canRunCheck, canWrite, validatePrincipals, type Principal } from "./authz.ts";
+import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
+import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 
 export interface DeterministicCheck {
@@ -18,6 +19,12 @@ export interface DeterministicCheck {
   run(input: { pack: Pack; state: State }): boolean;
 }
 
+export interface WorkerRuntime {
+  provider: ModelProvider;
+  broker: SourceBroker;
+  temperature?: number;
+}
+
 export interface Config {
   dir: string;
   pack: Pack;
@@ -25,6 +32,7 @@ export interface Config {
   tokens: Record<string, Principal>;
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
+  workers?: Record<string, WorkerRuntime>;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -243,7 +251,7 @@ export function makeServer(cfg: Config) {
         shaky: propagate(visiblePack, visibleDerived),
         coverage: coverage(visiblePack, visibleState, visibleDerived),
         checksum,
-        ...(canAudit(principal) ? { rejectedAttempts: store.rejections.length } : {}),
+        ...(canAudit(principal) && visible.size === cfg.pack.atoms.length ? { rejectedAttempts: store.rejections.length } : {}),
         note: "Nothing flagged means not detected, not safe.",
       },
     };
@@ -335,7 +343,101 @@ export function makeServer(cfg: Config) {
         const v = validate(event, currentSnapshot().state);
         if (!v.ok) return reject(v.reason);
         const line = appendStateEvent(event);
-        return json(res, 201, { seq: line.seq, hash: line.hash });
+        const fullAudit = canAudit(principal) && cfg.pack.atoms.every((atom) => canRead(principal, atom.id));
+        if (fullAudit) return json(res, 201, { seq: line.seq, hash: line.hash });
+        res.writeHead(201, {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        return res.end();
+      }
+
+      if (req.method === "POST" && url.pathname.startsWith("/workers/")) {
+        requireWritableIntegrity();
+        let body: any;
+        try {
+          body = JSON.parse((await readBody(req, maxBodyBytes)) || "{}");
+        } catch (e) {
+          if (e instanceof HttpError) throw e;
+          throw new HttpError(400, "invalid JSON");
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length > 0) {
+          return json(res, 422, { error: "worker request body must be an empty object" });
+        }
+
+        const atomId = decodeURIComponent(url.pathname.slice("/workers/".length));
+        if (!canRunWorker(principal, atomId)) return json(res, 403, { error: "worker access denied" });
+        const atomDef = atoms.get(atomId);
+        if (!atomDef?.worker) return json(res, 404, { error: "unknown or non-worker atom" });
+
+        if (
+          canRead(principal, atomId) &&
+          (atomDef.worker.reads ?? []).some((read) => !canRead(principal, read.atom))
+        ) {
+          return json(res, 403, { error: "worker output read requires access to every worker input" });
+        }
+
+        const runtimeId = atomDef.worker.runtime ?? "default";
+        const runtime = cfg.workers?.[runtimeId];
+        if (!runtime) return json(res, 503, { error: "worker runtime unavailable" });
+
+        const before = currentSnapshot();
+        const basis = {
+          target: before.state[atomId]?.value ?? null,
+          reads: Object.fromEntries(
+            (atomDef.worker.reads ?? []).map((read) => [read.atom, before.state[read.atom]?.value ?? null]),
+          ),
+        };
+        const result = await executeAtomWorker(
+          runtime.provider,
+          atomDef,
+          before.state,
+          runtime.broker,
+          { temperature: runtime.temperature },
+        );
+
+        const after = currentSnapshot();
+        const changed =
+          (after.state[atomId]?.value ?? null) !== basis.target ||
+          (atomDef.worker.reads ?? []).some(
+            (read) => (after.state[read.atom]?.value ?? null) !== basis.reads[read.atom],
+          );
+        const actor = { kind: "model", id: result.providerId } as const;
+
+        if (changed) {
+          store.recordRejection({
+            at: today(),
+            actor,
+            attempted: { worker: atomId, value: result.value },
+            reason: "worker inputs changed during execution",
+          });
+        } else {
+          const event: EaiEvent = {
+            id: `ev${store.next()}`,
+            at: today(),
+            actor,
+            type: "answer.proposed",
+            atom: atomId,
+            value: result.value,
+            probabilities: result.probabilities,
+          };
+          const verdict = validate(event, after.state);
+          if (!verdict.ok) {
+            store.recordRejection({
+              at: today(),
+              actor,
+              attempted: { worker: atomId, value: result.value },
+              reason: verdict.reason,
+            });
+          } else {
+            appendStateEvent(event);
+          }
+        }
+        res.writeHead(204, {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        return res.end();
       }
 
       if (req.method === "POST" && url.pathname.startsWith("/checks/")) {
@@ -392,10 +494,17 @@ export function makeServer(cfg: Config) {
         const v = validate(event, r.state);
         if (!v.ok) throw new HttpError(500, v.reason, false);
         const line = appendStateEvent(event);
-        return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
+        const fullAudit = canAudit(principal) && cfg.pack.atoms.every((atom) => canRead(principal, atom.id));
+        if (fullAudit) return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
+        return json(res, 201, { passed: true });
       }
 
-      if (req.method === "GET" && url.pathname === "/state") return json(res, 200, scoped(principal).body);
+      if (req.method === "GET" && url.pathname === "/state") {
+        if (!cfg.pack.atoms.some((atom) => canRead(principal, atom.id))) {
+          return json(res, 403, { error: "read access required" });
+        }
+        return json(res, 200, scoped(principal).body);
+      }
       if (req.method === "GET" && url.pathname.startsWith("/explain/")) {
         const id = decodeURIComponent(url.pathname.slice(9));
         const { r, visible } = scoped(principal);

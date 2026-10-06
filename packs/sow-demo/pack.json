@@ -2,27 +2,108 @@
   "pack": "sow-demo",
   "version": "0.1.0",
   "domain": "school onboarding trajectory (invented demo data)",
+  "sources": [
+    {
+      "id": "s.fin.request"
+    },
+    {
+      "id": "s.fin.approval"
+    },
+    {
+      "id": "s.plan.startdate"
+    }
+  ],
   "clusters": [
-    {"id": "c.fin.budget", "title": "Budget", "atoms": ["a.fin.016", "a.fin.017"]},
-    {"id": "c.plan", "title": "Planning", "atoms": ["a.plan.003"]}
+    {
+      "id": "c.fin.budget",
+      "title": "Budget",
+      "atoms": [
+        "a.fin.016",
+        "a.fin.017"
+      ]
+    },
+    {
+      "id": "c.plan",
+      "title": "Planning",
+      "atoms": [
+        "a.plan.003"
+      ]
+    }
   ],
   "atoms": [
-    {"id": "a.fin.016", "question": "Is a budget request filed?", "type": "yesno"},
-    {"id": "a.fin.017", "question": "Is the budget approved by the budget holder?", "type": "yesno",
-     "depends_on": ["a.fin.016"], "valid_for_days": 90},
-    {"id": "a.plan.003", "question": "Is the start date fixed?", "type": "yesno"}
+    {
+      "id": "a.fin.016",
+      "question": "Is a budget request filed?",
+      "type": "yesno",
+      "worker": {
+        "runtime": "default",
+        "sources": [
+          "s.fin.request"
+        ],
+        "max_context_items": 3,
+        "max_context_chars": 4000
+      }
+    },
+    {
+      "id": "a.fin.017",
+      "question": "Is the budget approved by the budget holder?",
+      "type": "yesno",
+      "depends_on": [
+        "a.fin.016"
+      ],
+      "valid_for_days": 90,
+      "worker": {
+        "runtime": "default",
+        "reads": [
+          {
+            "atom": "a.fin.016",
+            "as": "request_filed"
+          }
+        ],
+        "sources": [
+          "s.fin.approval"
+        ],
+        "max_context_items": 3,
+        "max_context_chars": 4000
+      }
+    },
+    {
+      "id": "a.plan.003",
+      "question": "Is the start date fixed?",
+      "type": "yesno",
+      "worker": {
+        "runtime": "default",
+        "sources": [
+          "s.plan.startdate"
+        ],
+        "max_context_items": 3,
+        "max_context_chars": 4000
+      }
+    }
   ],
   "rules": [
     {
       "id": "R-uncertain-fixed",
-      "when": {"all": [
-        {"atom": "a.plan.003", "value": "yes"},
-        {"atom": "a.fin.017", "status": {"lte": "claim"}}
-      ]},
+      "when": {
+        "all": [
+          {
+            "atom": "a.plan.003",
+            "value": "yes"
+          },
+          {
+            "atom": "a.fin.017",
+            "status": {
+              "lte": "claim"
+            }
+          }
+        ]
+      },
       "then": {
         "flag": "warning",
         "message": "The start date is fixed but the budget is not yet confirmed.",
-        "suggest": ["attach evidence to a.fin.017"]
+        "suggest": [
+          "attach evidence to a.fin.017"
+        ]
       }
     }
   ]
