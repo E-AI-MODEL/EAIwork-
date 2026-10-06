@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 import {
   coverage, derive, distribution, lintPack, optionsFor, propagate, replay, runRules, validate, weakestLink,
   type Actor, type EaiEvent, type Pack, type State,
@@ -393,7 +393,8 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
   }
   const dataDir = resolve(process.env.EAI_DIR ?? "./data");
   const resolvedWitnessDir = resolve(witnessDir);
-  if (resolvedWitnessDir === dataDir || resolvedWitnessDir.startsWith(dataDir + "/")) {
+  const witnessRelativeToData = relative(dataDir, resolvedWitnessDir);
+  if (witnessRelativeToData === "" || (!witnessRelativeToData.startsWith("..") && !isAbsolute(witnessRelativeToData))) {
     throw new Error("EAI_WITNESS_DIR must be outside EAI_DIR");
   }
   const witness = new SignedFileAnchorWitness(
