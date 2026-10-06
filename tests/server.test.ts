@@ -435,18 +435,58 @@ test("worker target cannot become an oracle for an unread dependency", async () 
 });
 
 test("scoped auditors cannot infer hidden worker rejections from global counters", async () => {
-  const before = await get(SCOPED_AUDITOR_WORKER_TOKEN, "/state");
+  const isolatedDir = mkdtempSync(join(tmpdir(), "eai-audit-oracle-"));
+  const isolatedWitnessDir = mkdtempSync(join(tmpdir(), "eai-audit-oracle-witness-"));
+  const isolated = makeServer({
+    dir: isolatedDir,
+    pack,
+    today: () => "2026-10-05",
+    tokens,
+    checks,
+    workers,
+    witness: new SignedFileAnchorWitness(isolatedWitnessDir, privateKeyPem, publicKeyPem),
+  });
+  await new Promise<void>((resolve) => isolated.server.listen(0, "127.0.0.1", resolve));
+  const isolatedBase = `http://127.0.0.1:${(isolated.server.address() as AddressInfo).port}`;
+
+  const seed = (body: unknown) => fetch(isolatedBase + "/events", {
+    method: "POST",
+    headers: { authorization: "Bearer " + PERSON_TOKEN },
+    body: JSON.stringify(body),
+  });
+  assert.equal((await seed({ type: "answer.proposed", atom: "a.fin.017", value: "yes" })).status, 201);
+  assert.equal((await seed({
+    type: "evidence.attached",
+    atom: "a.fin.017",
+    evidence: { source: "seed", mode: "reported", supports: true },
+  })).status, 201);
+
+  const readScoped = async () => (
+    await fetch(isolatedBase + "/state", {
+      headers: { authorization: "Bearer " + SCOPED_AUDITOR_WORKER_TOKEN },
+    })
+  ).json() as any;
+
+  const before = await readScoped();
   assert.deepEqual(Object.keys(before.atoms), ["a.plan.003"]);
   assert.equal("rejectedAttempts" in before, false);
 
-  const rejectedBefore = store.rejections.length;
-  const run = await post(SCOPED_AUDITOR_WORKER_TOKEN, {}, "/workers/a.fin.017");
+  const rejectedBefore = isolated.store.rejections.length;
+  const run = await fetch(isolatedBase + "/workers/a.fin.017", {
+    method: "POST",
+    headers: { authorization: "Bearer " + SCOPED_AUDITOR_WORKER_TOKEN },
+    body: "{}",
+  });
   assert.equal(run.status, 204);
-  assert.equal(store.rejections.length, rejectedBefore + 1);
+  assert.equal(isolated.store.rejections.length, rejectedBefore + 1);
 
-  const after = await get(SCOPED_AUDITOR_WORKER_TOKEN, "/state");
+  const after = await readScoped();
   assert.deepEqual(Object.keys(after.atoms), ["a.plan.003"]);
   assert.equal("rejectedAttempts" in after, false);
+
+  await new Promise<void>((resolve, reject) =>
+    isolated.server.close((err) => err ? reject(err) : resolve()),
+  );
 });
 
 test("server-owned worker gets only its atom capsule and writes an assumption", async () => {
