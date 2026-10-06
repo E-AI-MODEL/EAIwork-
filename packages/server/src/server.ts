@@ -45,6 +45,17 @@ const PUBLIC_TYPES = new Set([
   "flag.raised", "flag.dismissed", "status.raised",
 ]);
 
+const ruleAtoms = (condition: any): string[] => {
+  if (!condition || typeof condition !== "object") return [];
+  if (Array.isArray(condition.all)) return condition.all.flatMap(ruleAtoms);
+  if (Array.isArray(condition.any)) return condition.any.flatMap(ruleAtoms);
+  if (condition.not) return ruleAtoms(condition.not);
+  return typeof condition.atom === "string" ? [condition.atom] : [];
+};
+
+const visibleRules = (rules: any[] | undefined, visible: Set<string>) =>
+  (rules ?? []).filter((rule) => ruleAtoms(rule.when).every((atom) => visible.has(atom)));
+
 const json = (res: ServerResponse, code: number, body: unknown) => {
   res.writeHead(code, {
     "content-type": "application/json",
@@ -173,7 +184,7 @@ export function makeServer(cfg: Config) {
       clusters: cfg.pack.clusters
         .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((id) => visible.has(id)) }))
         .filter((cluster) => cluster.atoms.length > 0),
-      rules: visible.size === cfg.pack.atoms.length ? cfg.pack.rules : [],
+      rules: visibleRules(cfg.pack.rules, visible),
     };
     const visibleState = Object.fromEntries(Object.entries(r.state).filter(([id]) => visible.has(id)));
     const visibleDerived = Object.fromEntries(Object.entries(r.derived).filter(([id]) => visible.has(id)));
