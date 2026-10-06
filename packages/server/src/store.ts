@@ -78,11 +78,36 @@ export class Store {
     writeFileSync(file, JSON.stringify(anchor) + "\n");
   }
 
-  private acceptOwnWrite(): void {
-    if (this.hasVerifiedBaseline) this.refreshVerifiedFingerprints();
+  private invalidateBaseline(message: string): never {
+    this.hasVerifiedBaseline = false;
+    throw new Error(message);
+  }
+
+  private assertVerifiedBaselineUnchanged(): void {
+    if (!this.hasVerifiedBaseline) return;
+    for (const file of this.trackedFiles()) {
+      if (this.verifiedFingerprints.get(file) !== fingerprint(file)) {
+        this.invalidateBaseline("tracked store file changed outside the verified write path");
+      }
+    }
+  }
+
+  private acceptOwnWrite(changedFiles: string[]): void {
+    if (!this.hasVerifiedBaseline) return;
+    const changed = new Set(changedFiles);
+
+    for (const file of this.trackedFiles()) {
+      if (changed.has(file)) continue;
+      if (this.verifiedFingerprints.get(file) !== fingerprint(file)) {
+        this.invalidateBaseline("tracked store file changed while committing a local write");
+      }
+    }
+
+    for (const file of changed) this.verifiedFingerprints.set(file, fingerprint(file));
   }
 
   append(event: EaiEvent): Line {
+    this.assertVerifiedBaselineUnchanged();
     const prev = this.lines.at(-1)?.hash ?? GENESIS;
     const line: Line = { seq: this.next(), prev, hash: digest(prev, event), event };
     appendFileSync(this.file, JSON.stringify(line) + "\n");
@@ -92,11 +117,12 @@ export class Store {
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("events", this.expectedEventHead);
     }
-    this.acceptOwnWrite();
+    this.acceptOwnWrite([this.file, this.eventHeadFile]);
     return line;
   }
 
   recordRejection(rejection: Rejection): RejectionLine {
+    this.assertVerifiedBaselineUnchanged();
     const prev = this.rejectionLines.at(-1)?.hash ?? GENESIS;
     const line: RejectionLine = {
       seq: this.rejectionLines.length + 1,
@@ -111,7 +137,7 @@ export class Store {
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("rejections", this.expectedRejectionHead);
     }
-    this.acceptOwnWrite();
+    this.acceptOwnWrite([this.rejectionFile, this.rejectionHeadFile]);
     return line;
   }
 
