@@ -251,7 +251,7 @@ export function makeServer(cfg: Config) {
         shaky: propagate(visiblePack, visibleDerived),
         coverage: coverage(visiblePack, visibleState, visibleDerived),
         checksum,
-        ...(canAudit(principal) ? { rejectedAttempts: store.rejections.length } : {}),
+        ...(canAudit(principal) && visible.size === cfg.pack.atoms.length ? { rejectedAttempts: store.rejections.length } : {}),
         note: "Nothing flagged means not detected, not safe.",
       },
     };
