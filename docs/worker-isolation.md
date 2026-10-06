@@ -192,6 +192,8 @@ Een orchestrator heeft expliciet `workers`-recht nodig:
 
 De worker-capability staat los van gewone state-toegang. Een execute-only orchestrator kan daarom een worker starten zonder `/state` te kunnen lezen en zonder gewone `/events` te kunnen schrijven.
 
+Zodra een principal het target-atom zelf wél mag lezen, geldt een extra invariant: alle gedeclareerde worker-inputatoms moeten ook leesbaar zijn voor die principal. Anders wordt de worker-run geweigerd. Zo kan een zichtbaar target niet als indirect orakel voor een verborgen dependency fungeren.
+
 De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. Een afgehandelde worker-run antwoordt met HTTP `204 No Content`, ook wanneer het modelresultaat intern door de evidence-regels wordt geweigerd. De scheduler krijgt dus geen state, event-hash, modeluitkomst, probabilities of accept/reject-signaal terug.
 
 ## Consistentie tijdens generatie
