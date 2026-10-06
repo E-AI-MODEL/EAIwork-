@@ -29,7 +29,6 @@ export interface AskResult {
   event: EaiEvent;
   route: Route;
   probabilities: Record<string, number>;
-  capsule: AtomCapsule;
 }
 
 const boundedContext = async (
@@ -113,7 +112,7 @@ export async function executeAtomWorker(
     value,
     probabilities: p,
   };
-  return { event, route: route(p, atom.impact ?? "low"), probabilities: p, capsule };
+  return { event, route: route(p, atom.impact ?? "low"), probabilities: p };
 }
 
 /** Deterministic stand-in for tests and demos. The provider only receives the isolated capsule. */
