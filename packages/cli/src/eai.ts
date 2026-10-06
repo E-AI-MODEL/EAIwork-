@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { agreement, coverage, distribution, lintPack, propagate, replay, runRules, weakestLink } from "../../core/src/index.ts";
 import { Store } from "../../server/src/store.ts";
+import { SignedFileAnchorVerifier, SignedFileAnchorWitness } from "../../server/src/witness.ts";
 
 const [cmd, ...args] = process.argv.slice(2);
 const now = process.env.EAI_NOW ?? new Date().toISOString().slice(0, 10);
@@ -14,7 +15,9 @@ const usage = `usage:
   eai explain <pack.json> <events.jsonl> <atom>
   eai report <pack.json> <events.jsonl> [goal-atom,...]
   eai agree <answersA.json> <answersB.json>      (two observers, {atom: value})
-  eai verify-log <data-dir>`;
+  eai verify-local <data-dir>
+  eai verify-log <data-dir> <witness-dir> <public-key.pem>
+  eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem>`;
 
 if (cmd === "lint-pack") {
   const problems = lintPack(readJson(args[0]));
@@ -53,8 +56,20 @@ if (cmd === "lint-pack") {
   const r = agreement(readJson(args[0]), readJson(args[1]));
   console.log(`n=${r.n} agreement=${(r.percent * 100).toFixed(0)}% kappa=${r.kappa.toFixed(2)}`);
   r.disagreements.forEach((x) => console.log("  disagree on", x, "-> split the atom or rewrite the question"));
-} else if (cmd === "verify-log") {
+} else if (cmd === "verify-local") {
   const v = new Store(args[0]).verify();
-  console.log(v.ok ? "log intact" : `log broken at seq ${v.badAt}`);
+  console.log(v.ok ? "local log intact" : `local log broken at seq ${v.badAt}`);
+  process.exit(v.ok ? 0 : 1);
+} else if (cmd === "verify-log") {
+  if (args.length < 3) { console.error(usage); process.exit(2); }
+  const verifier = new SignedFileAnchorVerifier(args[1], readFileSync(args[2], "utf8"));
+  const v = new Store(args[0], verifier).verify();
+  console.log(v.ok ? "log and witness intact" : `verification failed at seq ${v.badAt}: ${v.reason ?? "local chain mismatch"}`);
+  process.exit(v.ok ? 0 : 1);
+} else if (cmd === "bootstrap-witness") {
+  if (args.length < 4) { console.error(usage); process.exit(2); }
+  const witness = new SignedFileAnchorWitness(args[1], readFileSync(args[2], "utf8"), readFileSync(args[3], "utf8"));
+  const v = new Store(args[0]).bootstrapWitness(witness);
+  console.log(v.ok ? "witness bootstrapped" : `bootstrap failed at seq ${v.badAt}: ${v.reason ?? "local chain mismatch"}`);
   process.exit(v.ok ? 0 : 1);
 } else { console.error(usage); process.exit(2); }
