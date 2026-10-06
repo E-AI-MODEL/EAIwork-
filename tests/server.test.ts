@@ -19,6 +19,7 @@ const ALL_ARRAY_TOKEN = "a".repeat(40);
 const RULE_SCOPE_TOKEN = "r".repeat(40);
 const TARGET_ONLY_WORKER_TOKEN = "t".repeat(40);
 const SCOPED_AUDITOR_WORKER_TOKEN = "q".repeat(40);
+const SEQUENCE_PROBE_WORKER_TOKEN = "u".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
     actor: { kind: "person", id: "person:jan" } as const,
@@ -55,6 +56,10 @@ const tokens = {
   [SCOPED_AUDITOR_WORKER_TOKEN]: {
     actor: { kind: "system", id: "system:scoped-auditor-worker" } as const,
     access: { read: ["a.plan.003"], write: [], workers: ["a.fin.017"], audit: true },
+  },
+  [SEQUENCE_PROBE_WORKER_TOKEN]: {
+    actor: { kind: "system", id: "system:sequence-probe-worker" } as const,
+    access: { read: ["a.plan.003"], write: ["a.plan.003"], workers: ["a.fin.017"] },
   },
 };
 const checks = {
@@ -487,6 +492,28 @@ test("scoped auditors cannot infer hidden worker rejections from global counters
   await new Promise<void>((resolve, reject) =>
     isolated.server.close((err) => err ? reject(err) : resolve()),
   );
+});
+
+test("scoped writers cannot infer hidden worker outcomes from global event sequences", async () => {
+  const first = await post(SEQUENCE_PROBE_WORKER_TOKEN, {
+    type: "answer.proposed",
+    atom: "a.plan.003",
+    value: "yes",
+  });
+  assert.equal(first.status, 201);
+  assert.equal(await first.text(), "");
+
+  const worker = await post(SEQUENCE_PROBE_WORKER_TOKEN, {}, "/workers/a.fin.017");
+  assert.equal(worker.status, 204);
+  assert.equal(await worker.text(), "");
+
+  const second = await post(SEQUENCE_PROBE_WORKER_TOKEN, {
+    type: "answer.proposed",
+    atom: "a.plan.003",
+    value: "no",
+  });
+  assert.equal(second.status, 201);
+  assert.equal(await second.text(), "");
 });
 
 test("server-owned worker gets only its atom capsule and writes an assumption", async () => {
