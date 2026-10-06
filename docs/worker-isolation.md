@@ -183,18 +183,16 @@ Een orchestrator heeft expliciet `workers`-recht nodig:
 {
   "actor": { "kind": "system", "id": "system:worker-orchestrator" },
   "access": {
-    "read": "*",
-    "write": "*",
+    "read": [],
+    "write": [],
     "workers": "*"
   }
 }
 ```
 
-Voor een worker-run gelden daarnaast:
+De worker-capability staat los van gewone state-toegang. Een execute-only orchestrator kan daarom een worker starten zonder `/state` te kunnen lezen en zonder gewone `/events` te kunnen schrijven.
 
-- de caller mag het target atom lezen;
-- de caller mag het target atom schrijven;
-- de caller mag alle gedeclareerde worker-inputatoms lezen.
+De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. De scheduler krijgt na een geslaagde run alleen de event `seq` en `hash` terug, niet de modeluitkomst of probabilities.
 
 ## Output
 
@@ -234,6 +232,8 @@ Wijzigingen aan workers moeten blijven aantonen dat:
 - caller-context wordt geweigerd;
 - publieke modeltokens worden geweigerd;
 - iedere uitvoering een verse modelsessie krijgt;
-- output beperkt blijft tot de vaste atomopties.
+- output beperkt blijft tot de vaste atomopties;
+- de orchestrator geen state hoeft te kunnen lezen of gewone events hoeft te kunnen schrijven;
+- de workerresponse de modeluitkomst niet teruglekt naar de scheduler.
 
 Deze eisen horen bij de architectuur, niet bij een specifieke provider.
