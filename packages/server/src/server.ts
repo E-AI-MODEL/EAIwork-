@@ -388,10 +388,9 @@ export function makeServer(cfg: Config) {
             attempted: { worker: atomId, value: result.event.value },
             reason: verdict.reason,
           });
-          return json(res, 422, { rejected: true, reason: verdict.reason });
+        } else {
+          appendStateEvent(result.event);
         }
-
-        appendStateEvent(result.event);
         res.writeHead(204, {
           "cache-control": "no-store",
           "x-content-type-options": "nosniff",
@@ -456,7 +455,12 @@ export function makeServer(cfg: Config) {
         return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
       }
 
-      if (req.method === "GET" && url.pathname === "/state") return json(res, 200, scoped(principal).body);
+      if (req.method === "GET" && url.pathname === "/state") {
+        if (!cfg.pack.atoms.some((atom) => canRead(principal, atom.id))) {
+          return json(res, 403, { error: "read access required" });
+        }
+        return json(res, 200, scoped(principal).body);
+      }
       if (req.method === "GET" && url.pathname.startsWith("/explain/")) {
         const id = decodeURIComponent(url.pathname.slice(9));
         const { r, visible } = scoped(principal);
