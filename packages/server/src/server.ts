@@ -179,7 +179,7 @@ export function makeServer(cfg: Config) {
     return snapshot;
   };
   const requireWritableIntegrity = () => {
-    const integrity = store.verify();
+    const integrity = store.verifyCurrent();
     if (!integrity.ok) throw new HttpError(503, "event log integrity check failed");
   };
 
