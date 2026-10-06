@@ -14,10 +14,15 @@ export interface SourceBroker {
   read(handle: string): Promise<string[]> | string[];
 }
 
-/** Any model, any vendor: one capsule in, probabilities over fixed options out. */
+export interface ModelSession {
+  answer(capsule: AtomCapsule): Promise<Record<string, number>>;
+  close?(): Promise<void> | void;
+}
+
+/** Any model, any vendor. A fresh single-use session is opened for every atom execution. */
 export interface ModelProvider {
   id: string; // e.g. "model:acme-v3"
-  answer(capsule: AtomCapsule): Promise<Record<string, number>>;
+  openSession(): Promise<ModelSession> | ModelSession;
 }
 
 export interface AskResult {
@@ -81,7 +86,13 @@ export async function executeAtomWorker(
   opts: { temperature?: number; at: string; eventId: string },
 ): Promise<AskResult> {
   const capsule = await buildAtomCapsule(atom, state, broker);
-  const raw = await provider.answer(structuredClone(capsule));
+  const session = await provider.openSession();
+  let raw: Record<string, number>;
+  try {
+    raw = await session.answer(structuredClone(capsule));
+  } finally {
+    await session.close?.();
+  }
 
   // Keep only allowed options; anything else the model invents is dropped.
   let p: Record<string, number> = {};
@@ -111,7 +122,9 @@ export const mockProvider = (
   answer: Record<string, number> | ((capsule: AtomCapsule) => Record<string, number>),
 ): ModelProvider => ({
   id,
-  answer: async (capsule) => typeof answer === "function" ? answer(capsule) : answer,
+  openSession: () => ({
+    answer: async (capsule) => typeof answer === "function" ? answer(capsule) : answer,
+  }),
 });
 
 /** Helper for runtimes that need to validate worker policies against a whole pack without exposing it to a model. */
