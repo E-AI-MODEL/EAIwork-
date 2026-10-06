@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Actor, EaiEvent } from "../../core/src/index.ts";
-import type { AnchorWitness } from "./witness.ts";
+import type { AnchorVerifier, AnchorWitness } from "./witness.ts";
 
 interface Line { seq: number; prev: string; hash: string; event: EaiEvent }
 export interface Rejection {
@@ -33,11 +33,11 @@ export class Store {
   private rejectionHeadFile: string;
   private expectedEventHead: Anchor;
   private expectedRejectionHead: Anchor;
-  private witness?: AnchorWitness;
+  private witness?: AnchorVerifier;
   lines: Line[] = [];
   rejectionLines: RejectionLine[] = [];
 
-  constructor(dir: string, witness?: AnchorWitness) {
+  constructor(dir: string, witness?: AnchorVerifier) {
     mkdirSync(dir, { recursive: true });
     this.witness = witness;
     this.file = join(dir, "events.jsonl");
@@ -65,7 +65,9 @@ export class Store {
     this.lines.push(line);
     this.expectedEventHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.eventHeadFile, this.expectedEventHead);
-    this.witness?.record("events", this.expectedEventHead);
+    if (this.witness && "record" in this.witness) {
+      (this.witness as AnchorWitness).record("events", this.expectedEventHead);
+    }
     return line;
   }
 
@@ -81,7 +83,9 @@ export class Store {
     this.rejectionLines.push(line);
     this.expectedRejectionHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.rejectionHeadFile, this.expectedRejectionHead);
-    this.witness?.record("rejections", this.expectedRejectionHead);
+    if (this.witness && "record" in this.witness) {
+      (this.witness as AnchorWitness).record("rejections", this.expectedRejectionHead);
+    }
     return line;
   }
 
@@ -147,5 +151,15 @@ export class Store {
       if (!witnessed.ok) return { ok: false, badAt: rejectionAnchor.seq || 1, log: "rejections", reason: witnessed.reason };
     }
     return { ok: true };
+  }
+
+  bootstrapWitness(witness: AnchorWitness): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } {
+    if (this.witness) throw new Error("witness already configured");
+    const local = this.verify();
+    if (!local.ok) return local;
+    witness.record("events", this.expectedEventHead);
+    witness.record("rejections", this.expectedRejectionHead);
+    this.witness = witness;
+    return this.verify();
   }
 }
