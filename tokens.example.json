@@ -1,5 +1,14 @@
 {
-  "REPLACE_WITH_RANDOM_64_HEX_PERSON_TOKEN": {"kind": "person", "id": "person:jan"},
-  "REPLACE_WITH_RANDOM_64_HEX_MODEL_TOKEN":  {"kind": "model",  "id": "model:demo"},
-  "REPLACE_WITH_RANDOM_64_HEX_CHECK_TOKEN":  {"kind": "check",  "id": "check:calc"}
+  "REPLACE_WITH_RANDOM_64_HEX_PERSON_TOKEN": {
+    "actor": {"kind": "person", "id": "person:jan"},
+    "access": {"read": "*", "write": "*", "audit": true}
+  },
+  "REPLACE_WITH_RANDOM_64_HEX_MODEL_TOKEN": {
+    "actor": {"kind": "model", "id": "model:demo"},
+    "access": {"read": ["a.plan.003"], "write": ["a.plan.003"]}
+  },
+  "REPLACE_WITH_RANDOM_64_HEX_CHECK_TOKEN": {
+    "actor": {"kind": "check", "id": "check:calc"},
+    "access": {"read": "*", "write": [], "checks": "*"}
+  }
 }

@@ -36,6 +36,8 @@ The transition is asymmetric. A model answer can create an assumption. A person 
 
 In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
 
+Every token maps to a principal with explicit `read`, `write`, `checks` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
+
 ## System shape
 
 ```text
@@ -64,10 +66,29 @@ npm run replay:demo
 cp tokens.example.json tokens.json
 # Replace every REPLACE_... key with a random secret, for example:
 # openssl rand -hex 32
-EAI_TOKENS=tokens.json npm run serve
+
+openssl genpkey -algorithm Ed25519 -out witness-private.pem
+openssl pkey -in witness-private.pem -pubout -out witness-public.pem
+mkdir -p ../eai-witness
+
+EAI_TOKENS=tokens.json \
+EAI_WITNESS_DIR=../eai-witness \
+EAI_WITNESS_PRIVATE_KEY=./witness-private.pem \
+EAI_WITNESS_PUBLIC_KEY=./witness-public.pem \
+npm run serve
 ```
 
-Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. Set `EAI_HOST` only when you deliberately want to expose it on another interface.
+Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. It also requires an Ed25519-signed, cryptographically chained witness journal outside `EAI_DIR`. Put that witness directory on a separate mounted volume or other rollback-resistant storage in deployments where datastore rollback must remain detectable. Keep the private key in a secret store or protected mount. Set `EAI_HOST` only when you deliberately want to expose the service on another interface.
+
+Existing deployments with non-empty logs need one explicit trust-on-first-use step before first start with this version:
+
+```bash
+eai verify-local ./data
+eai bootstrap-witness ./data ../eai-witness ./witness-private.pem ./witness-public.pem
+eai verify-log ./data ../eai-witness ./witness-public.pem
+```
+
+Only bootstrap a log whose local chain and current head you already trust. After bootstrap, use `verify-log` for full verification; `verify-local` checks only the datastore itself.
 
 Useful CLI commands:
 
@@ -77,7 +98,9 @@ eai replay <pack.json> <events.jsonl>
 eai explain <pack.json> <events.jsonl> <atom>
 eai report <pack.json> <events.jsonl> [goal-atom,...]
 eai agree <answersA.json> <answersB.json>
-eai verify-log <data-dir>
+eai verify-local <data-dir>
+eai verify-log <data-dir> <witness-dir> <public-key.pem>
+eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem>
 ```
 
 ## Repository map
@@ -102,7 +125,9 @@ eai verify-log <data-dir>
 - **Model asymmetry:** models may not raise status or impersonate a person.
 - **Server-controlled independence:** public clients cannot mint extra evidence origins; person/system lineage is derived from trusted actor identity.
 - **Deterministic proof:** `proven` requires a server-registered deterministic check; public clients cannot submit `check.passed`.
+- **Scoped authorization:** principals only see and modify explicitly permitted atoms; audit and check execution are separate permissions.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.
+- **Signed rollback detection:** event and rejection heads are Ed25519-signed into cryptographically chained witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
 - **Review wording:** no flags means “not detected”, not “safe”.
 
