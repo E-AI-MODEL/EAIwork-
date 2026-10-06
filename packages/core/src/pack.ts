@@ -10,6 +10,8 @@ export interface WorkerRead {
 }
 
 export interface AtomWorkerPolicy {
+  /** Server-side runtime id. Never shown to the model. Defaults to "default". */
+  runtime?: string;
   /** Only declared dependencies may be read by the worker. Values only; no status/evidence. */
   reads?: WorkerRead[];
   /** Opaque source handles resolved by the server-side broker. Handles are never shown to the model. */
@@ -75,6 +77,9 @@ export function lintPack(p: Pack): string[] {
     if (!worker) continue;
     const dependencies = new Set(a.depends_on ?? []);
     const aliases = new Set<string>();
+    if (worker.runtime !== undefined && !/^[a-z][a-z0-9._-]*$/.test(worker.runtime)) {
+      err.push(`${a.id}: worker runtime "${worker.runtime}" is invalid`);
+    }
     for (const read of worker.reads ?? []) {
       if (!ids.has(read.atom)) err.push(`${a.id}: worker reads unknown atom ${read.atom}`);
       if (!dependencies.has(read.atom)) err.push(`${a.id}: worker read ${read.atom} is not a declared dependency`);
