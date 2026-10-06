@@ -9,9 +9,13 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 ## Trust boundaries
 
 - Actor identity and authorization come from the server-side principal map, never from the request body.
-- Read/write/check/audit permissions are explicit and default-deny. Write scope must stay inside read scope.
+- Read/write/check/worker/audit permissions are explicit and default-deny. Write scope must stay inside read scope.
 - State and derived metadata are filtered before being returned, so hidden atoms do not leak through dependencies, rule output, checksums or audit counters.
 - Deterministic checks declare their input atoms. The caller must be allowed to read all inputs and the check receives only that scoped state, preventing check results from becoming an oracle over hidden atoms.
+- Public API tokens may not represent model actors. Model events are produced only by server-owned worker execution.
+- Atom workers receive server-built `AtomCapsule` objects only: local question, fixed options, aliased values of declared dependencies and bounded snippets from declared source handles.
+- Worker HTTP calls accept no prompt/context payload. The source broker receives only an opaque handle, never the pack or target atom.
+- Every atom execution opens a fresh single-use model session. Direct worker-to-worker messaging, shared scratchpads and swarm blackboards are outside the worker API.
 - Public `/events` requests cannot create `check.passed` events.
 - Person/system evidence lineage is derived by the server from actor identity. Client-supplied lineage is ignored.
 - `proven` can only be reached through a deterministic check registered inside the server process.
@@ -22,4 +26,4 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - The signing private key must not live in the datastore or witness directory. The witness store should be on separate, rollback-resistant storage. A host-level attacker with the signing key or control of both rollback domains remains outside this threat model.
 - Direct server startup requires an explicit token file and binds to `127.0.0.1` unless `EAI_HOST` is set deliberately.
 
-Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits and injection through evidence text.
+Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits, source-handle scope, provider-side session reuse and injection through evidence text.
