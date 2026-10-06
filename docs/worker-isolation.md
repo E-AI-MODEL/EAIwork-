@@ -194,6 +194,10 @@ De worker-capability staat los van gewone state-toegang. Een execute-only orches
 
 De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. Een afgehandelde worker-run antwoordt met HTTP `204 No Content`, ook wanneer het modelresultaat intern door de evidence-regels wordt geweigerd. De scheduler krijgt dus geen state, event-hash, modeluitkomst, probabilities of accept/reject-signaal terug.
 
+## Consistentie tijdens generatie
+
+De server onthoudt bij de start van een worker-call de huidige targetwaarde en de waarden van alle gedeclareerde worker-inputs. Na de modelcall controleert hij die opnieuw. Is één van deze waarden tijdens de generatie veranderd, dan wordt het modelresultaat niet gecommit. De scheduler ziet nog steeds alleen een bodyloze `204`; de afwijzing blijft intern zichtbaar in het rejection log.
+
 ## Output
 
 Een worker kan uitsluitend probabilities over de vaste antwoordopties teruggeven.
