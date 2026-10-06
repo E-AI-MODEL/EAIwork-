@@ -476,6 +476,7 @@ test("worker result is discarded when a declared input changes during generation
     pack,
     today: () => "2026-10-05",
     tokens,
+    checks,
     workers: raceWorkers,
     witness: raceWitness,
   });
