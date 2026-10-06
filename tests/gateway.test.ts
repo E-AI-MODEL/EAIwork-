@@ -41,7 +41,7 @@ test("atom capsule contains only local question, options, aliased values and bou
   const capsule = await buildAtomCapsule(atom, state, broker);
   assert.deepEqual(Object.keys(capsule).sort(), ["context", "inputs", "options", "question"]);
   assert.deepEqual(capsule.inputs, { request_filed: "yes" });
-  assert.deepEqual(capsule.context, ["approval=yes", "h"]);
+  assert.deepEqual(capsule.context, ["approval=yes"]);
   assert.deepEqual(requested, ["s.fin.approval"]);
 
   const serialized = JSON.stringify(capsule);
