@@ -369,27 +369,56 @@ export function makeServer(cfg: Config) {
         if (!runtime) return json(res, 503, { error: "worker runtime unavailable" });
 
         const before = currentSnapshot();
+        const basis = {
+          target: before.state[atomId]?.value ?? null,
+          reads: Object.fromEntries(
+            (atomDef.worker.reads ?? []).map((read) => [read.atom, before.state[read.atom]?.value ?? null]),
+          ),
+        };
         const result = await executeAtomWorker(
           runtime.provider,
           atomDef,
           before.state,
           runtime.broker,
-          {
-            at: today(),
-            eventId: `ev${store.next()}`,
-            temperature: runtime.temperature,
-          },
+          { temperature: runtime.temperature },
         );
-        const verdict = validate(result.event, before.state);
-        if (!verdict.ok) {
+
+        const after = currentSnapshot();
+        const changed =
+          (after.state[atomId]?.value ?? null) !== basis.target ||
+          (atomDef.worker.reads ?? []).some(
+            (read) => (after.state[read.atom]?.value ?? null) !== basis.reads[read.atom],
+          );
+        const actor = { kind: "model", id: result.providerId } as const;
+
+        if (changed) {
           store.recordRejection({
             at: today(),
-            actor: result.event.actor,
-            attempted: { worker: atomId, value: result.event.value },
-            reason: verdict.reason,
+            actor,
+            attempted: { worker: atomId, value: result.value },
+            reason: "worker inputs changed during execution",
           });
         } else {
-          appendStateEvent(result.event);
+          const event: EaiEvent = {
+            id: `ev${store.next()}`,
+            at: today(),
+            actor,
+            type: "answer.proposed",
+            atom: atomId,
+            value: result.value,
+            probabilities: result.probabilities,
+          };
+          const verdict = validate(event, after.state);
+          if (!verdict.ok) {
+            store.recordRejection({
+              at: today(),
+              actor,
+              attempted: { worker: atomId, value: result.value },
+              reason: verdict.reason,
+            });
+          } else {
+            appendStateEvent(event);
+          }
         }
         res.writeHead(204, {
           "cache-control": "no-store",
