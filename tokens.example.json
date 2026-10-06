@@ -16,8 +16,8 @@
       "id": "system:worker-orchestrator"
     },
     "access": {
-      "read": "*",
-      "write": "*",
+      "read": [],
+      "write": [],
       "workers": "*"
     }
   },
