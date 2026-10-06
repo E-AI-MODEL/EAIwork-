@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { join } from "node:path";
 
@@ -168,7 +168,8 @@ export class SignedFileAnchorWitness extends SignedFileAnchorVerifier implements
 
   constructor(dir: string, privateKeyPem: string, publicKeyPem: string) {
     super(dir, publicKeyPem);
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
     this.privateKey = createPrivateKey(privateKeyPem);
     const probe = Buffer.from("eai-witness-key-pair-check");
     const probeSignature = sign(null, probe, this.privateKey);
