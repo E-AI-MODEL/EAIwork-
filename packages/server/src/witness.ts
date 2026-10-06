@@ -1,5 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type WitnessLog = "events" | "rejections";
@@ -42,7 +42,7 @@ export class SignedFileAnchorWitness implements AnchorWitness {
     this.keyId = createHash("sha256").update(exported).digest("hex").slice(0, 16);
   }
 
-  private file(log: WitnessLog) { return join(this.dir, `${log}.anchor.signed.json`); }
+  private file(log: WitnessLog) { return join(this.dir, `${log}.anchor.witness.jsonl`); }
 
   record(log: WitnessLog, anchor: Anchor): void {
     const body = payload(log, anchor);
@@ -54,10 +54,7 @@ export class SignedFileAnchorWitness implements AnchorWitness {
       keyId: this.keyId,
       signature: sign(null, Buffer.from(body), this.privateKey).toString("base64"),
     };
-    const target = this.file(log);
-    const temp = target + ".tmp";
-    writeFileSync(temp, JSON.stringify(envelope) + "\n", { mode: 0o600 });
-    renameSync(temp, target);
+    appendFileSync(this.file(log), JSON.stringify(envelope) + "\n", { encoding: "utf8", mode: 0o600 });
   }
 
   verify(log: WitnessLog, anchor: Anchor): { ok: boolean; reason?: string } {
@@ -69,7 +66,8 @@ export class SignedFileAnchorWitness implements AnchorWitness {
     }
 
     try {
-      const envelope = JSON.parse(readFileSync(file, "utf8")) as SignedEnvelope;
+      const lines = readFileSync(file, "utf8").split("\n").filter(Boolean);
+      const envelope = JSON.parse(lines.at(-1) ?? "{}") as SignedEnvelope;
       if (
         envelope.version !== 1 ||
         envelope.log !== log ||
