@@ -578,14 +578,18 @@ test("actor-raised flags are visible and a person can dismiss them", async () =>
   assert.ok(!after.flags.some((x: any) => x.message === "person concern"));
 });
 
-test("worker endpoint clamps provider output to fixed atom options", async () => {
+test("worker endpoint clamps provider output without exposing model result to the scheduler", async () => {
   workerAnswers["Is the start date fixed?"] = { yes: 0.9, no: 0.05, banana: 5 };
   const response = await post(ORCHESTRATOR_TOKEN, {}, "/workers/a.plan.003");
   assert.equal(response.status, 201);
   const body = await response.json() as any;
-  assert.equal(body.value, "yes");
-  assert.equal("banana" in body.probabilities, false);
-  assert.equal(body.route, "accept-as-assumption");
+  assert.deepEqual(Object.keys(body).sort(), ["hash", "seq"]);
+
+  const event = store.events.at(-1) as any;
+  assert.equal(event.type, "answer.proposed");
+  assert.equal(event.atom, "a.plan.003");
+  assert.equal(event.value, "yes");
+  assert.equal("banana" in event.probabilities, false);
 });
 
 test("log hash chain verifies, detects tampering, and makeServer fails closed", async () => {
