@@ -256,6 +256,39 @@ test("5,000 rejected writes stay on the constant-time integrity path", () => {
   assert.equal(stressStore.verifyCurrent().ok, false);
 });
 
+test("a local rejection cannot bless an event-log tamper that happens after the fast integrity check", () => {
+  const raceDir = mkdtempSync(join(tmpdir(), "eai-race-"));
+  const raceWitnessDir = mkdtempSync(join(tmpdir(), "eai-race-witness-"));
+  const raceWitness = new SignedFileAnchorWitness(raceWitnessDir, privateKeyPem, publicKeyPem);
+  const raceStore = new Store(raceDir, raceWitness);
+
+  raceStore.append({
+    id: "race-1", at: "2026-10-05",
+    actor: { kind: "person", id: "person:race" },
+    type: "answer.proposed", atom: "a.plan.003", value: "yes",
+  });
+  assert.equal(raceStore.verify().ok, true);
+  assert.equal(raceStore.verifyCurrent().ok, true);
+
+  const eventFile = join(raceDir, "events.jsonl");
+  const original = readFileSync(eventFile, "utf8");
+  const tampered = original.replace('"value":"yes"', '"value":"no"');
+  writeFileSync(eventFile, tampered);
+
+  assert.throws(
+    () => raceStore.recordRejection({
+      at: "2026-10-05",
+      actor: { kind: "model", id: "model:race" },
+      attempted: { type: "future.magic" },
+      reason: "rejected",
+    }),
+    /tracked store file changed/,
+  );
+  assert.equal(raceStore.rejections.length, 0);
+  assert.equal(raceStore.verifyCurrent().ok, false);
+  assert.equal(raceStore.verify().ok, false);
+});
+
 test("audit endpoints require explicit audit permission", async () => {
   const denied = await fetch(base + "/log/verify", { headers: { authorization: "Bearer " + MODEL_TOKEN } });
   assert.equal(denied.status, 403);
