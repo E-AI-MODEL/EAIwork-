@@ -1,5 +1,5 @@
 import { optionsFor, route, temperatureScale } from "../../core/src/index.ts";
-import type { EaiEvent, Pack, PackAtom, Route, State } from "../../core/src/index.ts";
+import type { Pack, PackAtom, Route, State } from "../../core/src/index.ts";
 
 export interface AtomCapsule {
   /** The model sees no atom id, cluster, pack, project goal, status, evidence or downstream use. */
@@ -25,8 +25,9 @@ export interface ModelProvider {
   openSession(): Promise<ModelSession> | ModelSession;
 }
 
-export interface AskResult {
-  event: EaiEvent;
+export interface WorkerResult {
+  providerId: string;
+  value: string;
   route: Route;
   probabilities: Record<string, number>;
 }
@@ -82,8 +83,8 @@ export async function executeAtomWorker(
   atom: PackAtom,
   state: State,
   broker: SourceBroker,
-  opts: { temperature?: number; at: string; eventId: string },
-): Promise<AskResult> {
+  opts: { temperature?: number } = {},
+): Promise<WorkerResult> {
   const capsule = await buildAtomCapsule(atom, state, broker);
   const session = await provider.openSession();
   let raw: Record<string, number>;
@@ -103,16 +104,12 @@ export async function executeAtomWorker(
   if (opts.temperature) p = temperatureScale(p, opts.temperature);
 
   const value = Object.entries(p).sort((a, b) => b[1] - a[1])[0][0];
-  const event: EaiEvent = {
-    id: opts.eventId,
-    at: opts.at,
-    actor: { kind: "model", id: provider.id },
-    type: "answer.proposed",
-    atom: atom.id,
+  return {
+    providerId: provider.id,
     value,
+    route: route(p, atom.impact ?? "low"),
     probabilities: p,
   };
-  return { event, route: route(p, atom.impact ?? "low"), probabilities: p };
 }
 
 /** Deterministic stand-in for tests and demos. The provider only receives the isolated capsule. */
