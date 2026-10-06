@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Actor, EaiEvent } from "../../core/src/index.ts";
+import type { AnchorWitness } from "./witness.ts";
 
 interface Line { seq: number; prev: string; hash: string; event: EaiEvent }
 export interface Rejection {
@@ -11,7 +12,7 @@ export interface Rejection {
   reason: string;
 }
 interface RejectionLine { seq: number; prev: string; hash: string; rejection: Rejection }
-interface Anchor { seq: number; hash: string }
+export interface Anchor { seq: number; hash: string }
 
 const GENESIS = "0".repeat(64);
 const emptyAnchor = (): Anchor => ({ seq: 0, hash: GENESIS });
@@ -32,11 +33,13 @@ export class Store {
   private rejectionHeadFile: string;
   private expectedEventHead: Anchor;
   private expectedRejectionHead: Anchor;
+  private witness?: AnchorWitness;
   lines: Line[] = [];
   rejectionLines: RejectionLine[] = [];
 
-  constructor(dir: string) {
+  constructor(dir: string, witness?: AnchorWitness) {
     mkdirSync(dir, { recursive: true });
+    this.witness = witness;
     this.file = join(dir, "events.jsonl");
     this.rejectionFile = join(dir, "rejections.jsonl");
     this.eventHeadFile = join(dir, "events.head");
@@ -62,6 +65,7 @@ export class Store {
     this.lines.push(line);
     this.expectedEventHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.eventHeadFile, this.expectedEventHead);
+    this.witness?.record("events", this.expectedEventHead);
     return line;
   }
 
@@ -77,10 +81,11 @@ export class Store {
     this.rejectionLines.push(line);
     this.expectedRejectionHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.rejectionHeadFile, this.expectedRejectionHead);
+    this.witness?.record("rejections", this.expectedRejectionHead);
     return line;
   }
 
-  verify(): { ok: boolean; badAt?: number; log?: "events" | "rejections" } {
+  verify(): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } {
     let events: Line[];
     let rejections: RejectionLine[];
     let eventAnchor: Anchor;
@@ -101,7 +106,7 @@ export class Store {
       anchor: Anchor,
       expectedAnchor: Anchor,
       log: "events" | "rejections",
-    ): { ok: boolean; badAt?: number; log?: "events" | "rejections" } => {
+    ): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } => {
       let prev = GENESIS;
       for (let i = 0; i < disk.length; i++) {
         const line = disk[i];
@@ -128,9 +133,19 @@ export class Store {
       events, this.lines, (line) => line.event, eventAnchor, this.expectedEventHead, "events",
     );
     if (!eventResult.ok) return eventResult;
-    return verifyChain(
+    if (this.witness) {
+      const witnessed = this.witness.verify("events", eventAnchor);
+      if (!witnessed.ok) return { ok: false, badAt: eventAnchor.seq || 1, log: "events", reason: witnessed.reason };
+    }
+    const rejectionResult = verifyChain(
       rejections, this.rejectionLines, (line) => line.rejection,
       rejectionAnchor, this.expectedRejectionHead, "rejections",
     );
+    if (!rejectionResult.ok) return rejectionResult;
+    if (this.witness) {
+      const witnessed = this.witness.verify("rejections", rejectionAnchor);
+      if (!witnessed.ok) return { ok: false, badAt: rejectionAnchor.seq || 1, log: "rejections", reason: witnessed.reason };
+    }
+    return { ok: true };
   }
 }
