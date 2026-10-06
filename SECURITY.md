@@ -18,6 +18,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - The server refuses to start when its event log fails integrity verification.
 - Event and rejection heads are signed with Ed25519 and appended to cryptographically chained witness journals outside the datastore. Rewriting both a log and its local head is not sufficient to hide rollback while the witness store itself is not rolled back.
 - Normal request writes use cached verified heads plus file fingerprints. Full log and witness scans are reserved for startup/audit or triggered automatically after external file changes, preventing rejection traffic from making verification work grow quadratically.
+- The server holds an exclusive writer lock for the lifetime of the process. `EAI_DIR` is restricted to `0700`, tracked files to `0600`, and the witness directory to `0700`. Run the service under a dedicated OS account; another process with direct write access as that same account is a host compromise and is outside the supported multi-writer model.
 - The signing private key must not live in the datastore or witness directory. The witness store should be on separate, rollback-resistant storage. A host-level attacker with the signing key or control of both rollback domains remains outside this threat model.
 - Direct server startup requires an explicit token file and binds to `127.0.0.1` unless `EAI_HOST` is set deliberately.
 
