@@ -363,12 +363,6 @@ export function makeServer(cfg: Config) {
         if (!canRunWorker(principal, atomId)) return json(res, 403, { error: "worker access denied" });
         const atomDef = atoms.get(atomId);
         if (!atomDef?.worker) return json(res, 404, { error: "unknown or non-worker atom" });
-        if (!canRead(principal, atomId) || !canWrite(principal, atomId)) {
-          return json(res, 403, { error: "worker target access denied" });
-        }
-        if ((atomDef.worker.reads ?? []).some((read) => !canRead(principal, read.atom))) {
-          return json(res, 403, { error: "worker input read access denied" });
-        }
 
         const runtimeId = atomDef.worker.runtime ?? "default";
         const runtime = cfg.workers?.[runtimeId];
@@ -401,9 +395,6 @@ export function makeServer(cfg: Config) {
         return json(res, 201, {
           seq: line.seq,
           hash: line.hash,
-          value: result.event.value,
-          route: result.route,
-          probabilities: result.probabilities,
         });
       }
 
