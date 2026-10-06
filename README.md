@@ -36,7 +36,7 @@ The transition is asymmetric. A model answer can create an assumption. A person 
 
 In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
 
-Every token maps to a principal with explicit `read`, `write`, `checks` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read.
+Every token maps to a principal with explicit `read`, `write`, `checks` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
 
 ## System shape
 
