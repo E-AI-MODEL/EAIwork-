@@ -36,7 +36,9 @@ The transition is asymmetric. A model answer can create an assumption. A person 
 
 In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
 
-Every token maps to a principal with explicit `read`, `write`, `checks` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
+Every token maps to a principal with explicit `read`, `write`, `checks`, `workers` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
+
+Model workers are isolated differently from ordinary API principals. A pack declares each worker's allowed dependency values, opaque source handles and context limits. The server builds an `AtomCapsule`; the model never receives the atom id, pack, cluster, sibling atoms, status, evidence, lineage, project goal or caller-supplied context. Public API tokens may not represent model actors, and every atom execution opens a fresh single-use model session. See [docs/worker-isolation.md](docs/worker-isolation.md).
 
 ## System shape
 
@@ -49,7 +51,7 @@ pack.json
 append-only event log ──► replay ──► derived atom state
         ▲                              │
         │                              ├── distributions
-person / model / check                 ├── review signals
+person / worker capsule / check        ├── review signals
                                        └── evidence inspector
 ```
 
@@ -114,7 +116,7 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 | `packages/core` | Derivation, validation, replay, rules, analysis, agreement and calibration. No network. |
 | `packages/server` | Token-derived identity, hash-chained event storage and HTTP API. |
 | `packages/client` | Dependency-free evidence-first workbench. |
-| `packages/gateway` | Typed model interface. Mock provider only in v0.1. |
+| `packages/gateway` | AtomCapsule builder and single-use typed model sessions. Mock provider only in v0.1. |
 | `packages/cli` | Pack linting, replay, explanation, reports, agreement and log verification. |
 | `schema/v0.1` | Draft JSON Schema. Not yet enforced in code. |
 | `conformance` | Behavioral vectors any compatible implementation should pass. |
@@ -129,7 +131,8 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 - **Model asymmetry:** models may not raise status or impersonate a person.
 - **Server-controlled independence:** public clients cannot mint extra evidence origins; person/system lineage is derived from trusted actor identity.
 - **Deterministic proof:** `proven` requires a server-registered deterministic check; public clients cannot submit `check.passed`.
-- **Scoped authorization:** principals only see and modify explicitly permitted atoms; audit and check execution are separate permissions.
+- **Scoped authorization:** principals only see and modify explicitly permitted atoms; audit, check and worker execution are separate permissions.
+- **Anatomical worker isolation:** model workers receive only server-built atom capsules with declared local inputs and bounded source context. No public model tokens, free caller-context or shared worker chat is available.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.
 - **Signed rollback detection:** event and rejection heads are Ed25519-signed into cryptographically chained witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
