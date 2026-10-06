@@ -343,7 +343,13 @@ export function makeServer(cfg: Config) {
         const v = validate(event, currentSnapshot().state);
         if (!v.ok) return reject(v.reason);
         const line = appendStateEvent(event);
-        return json(res, 201, { seq: line.seq, hash: line.hash });
+        const fullAudit = canAudit(principal) && cfg.pack.atoms.every((atom) => canRead(principal, atom.id));
+        if (fullAudit) return json(res, 201, { seq: line.seq, hash: line.hash });
+        res.writeHead(201, {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+        });
+        return res.end();
       }
 
       if (req.method === "POST" && url.pathname.startsWith("/workers/")) {
@@ -488,7 +494,9 @@ export function makeServer(cfg: Config) {
         const v = validate(event, r.state);
         if (!v.ok) throw new HttpError(500, v.reason, false);
         const line = appendStateEvent(event);
-        return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
+        const fullAudit = canAudit(principal) && cfg.pack.atoms.every((atom) => canRead(principal, atom.id));
+        if (fullAudit) return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
+        return json(res, 201, { passed: true });
       }
 
       if (req.method === "GET" && url.pathname === "/state") {
