@@ -112,3 +112,31 @@ test("pack lint rejects worker attempts to widen their own anatomical scope", ()
   assert.match(errors, /max_context_items/);
   assert.match(errors, /max_context_chars/);
 });
+
+
+test("every atom execution opens a fresh single-use model session", async () => {
+  let sessions = 0;
+  let closes = 0;
+  const provider = {
+    id: "model:fresh",
+    openSession: () => {
+      sessions++;
+      let used = false;
+      return {
+        answer: async () => {
+          assert.equal(used, false);
+          used = true;
+          return { yes: 1, no: 0, unknown: 0 };
+        },
+        close: () => { closes++; },
+      };
+    },
+  };
+  const broker = { read: async () => ["approved"] };
+
+  await executeAtomWorker(provider, atom, state, broker, { at: "2026-10-06", eventId: "ev-a" });
+  await executeAtomWorker(provider, atom, state, broker, { at: "2026-10-06", eventId: "ev-b" });
+
+  assert.equal(sessions, 2);
+  assert.equal(closes, 2);
+});
