@@ -125,6 +125,9 @@ export class SignedFileAnchorWitness extends SignedFileAnchorVerifier implements
   record(log: WitnessLog, anchor: Anchor): void {
     const journal = this.readAndVerifyJournal(log);
     if (!journal.ok) throw new Error(journal.reason);
+    if (journal.last && anchor.seq === journal.last.seq && anchor.hash === journal.last.hash) {
+      return;
+    }
     if (journal.last && anchor.seq !== journal.last.seq + 1) {
       throw new Error(`witness sequence must advance by one for ${log}`);
     }
