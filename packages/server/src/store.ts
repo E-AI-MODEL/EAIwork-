@@ -52,18 +52,22 @@ export class Store {
     chmodSync(dir, 0o700);
     this.witness = witness;
     this.lockFile = join(dir, ".writer.lock");
-    if (options.exclusiveWriter) this.persistentLockToken = this.acquireWriterLock();
-
     this.file = join(dir, "events.jsonl");
     this.rejectionFile = join(dir, "rejections.jsonl");
     this.eventHeadFile = join(dir, "events.head");
     this.rejectionHeadFile = join(dir, "rejections.head");
-    for (const file of this.trackedFiles()) if (existsSync(file)) chmodSync(file, 0o600);
 
-    this.lines = linesFrom<Line>(this.file);
-    this.rejectionLines = linesFrom<RejectionLine>(this.rejectionFile);
-    this.expectedEventHead = anchorFrom(this.eventHeadFile);
-    this.expectedRejectionHead = anchorFrom(this.rejectionHeadFile);
+    try {
+      if (options.exclusiveWriter) this.persistentLockToken = this.acquireWriterLock();
+      for (const file of this.trackedFiles()) if (existsSync(file)) chmodSync(file, 0o600);
+      this.lines = linesFrom<Line>(this.file);
+      this.rejectionLines = linesFrom<RejectionLine>(this.rejectionFile);
+      this.expectedEventHead = anchorFrom(this.eventHeadFile);
+      this.expectedRejectionHead = anchorFrom(this.rejectionHeadFile);
+    } catch (e) {
+      this.close();
+      throw e;
+    }
   }
 
   get events(): EaiEvent[] { return this.lines.map((l) => l.event); }
