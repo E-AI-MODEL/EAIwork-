@@ -59,18 +59,10 @@ test("provider sees the capsule, never the real atom identity or pack structure"
   });
   const broker = { read: async () => ["approved"] };
 
-  const result = await executeAtomWorker(
-    provider,
-    atom,
-    state,
-    broker,
-    { at: "2026-10-06", eventId: "ev1" },
-  );
+  const result = await executeAtomWorker(provider, atom, state, broker);
 
-  assert.equal(result.event.type, "answer.proposed");
-  assert.equal(result.event.atom, "a.fin.017");
-  assert.equal(result.event.actor.id, "model:blind");
-  assert.equal((result.event as any).value, "yes");
+  assert.equal(result.providerId, "model:blind");
+  assert.equal(result.value, "yes");
   assert.equal("invented" in result.probabilities, false);
 
   const visibleToProvider = JSON.stringify(seen);
@@ -134,8 +126,8 @@ test("every atom execution opens a fresh single-use model session", async () => 
   };
   const broker = { read: async () => ["approved"] };
 
-  await executeAtomWorker(provider, atom, state, broker, { at: "2026-10-06", eventId: "ev-a" });
-  await executeAtomWorker(provider, atom, state, broker, { at: "2026-10-06", eventId: "ev-b" });
+  await executeAtomWorker(provider, atom, state, broker);
+  await executeAtomWorker(provider, atom, state, broker);
 
   assert.equal(sessions, 2);
   assert.equal(closes, 2);
