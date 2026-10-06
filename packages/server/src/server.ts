@@ -12,6 +12,7 @@ import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 
 export interface DeterministicCheck {
   atom: string;
+  reads: string[];
   source: string;
   allowedActorId: string;
   run(input: { pack: Pack; state: State }): boolean;
@@ -140,7 +141,17 @@ export function makeServer(cfg: Config) {
   validatePrincipals(cfg.tokens, cfg.pack, Object.keys(cfg.checks ?? {}), ACTOR_KINDS);
 
   for (const [id, check] of Object.entries(cfg.checks ?? {})) {
-    if (!id.trim() || !atoms.has(check.atom) || typeof check.run !== "function" || !check.source?.trim() || !check.allowedActorId?.trim()) {
+    if (
+      !id.trim() ||
+      !atoms.has(check.atom) ||
+      !Array.isArray(check.reads) ||
+      !check.reads.length ||
+      !check.reads.includes(check.atom) ||
+      check.reads.some((atom) => !atoms.has(atom)) ||
+      typeof check.run !== "function" ||
+      !check.source?.trim() ||
+      !check.allowedActorId?.trim()
+    ) {
       throw new Error(`invalid deterministic check configuration: ${id}`);
     }
   }
@@ -326,13 +337,27 @@ export function makeServer(cfg: Config) {
         if (!canRunCheck(principal, id)) return json(res, 403, { error: "check access denied" });
         const check = cfg.checks?.[id];
         if (!check) return json(res, 404, { error: "unknown deterministic check" });
-        if (!canRead(principal, check.atom)) return json(res, 403, { error: "check target read access denied" });
+        if (check.reads.some((atom) => !canRead(principal, atom))) {
+          return json(res, 403, { error: "check input read access denied" });
+        }
         if (check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
 
         const r = currentSnapshot();
+        const checkVisible = new Set(check.reads);
+        const checkPack: Pack = {
+          ...cfg.pack,
+          atoms: cfg.pack.atoms
+            .filter((atom) => checkVisible.has(atom.id))
+            .map((atom) => ({ ...atom, depends_on: (atom.depends_on ?? []).filter((dep) => checkVisible.has(dep)) })),
+          clusters: cfg.pack.clusters
+            .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((atom) => checkVisible.has(atom)) }))
+            .filter((cluster) => cluster.atoms.length > 0),
+          rules: visibleRules(cfg.pack.rules, checkVisible),
+        };
+        const checkState = Object.fromEntries(Object.entries(r.state).filter(([atom]) => checkVisible.has(atom)));
         let passed = false;
         try {
-          passed = check.run({ pack: cfg.pack, state: structuredClone(r.state) }) === true;
+          passed = check.run({ pack: checkPack, state: structuredClone(checkState) }) === true;
         } catch {
           throw new HttpError(500, "deterministic check failed", false);
         }
