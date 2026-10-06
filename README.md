@@ -80,6 +80,16 @@ npm run serve
 
 Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. It also requires an Ed25519-signed append-only witness journal outside `EAI_DIR`. Put that witness directory on a separate mounted volume or other rollback-resistant storage in deployments where datastore rollback must remain detectable. Keep the private key in a secret store or protected mount. Set `EAI_HOST` only when you deliberately want to expose the service on another interface.
 
+Existing deployments with non-empty logs need one explicit trust-on-first-use step before first start with this version:
+
+```bash
+eai verify-local ./data
+eai bootstrap-witness ./data ../eai-witness ./witness-private.pem ./witness-public.pem
+eai verify-log ./data ../eai-witness ./witness-public.pem
+```
+
+Only bootstrap a log whose local chain and current head you already trust. After bootstrap, use `verify-log` for full verification; `verify-local` checks only the datastore itself.
+
 Useful CLI commands:
 
 ```text
@@ -88,7 +98,9 @@ eai replay <pack.json> <events.jsonl>
 eai explain <pack.json> <events.jsonl> <atom>
 eai report <pack.json> <events.jsonl> [goal-atom,...]
 eai agree <answersA.json> <answersB.json>
-eai verify-log <data-dir>
+eai verify-local <data-dir>
+eai verify-log <data-dir> <witness-dir> <public-key.pem>
+eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem>
 ```
 
 ## Repository map
