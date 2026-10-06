@@ -52,6 +52,15 @@ export function validatePrincipals(
     validateScope(principal.access.read, atoms, "read", true);
     validateScope(principal.access.write, atoms, "write", true);
     validateScope(principal.access.checks, checks, "checks", false);
+    if (principal.access.write === "*" && principal.access.read !== "*") {
+      throw new Error("write scope must be a subset of read scope");
+    }
+    if (Array.isArray(principal.access.write) && principal.access.read !== "*") {
+      const readable = new Set(principal.access.read);
+      for (const id of principal.access.write) {
+        if (!readable.has(id)) throw new Error("write scope must be a subset of read scope");
+      }
+    }
     if (principal.access.audit !== undefined && typeof principal.access.audit !== "boolean") {
       throw new Error("audit permission must be boolean");
     }
