@@ -391,11 +391,12 @@ export function makeServer(cfg: Config) {
           return json(res, 422, { rejected: true, reason: verdict.reason });
         }
 
-        const line = appendStateEvent(result.event);
-        return json(res, 201, {
-          seq: line.seq,
-          hash: line.hash,
+        appendStateEvent(result.event);
+        res.writeHead(204, {
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
         });
+        return res.end();
       }
 
       if (req.method === "POST" && url.pathname.startsWith("/checks/")) {
