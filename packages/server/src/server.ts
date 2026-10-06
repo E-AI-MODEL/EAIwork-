@@ -315,6 +315,7 @@ export function makeServer(cfg: Config) {
         if (!canRunCheck(principal, id)) return json(res, 403, { error: "check access denied" });
         const check = cfg.checks?.[id];
         if (!check) return json(res, 404, { error: "unknown deterministic check" });
+        if (!canRead(principal, check.atom)) return json(res, 403, { error: "check target read access denied" });
         if (check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
 
         const r = currentSnapshot();
