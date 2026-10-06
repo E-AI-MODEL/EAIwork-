@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -310,6 +310,65 @@ test("a local rejection cannot bless an event-log tamper that happens after the 
   assert.equal(raceStore.rejections.length, 0);
   assert.equal(raceStore.verifyCurrent().ok, false);
   assert.equal(raceStore.verify().ok, false);
+});
+
+test("post-commit integrity failures still refresh state before a later deterministic check", async () => {
+  const staleDir = mkdtempSync(join(tmpdir(), "eai-stale-snapshot-"));
+  const staleWitnessDir = mkdtempSync(join(tmpdir(), "eai-stale-witness-"));
+  const delegate = new SignedFileAnchorWitness(staleWitnessDir, privateKeyPem, publicKeyPem);
+  let injected = false;
+  const tamperingWitness = {
+    verify: (log: "events" | "rejections", anchor: { seq: number; hash: string }) =>
+      delegate.verify(log, anchor),
+    verifyCurrent: (log: "events" | "rejections", anchor: { seq: number; hash: string }) =>
+      delegate.verifyCurrent(log, anchor),
+    record: (log: "events" | "rejections", anchor: { seq: number; hash: string }) => {
+      delegate.record(log, anchor);
+      if (log === "events" && !injected) {
+        injected = true;
+        writeFileSync(join(staleDir, "rejections.jsonl"), "");
+      }
+    },
+  };
+
+  const isolated = makeServer({
+    dir: staleDir,
+    pack,
+    today: () => "2026-10-05",
+    tokens,
+    checks,
+    witness: tamperingWitness,
+  });
+  await new Promise<void>((resolve) => isolated.server.listen(0, "127.0.0.1", resolve));
+  const isolatedBase = `http://127.0.0.1:${(isolated.server.address() as AddressInfo).port}`;
+
+  const proposed = await fetch(isolatedBase + "/events", {
+    method: "POST",
+    headers: { authorization: "Bearer " + PERSON_TOKEN },
+    body: JSON.stringify({ type: "answer.proposed", atom: "a.fin.017", value: "yes" }),
+  });
+  assert.equal(proposed.status, 500);
+  assert.equal(isolated.store.events.length, 1);
+
+  const injectedFile = join(staleDir, "rejections.jsonl");
+  if (existsSync(injectedFile)) unlinkSync(injectedFile);
+
+  const stateAfterFailure = await (
+    await fetch(isolatedBase + "/state", { headers: { authorization: "Bearer " + PERSON_TOKEN } })
+  ).json() as any;
+  assert.equal(stateAfterFailure.atoms["a.fin.017"].value, "yes");
+
+  const checked = await fetch(isolatedBase + "/checks/budget-approved", {
+    method: "POST",
+    headers: { authorization: "Bearer " + CHECK_TOKEN },
+    body: "{}",
+  });
+  assert.equal(checked.status, 201);
+  assert.equal((await checked.json() as any).passed, true);
+
+  await new Promise<void>((resolve, reject) =>
+    isolated.server.close((err) => err ? reject(err) : resolve()),
+  );
 });
 
 test("audit endpoints require explicit audit permission", async () => {
