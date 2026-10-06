@@ -33,6 +33,11 @@ export class SignedFileAnchorWitness implements AnchorWitness {
     mkdirSync(dir, { recursive: true });
     this.privateKey = createPrivateKey(privateKeyPem);
     this.publicKey = createPublicKey(publicKeyPem);
+    const probe = Buffer.from("eai-witness-key-pair-check");
+    const probeSignature = sign(null, probe, this.privateKey);
+    if (!verify(null, probe, this.publicKey, probeSignature)) {
+      throw new Error("witness private/public key pair does not match");
+    }
     const exported = this.publicKey.export({ type: "spki", format: "pem" }).toString();
     this.keyId = createHash("sha256").update(exported).digest("hex").slice(0, 16);
   }
