@@ -11,6 +11,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Actor identity and authorization come from the server-side principal map, never from the request body.
 - Read/write/check/audit permissions are explicit and default-deny. Write scope must stay inside read scope.
 - State and derived metadata are filtered before being returned, so hidden atoms do not leak through dependencies, rule output, checksums or audit counters.
+- Deterministic checks declare their input atoms. The caller must be allowed to read all inputs and the check receives only that scoped state, preventing check results from becoming an oracle over hidden atoms.
 - Public `/events` requests cannot create `check.passed` events.
 - Person/system evidence lineage is derived by the server from actor identity. Client-supplied lineage is ignored.
 - `proven` can only be reached through a deterministic check registered inside the server process.
