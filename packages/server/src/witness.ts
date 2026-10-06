@@ -23,11 +23,13 @@ const payload = (log: WitnessLog, anchor: Anchor) =>
   JSON.stringify({ version: 1, log, seq: anchor.seq, hash: anchor.hash });
 
 export class SignedFileAnchorWitness implements AnchorWitness {
+  private dir: string;
   private privateKey: ReturnType<typeof createPrivateKey>;
   private publicKey: ReturnType<typeof createPublicKey>;
   private keyId: string;
 
-  constructor(private dir: string, privateKeyPem: string, publicKeyPem: string) {
+  constructor(dir: string, privateKeyPem: string, publicKeyPem: string) {
+    this.dir = dir;
     mkdirSync(dir, { recursive: true });
     this.privateKey = createPrivateKey(privateKeyPem);
     this.publicKey = createPublicKey(publicKeyPem);
