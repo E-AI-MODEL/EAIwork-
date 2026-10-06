@@ -78,7 +78,7 @@ EAI_WITNESS_PUBLIC_KEY=./witness-public.pem \
 npm run serve
 ```
 
-Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. It also requires an Ed25519-signed append-only witness journal outside `EAI_DIR`. Put that witness directory on a separate mounted volume or other rollback-resistant storage in deployments where datastore rollback must remain detectable. Keep the private key in a secret store or protected mount. Set `EAI_HOST` only when you deliberately want to expose the service on another interface.
+Open `http://127.0.0.1:8787`. The server requires an explicit `EAI_TOKENS` file, rejects placeholder/example tokens and binds to `127.0.0.1` by default. It also requires an Ed25519-signed, cryptographically chained witness journal outside `EAI_DIR`. Put that witness directory on a separate mounted volume or other rollback-resistant storage in deployments where datastore rollback must remain detectable. Keep the private key in a secret store or protected mount. Set `EAI_HOST` only when you deliberately want to expose the service on another interface.
 
 Existing deployments with non-empty logs need one explicit trust-on-first-use step before first start with this version:
 
@@ -127,7 +127,7 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 - **Deterministic proof:** `proven` requires a server-registered deterministic check; public clients cannot submit `check.passed`.
 - **Scoped authorization:** principals only see and modify explicitly permitted atoms; audit and check execution are separate permissions.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.
-- **Signed rollback detection:** event and rejection heads are Ed25519-signed into append-only witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
+- **Signed rollback detection:** event and rejection heads are Ed25519-signed into cryptographically chained witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
 - **Review wording:** no flags means “not detected”, not “safe”.
 
