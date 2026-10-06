@@ -18,6 +18,7 @@ const LIMITED_TOKEN = "l".repeat(40);
 const ALL_ARRAY_TOKEN = "a".repeat(40);
 const RULE_SCOPE_TOKEN = "r".repeat(40);
 const TARGET_ONLY_WORKER_TOKEN = "t".repeat(40);
+const SCOPED_AUDITOR_WORKER_TOKEN = "q".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
     actor: { kind: "person", id: "person:jan" } as const,
@@ -50,6 +51,10 @@ const tokens = {
   [TARGET_ONLY_WORKER_TOKEN]: {
     actor: { kind: "system", id: "system:target-only-worker" } as const,
     access: { read: ["a.fin.017"], write: [], workers: ["a.fin.017"] },
+  },
+  [SCOPED_AUDITOR_WORKER_TOKEN]: {
+    actor: { kind: "system", id: "system:scoped-auditor-worker" } as const,
+    access: { read: ["a.plan.003"], write: [], workers: ["a.fin.017"], audit: true },
   },
 };
 const checks = {
@@ -427,6 +432,21 @@ test("worker target cannot become an oracle for an unread dependency", async () 
 
   const after = await get(TARGET_ONLY_WORKER_TOKEN, "/state");
   assert.equal(after.atoms["a.fin.017"].value, before.atoms["a.fin.017"].value);
+});
+
+test("scoped auditors cannot infer hidden worker rejections from global counters", async () => {
+  const before = await get(SCOPED_AUDITOR_WORKER_TOKEN, "/state");
+  assert.deepEqual(Object.keys(before.atoms), ["a.plan.003"]);
+  assert.equal("rejectedAttempts" in before, false);
+
+  const rejectedBefore = store.rejections.length;
+  const run = await post(SCOPED_AUDITOR_WORKER_TOKEN, {}, "/workers/a.fin.017");
+  assert.equal(run.status, 204);
+  assert.equal(store.rejections.length, rejectedBefore + 1);
+
+  const after = await get(SCOPED_AUDITOR_WORKER_TOKEN, "/state");
+  assert.deepEqual(Object.keys(after.atoms), ["a.plan.003"]);
+  assert.equal("rejectedAttempts" in after, false);
 });
 
 test("server-owned worker gets only its atom capsule and writes an assumption", async () => {
