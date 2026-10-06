@@ -17,6 +17,7 @@ const CHECK_TOKEN = "c".repeat(40);
 const BLIND_CHECK_TOKEN = "b".repeat(40);
 const LIMITED_TOKEN = "l".repeat(40);
 const ALL_ARRAY_TOKEN = "a".repeat(40);
+const RULE_SCOPE_TOKEN = "r".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
     actor: { kind: "person", id: "person:jan" } as const,
@@ -42,10 +43,15 @@ const tokens = {
     actor: { kind: "person", id: "person:all-array" } as const,
     access: { read: ["a.fin.016", "a.fin.017", "a.plan.003"], write: [] },
   },
+  [RULE_SCOPE_TOKEN]: {
+    actor: { kind: "person", id: "person:rule-scope" } as const,
+    access: { read: ["a.fin.017", "a.plan.003"], write: [] },
+  },
 };
 const checks = {
   "budget-approved": {
     atom: "a.fin.017",
+    reads: ["a.fin.017"],
     source: "server-side deterministic budget check",
     allowedActorId: "check:calc",
     run: ({ state }: any) => state["a.fin.017"]?.value === "yes",
@@ -133,9 +139,13 @@ test("authorization is default-deny per atom and does not leak hidden metadata",
   assert.equal(after.checksum, checksumBefore);
 });
 
-test("explicit all-atom read scope preserves rule output", async () => {
-  const state = await get(ALL_ARRAY_TOKEN, "/state");
-  assert.ok(state.flags.some((flag: any) => flag.rule === "R-uncertain-fixed"));
+test("rules remain visible whenever all rule inputs are readable", async () => {
+  const allState = await get(ALL_ARRAY_TOKEN, "/state");
+  assert.ok(allState.flags.some((flag: any) => flag.rule === "R-uncertain-fixed"));
+
+  const scopedState = await get(RULE_SCOPE_TOKEN, "/state");
+  assert.ok(scopedState.flags.some((flag: any) => flag.rule === "R-uncertain-fixed"));
+  assert.equal(JSON.stringify(scopedState).includes("a.fin.016"), false);
 });
 
 test("existing verified logs can be explicitly bootstrapped into a signed witness", () => {
@@ -230,7 +240,7 @@ test("public clients cannot submit check.passed", async () => {
 test("check permission alone cannot probe a hidden atom", async () => {
   const r = await post(BLIND_CHECK_TOKEN, {}, "/checks/budget-approved");
   assert.equal(r.status, 403);
-  assert.match((await r.json() as any).error, /target read access denied/);
+  assert.match((await r.json() as any).error, /input read access denied/);
 });
 
 test("only a registered server-side deterministic check can create proven status", async () => {
