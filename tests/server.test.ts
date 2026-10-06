@@ -24,7 +24,7 @@ const tokens = {
   },
   [ORCHESTRATOR_TOKEN]: {
     actor: { kind: "system", id: "system:worker-orchestrator" } as const,
-    access: { read: "*" as const, write: "*" as const, workers: "*" as const },
+    access: { read: [], write: [], workers: "*" as const },
   },
   [CHECK_TOKEN]: {
     actor: { kind: "check", id: "check:calc" } as const,
@@ -221,7 +221,7 @@ test("authorization is default-deny per atom and does not leak hidden metadata",
   assert.equal(denied.status, 403);
 
   const checksumBefore = before.checksum;
-  assert.equal((await post(ORCHESTRATOR_TOKEN, { type: "answer.proposed", atom: "a.plan.003", value: "yes" })).status, 201);
+  assert.equal((await post(PERSON_TOKEN, { type: "answer.proposed", atom: "a.plan.003", value: "yes" })).status, 201);
   const after = await get(LIMITED_TOKEN, "/state");
   assert.equal(after.checksum, checksumBefore);
 });
@@ -428,9 +428,13 @@ test("server-owned worker gets only its atom capsule and writes an assumption", 
   const run = await post(ORCHESTRATOR_TOKEN, {}, "/workers/a.fin.017");
   assert.equal(run.status, 201);
   const body = await run.json() as any;
-  assert.equal(body.value, "yes");
-  assert.equal(body.route, "accept-as-assumption");
+  assert.deepEqual(Object.keys(body).sort(), ["hash", "seq"]);
   assert.equal((await get(PERSON_TOKEN, "/state")).atoms["a.fin.017"].status, "assumption");
+
+  const orchestratorState = await fetch(base + "/state", { headers: { authorization: "Bearer " + ORCHESTRATOR_TOKEN } });
+  assert.equal(orchestratorState.status, 200);
+  assert.deepEqual(Object.keys(((await orchestratorState.json()) as any).atoms), []);
+  assert.equal((await post(ORCHESTRATOR_TOKEN, { type: "answer.proposed", atom: "a.fin.017", value: "yes" })).status, 403);
 
   assert.deepEqual(Object.keys(lastWorkerCapsule).sort(), ["context", "inputs", "options", "question"]);
   assert.deepEqual(lastWorkerCapsule.inputs, { request_filed: null });
@@ -546,9 +550,9 @@ test("values must be allowed options; unknown atoms and event types are rejected
 
 test("field-validation failures are recorded in the rejection audit", async () => {
   const before = store.rejections.length;
-  const badAnswer = await post(ORCHESTRATOR_TOKEN, { type: "answer.proposed", atom: "a.fin.017" });
+  const badAnswer = await post(PERSON_TOKEN, { type: "answer.proposed", atom: "a.fin.017" });
   assert.equal(badAnswer.status, 422);
-  const badFlag = await post(ORCHESTRATOR_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: "" });
+  const badFlag = await post(PERSON_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: "" });
   assert.equal(badFlag.status, 422);
   assert.equal(store.rejections.length, before + 2);
   assert.match(store.rejections.at(-2)!.reason, /answer value/);
@@ -557,21 +561,21 @@ test("field-validation failures are recorded in the rejection audit", async () =
 
 test("oversized request bodies are rejected before event processing", async () => {
   const huge = "x".repeat(70 * 1024);
-  const r = await post(ORCHESTRATOR_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: huge });
+  const r = await post(PERSON_TOKEN, { type: "flag.raised", atom: "a.fin.017", message: huge });
   assert.equal(r.status, 413);
 });
 
 test("actor-raised flags are visible and a person can dismiss them", async () => {
   assert.equal((await post(PERSON_TOKEN, { type: "answer.proposed", atom: "a.fin.016", value: "yes" })).status, 201);
-  assert.equal((await post(ORCHESTRATOR_TOKEN, { type: "flag.raised", atom: "a.fin.016", message: "system concern" })).status, 201);
+  assert.equal((await post(PERSON_TOKEN, { type: "flag.raised", atom: "a.fin.016", message: "person concern" })).status, 201);
   const state = await get(PERSON_TOKEN, "/state");
-  const flag = state.flags.find((x: any) => x.message === "system concern");
+  const flag = state.flags.find((x: any) => x.message === "person concern");
   assert.ok(flag);
   const explanation = await get(PERSON_TOKEN, "/explain/a.fin.016");
-  assert.ok(explanation.flags.some((x: any) => x.message === "system concern" && !x.dismissed));
+  assert.ok(explanation.flags.some((x: any) => x.message === "person concern" && !x.dismissed));
   assert.equal((await post(PERSON_TOKEN, { type: "flag.dismissed", atom: "a.fin.016", flag: flag.rule, reason: "reviewed" })).status, 201);
   const after = await get(PERSON_TOKEN, "/state");
-  assert.ok(!after.flags.some((x: any) => x.message === "system concern"));
+  assert.ok(!after.flags.some((x: any) => x.message === "person concern"));
 });
 
 test("worker endpoint clamps provider output to fixed atom options", async () => {
