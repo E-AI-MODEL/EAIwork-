@@ -8,11 +8,10 @@ import type { AddressInfo } from "node:net";
 import { makeServer } from "../packages/server/src/server.ts";
 import { SignedFileAnchorVerifier, SignedFileAnchorWitness } from "../packages/server/src/witness.ts";
 import { Store } from "../packages/server/src/store.ts";
-import { ask, mockProvider } from "../packages/gateway/src/gateway.ts";
 
 const pack = JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json", import.meta.url), "utf8"));
 const PERSON_TOKEN = "p".repeat(40);
-const MODEL_TOKEN = "m".repeat(40);
+const ORCHESTRATOR_TOKEN = "o".repeat(40);
 const CHECK_TOKEN = "c".repeat(40);
 const BLIND_CHECK_TOKEN = "b".repeat(40);
 const LIMITED_TOKEN = "l".repeat(40);
@@ -23,9 +22,9 @@ const tokens = {
     actor: { kind: "person", id: "person:jan" } as const,
     access: { read: "*" as const, write: "*" as const, audit: true },
   },
-  [MODEL_TOKEN]: {
-    actor: { kind: "model", id: "model:demo" } as const,
-    access: { read: "*" as const, write: "*" as const },
+  [ORCHESTRATOR_TOKEN]: {
+    actor: { kind: "system", id: "system:worker-orchestrator" } as const,
+    access: { read: "*" as const, write: "*" as const, workers: "*" as const },
   },
   [CHECK_TOKEN]: {
     actor: { kind: "check", id: "check:calc" } as const,
@@ -58,6 +57,38 @@ const checks = {
   },
 };
 
+const workerAnswers: Record<string, Record<string, number>> = {
+  "Is a budget request filed?": { yes: 0.9, no: 0.05, unknown: 0.05 },
+  "Is the budget approved by the budget holder?": { yes: 0.9, no: 0.05, unknown: 0.05 },
+  "Is the start date fixed?": { yes: 0.9, no: 0.05, unknown: 0.05 },
+};
+let lastWorkerCapsule: any = null;
+let workerCalls = 0;
+const brokerReads: string[] = [];
+const workers = {
+  default: {
+    provider: {
+      id: "model:demo",
+      answer: async (capsule: any) => {
+        workerCalls++;
+        lastWorkerCapsule = structuredClone(capsule);
+        return workerAnswers[capsule.question] ?? { unknown: 1 };
+      },
+    },
+    broker: {
+      read: async (handle: string) => {
+        brokerReads.push(handle);
+        const table: Record<string, string[]> = {
+          "s.fin.request": ["request filed"],
+          "s.fin.approval": ["budget holder approved"],
+          "s.plan.startdate": ["start date fixed"],
+        };
+        return table[handle] ?? ["GLOBAL CONTEXT MUST NEVER BE READ"];
+      },
+    },
+  },
+};
+
 const dir = mkdtempSync(join(tmpdir(), "eai-"));
 const witnessDir = mkdtempSync(join(tmpdir(), "eai-witness-"));
 const keyPair = generateKeyPairSync("ed25519");
@@ -65,7 +96,7 @@ const privateKeyPem = keyPair.privateKey.export({ format: "pem", type: "pkcs8" }
 const publicKeyPem = keyPair.publicKey.export({ format: "pem", type: "spki" }).toString();
 const witness = new SignedFileAnchorWitness(witnessDir, privateKeyPem, publicKeyPem);
 const { server, store } = makeServer({
-  dir, pack, today: () => "2026-10-05", tokens, checks, witness,
+  dir, pack, today: () => "2026-10-05", tokens, checks, workers, witness,
 });
 await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
