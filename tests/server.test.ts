@@ -168,6 +168,35 @@ test("existing verified logs can be explicitly bootstrapped into a signed witnes
   const bootstrapped = new Store(legacyDir).bootstrapWitness(legacyWitness);
   assert.equal(bootstrapped.ok, true);
   assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
+
+  assert.throws(
+    () => new Store(legacyDir).bootstrapWitness(legacyWitness),
+    /advance by one/,
+  );
+
+  const witnessedStore = new Store(legacyDir, legacyWitness);
+  witnessedStore.append({
+    id: "legacy-2", at: "2026-10-05",
+    actor: { kind: "person", id: "person:legacy" },
+    type: "answer.proposed", atom: "a.plan.003", value: "no",
+  });
+  assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
+
+  const journalFile = join(legacyWitnessDir, "events.anchor.witness.jsonl");
+  const originalJournal = readFileSync(journalFile, "utf8");
+  const journalLines = originalJournal.split("\n").filter(Boolean);
+  const firstEnvelope = JSON.parse(journalLines[0]);
+  firstEnvelope.hash = firstEnvelope.hash.replace(/^./, firstEnvelope.hash[0] === "a" ? "b" : "a");
+  journalLines[0] = JSON.stringify(firstEnvelope);
+  writeFileSync(journalFile, journalLines.join("\n") + "\n");
+  const tamperedWitness = new Store(
+    legacyDir,
+    new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem),
+  ).verify();
+  assert.equal(tamperedWitness.ok, false);
+  assert.match(tamperedWitness.reason ?? "", /witness/);
+  writeFileSync(journalFile, originalJournal);
+  assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
 });
 
 test("audit endpoints require explicit audit permission", async () => {
