@@ -146,6 +146,16 @@ De body moet een leeg object zijn. Een caller kan dus niet meesturen:
 
 De server bouwt de capsule zelf.
 
+## Output-leesrechten en dependency-orakels
+
+Een execute-only orchestrator mag een worker starten zonder state te kunnen lezen. Dat blijft toegestaan.
+
+Zodra een principal het target atom wél kan lezen, geldt een extra invariant:
+
+> **read(target) + workers(target) vereist read() op iedere gedeclareerde worker-input.**
+
+Anders zou het leesbare target na worker execution informatie kunnen prijsgeven over een verborgen dependency. De server blokkeert zo'n worker-run met 403 voordat de capsule wordt gebouwd.
+
 ## Geen publieke modeltokens
 
 Een `model` actor kan geen publiek API-token krijgen.
