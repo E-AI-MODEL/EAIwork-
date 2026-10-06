@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { Actor, EaiEvent } from "../../core/src/index.ts";
@@ -24,6 +24,11 @@ const linesFrom = <T>(file: string): T[] =>
     : [];
 const anchorFrom = (file: string): Anchor =>
   existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : emptyAnchor();
+const fingerprint = (file: string) => {
+  if (!existsSync(file)) return "missing";
+  const s = statSync(file);
+  return [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs].join(":");
+};
 
 /** Append-only logs plus sidecar head anchors so suffix deletion remains detectable after restart. */
 export class Store {
@@ -34,6 +39,8 @@ export class Store {
   private expectedEventHead: Anchor;
   private expectedRejectionHead: Anchor;
   private witness?: AnchorVerifier;
+  private verifiedFingerprints = new Map<string, string>();
+  private hasVerifiedBaseline = false;
   lines: Line[] = [];
   rejectionLines: RejectionLine[] = [];
 
@@ -54,8 +61,25 @@ export class Store {
   get rejections(): Rejection[] { return this.rejectionLines.map((l) => l.rejection); }
   next(): number { return this.lines.length + 1; }
 
+  private trackedFiles() {
+    return [this.file, this.rejectionFile, this.eventHeadFile, this.rejectionHeadFile];
+  }
+
+  private refreshVerifiedFingerprints(): void {
+    for (const file of this.trackedFiles()) this.verifiedFingerprints.set(file, fingerprint(file));
+  }
+
+  private localFilesUnchanged(): boolean {
+    if (!this.hasVerifiedBaseline) return false;
+    return this.trackedFiles().every((file) => this.verifiedFingerprints.get(file) === fingerprint(file));
+  }
+
   private writeAnchor(file: string, anchor: Anchor): void {
     writeFileSync(file, JSON.stringify(anchor) + "\n");
+  }
+
+  private acceptOwnWrite(): void {
+    if (this.hasVerifiedBaseline) this.refreshVerifiedFingerprints();
   }
 
   append(event: EaiEvent): Line {
@@ -68,6 +92,7 @@ export class Store {
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("events", this.expectedEventHead);
     }
+    this.acceptOwnWrite();
     return line;
   }
 
@@ -86,9 +111,11 @@ export class Store {
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("rejections", this.expectedRejectionHead);
     }
+    this.acceptOwnWrite();
     return line;
   }
 
+  /** Full replay-grade verification. Use at startup, for audits and after external file changes. */
   verify(): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } {
     let events: Line[];
     let rejections: RejectionLine[];
@@ -141,6 +168,7 @@ export class Store {
       const witnessed = this.witness.verify("events", eventAnchor);
       if (!witnessed.ok) return { ok: false, badAt: eventAnchor.seq || 1, log: "events", reason: witnessed.reason };
     }
+
     const rejectionResult = verifyChain(
       rejections, this.rejectionLines, (line) => line.rejection,
       rejectionAnchor, this.expectedRejectionHead, "rejections",
@@ -149,6 +177,30 @@ export class Store {
     if (this.witness) {
       const witnessed = this.witness.verify("rejections", rejectionAnchor);
       if (!witnessed.ok) return { ok: false, badAt: rejectionAnchor.seq || 1, log: "rejections", reason: witnessed.reason };
+    }
+
+    this.hasVerifiedBaseline = true;
+    this.refreshVerifiedFingerprints();
+    return { ok: true };
+  }
+
+  /**
+   * Fast fail-closed verification for the request path.
+   * It is O(1) while files match the last full verification/accepted local write.
+   * Any external file change falls back to full verification.
+   */
+  verifyCurrent(): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } {
+    if (!this.localFilesUnchanged()) return this.verify();
+
+    if (this.witness) {
+      const eventWitness = this.witness.verifyCurrent("events", this.expectedEventHead);
+      if (!eventWitness.ok) {
+        return { ok: false, badAt: this.expectedEventHead.seq || 1, log: "events", reason: eventWitness.reason };
+      }
+      const rejectionWitness = this.witness.verifyCurrent("rejections", this.expectedRejectionHead);
+      if (!rejectionWitness.ok) {
+        return { ok: false, badAt: this.expectedRejectionHead.seq || 1, log: "rejections", reason: rejectionWitness.reason };
+      }
     }
     return { ok: true };
   }

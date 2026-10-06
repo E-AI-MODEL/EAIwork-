@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -75,6 +75,38 @@ const post = (token: string, body: unknown, path = "/events") =>
   fetch(base + path, { method: "POST", headers: { authorization: "Bearer " + token }, body: JSON.stringify(body) });
 const get = async (token: string, path: string) =>
   (await fetch(base + path, { headers: { authorization: "Bearer " + token } })).json() as any;
+
+class CountingWitness {
+  full = 0;
+  current = 0;
+  records = 0;
+  private heads = {
+    events: { seq: 0, hash: "0".repeat(64) },
+    rejections: { seq: 0, hash: "0".repeat(64) },
+  };
+
+  private matches(log: "events" | "rejections", anchor: { seq: number; hash: string }) {
+    const expected = this.heads[log];
+    return expected.seq === anchor.seq && expected.hash === anchor.hash
+      ? { ok: true }
+      : { ok: false, reason: `${log} head mismatch` };
+  }
+
+  verify(log: "events" | "rejections", anchor: { seq: number; hash: string }) {
+    this.full++;
+    return this.matches(log, anchor);
+  }
+
+  verifyCurrent(log: "events" | "rejections", anchor: { seq: number; hash: string }) {
+    this.current++;
+    return this.matches(log, anchor);
+  }
+
+  record(log: "events" | "rejections", anchor: { seq: number; hash: string }) {
+    this.records++;
+    this.heads[log] = { ...anchor };
+  }
+}
 
 test("weak, placeholder, or unscoped principals are rejected at startup", () => {
   const actor = { kind: "person", id: "person:x" } as const;
@@ -195,6 +227,33 @@ test("existing verified logs can be explicitly bootstrapped into a signed witnes
   assert.match(tamperedWitness.reason ?? "", /witness/);
   writeFileSync(journalFile, originalJournal);
   assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
+});
+
+test("5,000 rejected writes stay on the constant-time integrity path", () => {
+  const stressDir = mkdtempSync(join(tmpdir(), "eai-stress-"));
+  const counting = new CountingWitness();
+  const stressStore = new Store(stressDir, counting);
+
+  assert.equal(stressStore.verify().ok, true);
+  const fullAfterStartup = counting.full;
+
+  for (let i = 0; i < 5_000; i++) {
+    assert.equal(stressStore.verifyCurrent().ok, true);
+    stressStore.recordRejection({
+      at: "2026-10-05",
+      actor: { kind: "model", id: "model:stress" },
+      attempted: { i },
+      reason: "rejected",
+    });
+  }
+
+  assert.equal(counting.full, fullAfterStartup);
+  assert.equal(counting.records, 5_000);
+  assert.equal(counting.current, 10_000);
+  assert.equal(stressStore.verifyCurrent().ok, true);
+
+  appendFileSync(join(stressDir, "rejections.jsonl"), "{}\n");
+  assert.equal(stressStore.verifyCurrent().ok, false);
 });
 
 test("audit endpoints require explicit audit permission", async () => {
@@ -351,6 +410,7 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   const tampered = [...originalLines];
   const first = JSON.parse(tampered[0]); first.event.value = "no"; tampered[0] = JSON.stringify(first);
   writeFileSync(file, tampered.join("\n") + "\n");
+  assert.equal(store.verifyCurrent().ok, false);
   assert.equal(store.verify().ok, false);
   assert.equal(new Store(dir, witness).verify().ok, false);
   assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
