@@ -7,7 +7,8 @@ import {
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
-import { canAudit, canRead, canRunCheck, canWrite, validatePrincipals, type Principal } from "./authz.ts";
+import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
+import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 
 export interface DeterministicCheck {
@@ -18,6 +19,12 @@ export interface DeterministicCheck {
   run(input: { pack: Pack; state: State }): boolean;
 }
 
+export interface WorkerRuntime {
+  provider: ModelProvider;
+  broker: SourceBroker;
+  temperature?: number;
+}
+
 export interface Config {
   dir: string;
   pack: Pack;
@@ -25,6 +32,7 @@ export interface Config {
   tokens: Record<string, Principal>;
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
+  workers?: Record<string, WorkerRuntime>;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -336,6 +344,67 @@ export function makeServer(cfg: Config) {
         if (!v.ok) return reject(v.reason);
         const line = appendStateEvent(event);
         return json(res, 201, { seq: line.seq, hash: line.hash });
+      }
+
+      if (req.method === "POST" && url.pathname.startsWith("/workers/")) {
+        requireWritableIntegrity();
+        let body: any;
+        try {
+          body = JSON.parse((await readBody(req, maxBodyBytes)) || "{}");
+        } catch (e) {
+          if (e instanceof HttpError) throw e;
+          throw new HttpError(400, "invalid JSON");
+        }
+        if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length > 0) {
+          return json(res, 422, { error: "worker request body must be an empty object" });
+        }
+
+        const atomId = decodeURIComponent(url.pathname.slice("/workers/".length));
+        if (!canRunWorker(principal, atomId)) return json(res, 403, { error: "worker access denied" });
+        const atomDef = atoms.get(atomId);
+        if (!atomDef?.worker) return json(res, 404, { error: "unknown or non-worker atom" });
+        if (!canRead(principal, atomId) || !canWrite(principal, atomId)) {
+          return json(res, 403, { error: "worker target access denied" });
+        }
+        if ((atomDef.worker.reads ?? []).some((read) => !canRead(principal, read.atom))) {
+          return json(res, 403, { error: "worker input read access denied" });
+        }
+
+        const runtimeId = atomDef.worker.runtime ?? "default";
+        const runtime = cfg.workers?.[runtimeId];
+        if (!runtime) return json(res, 503, { error: "worker runtime unavailable" });
+
+        const before = currentSnapshot();
+        const result = await executeAtomWorker(
+          runtime.provider,
+          atomDef,
+          before.state,
+          runtime.broker,
+          {
+            at: today(),
+            eventId: `ev${store.next()}`,
+            temperature: runtime.temperature,
+          },
+        );
+        const verdict = validate(result.event, before.state);
+        if (!verdict.ok) {
+          store.recordRejection({
+            at: today(),
+            actor: result.event.actor,
+            attempted: { worker: atomId, value: result.event.value },
+            reason: verdict.reason,
+          });
+          return json(res, 422, { rejected: true, reason: verdict.reason });
+        }
+
+        const line = appendStateEvent(result.event);
+        return json(res, 201, {
+          seq: line.seq,
+          hash: line.hash,
+          value: result.event.value,
+          route: result.route,
+          probabilities: result.probabilities,
+        });
       }
 
       if (req.method === "POST" && url.pathname.startsWith("/checks/")) {
