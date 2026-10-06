@@ -69,11 +69,13 @@ const workers = {
   default: {
     provider: {
       id: "model:demo",
-      answer: async (capsule: any) => {
-        workerCalls++;
-        lastWorkerCapsule = structuredClone(capsule);
-        return workerAnswers[capsule.question] ?? { unknown: 1 };
-      },
+      openSession: () => ({
+        answer: async (capsule: any) => {
+          workerCalls++;
+          lastWorkerCapsule = structuredClone(capsule);
+          return workerAnswers[capsule.question] ?? { unknown: 1 };
+        },
+      }),
     },
     broker: {
       read: async (handle: string) => {
