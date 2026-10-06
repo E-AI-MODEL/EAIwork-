@@ -92,6 +92,8 @@ Only bootstrap a log whose local chain and current head you already trust. After
 
 The HTTP write path uses a cached verified head and file fingerprints, so normal writes and rejected requests do not rescan the full event or witness history. Startup, `verify-log` and audit verification still perform a full chain check. Any external change to tracked log/head/witness files invalidates the fast path and forces full verification.
 
+The server also takes an exclusive writer lock for the lifetime of the process. `EAI_DIR` is forced to mode `0700` and tracked files to `0600`; the witness directory is also `0700`. Run EAIwork under a dedicated OS account and do not grant other processes direct write access to `EAI_DIR`. Supported writes are serialized through the Store.
+
 Useful CLI commands:
 
 ```text

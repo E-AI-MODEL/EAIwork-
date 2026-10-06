@@ -1,5 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Actor, EaiEvent } from "../../core/src/index.ts";
 import type { AnchorVerifier, AnchorWitness } from "./witness.ts";
@@ -13,6 +13,7 @@ export interface Rejection {
 }
 interface RejectionLine { seq: number; prev: string; hash: string; rejection: Rejection }
 export interface Anchor { seq: number; hash: string }
+export interface StoreOptions { exclusiveWriter?: boolean }
 
 const GENESIS = "0".repeat(64);
 const emptyAnchor = (): Anchor => ({ seq: 0, hash: GENESIS });
@@ -39,22 +40,34 @@ export class Store {
   private expectedEventHead: Anchor;
   private expectedRejectionHead: Anchor;
   private witness?: AnchorVerifier;
+  private lockFile: string;
+  private persistentLockToken?: string;
   private verifiedFingerprints = new Map<string, string>();
   private hasVerifiedBaseline = false;
   lines: Line[] = [];
   rejectionLines: RejectionLine[] = [];
 
-  constructor(dir: string, witness?: AnchorVerifier) {
-    mkdirSync(dir, { recursive: true });
+  constructor(dir: string, witness?: AnchorVerifier, options: StoreOptions = {}) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
     this.witness = witness;
+    this.lockFile = join(dir, ".writer.lock");
     this.file = join(dir, "events.jsonl");
     this.rejectionFile = join(dir, "rejections.jsonl");
     this.eventHeadFile = join(dir, "events.head");
     this.rejectionHeadFile = join(dir, "rejections.head");
-    this.lines = linesFrom<Line>(this.file);
-    this.rejectionLines = linesFrom<RejectionLine>(this.rejectionFile);
-    this.expectedEventHead = anchorFrom(this.eventHeadFile);
-    this.expectedRejectionHead = anchorFrom(this.rejectionHeadFile);
+
+    try {
+      if (options.exclusiveWriter) this.persistentLockToken = this.acquireWriterLock();
+      for (const file of this.trackedFiles()) if (existsSync(file)) chmodSync(file, 0o600);
+      this.lines = linesFrom<Line>(this.file);
+      this.rejectionLines = linesFrom<RejectionLine>(this.rejectionFile);
+      this.expectedEventHead = anchorFrom(this.eventHeadFile);
+      this.expectedRejectionHead = anchorFrom(this.rejectionHeadFile);
+    } catch (e) {
+      this.close();
+      throw e;
+    }
   }
 
   get events(): EaiEvent[] { return this.lines.map((l) => l.event); }
@@ -63,6 +76,60 @@ export class Store {
 
   private trackedFiles() {
     return [this.file, this.rejectionFile, this.eventHeadFile, this.rejectionHeadFile];
+  }
+
+  private pidIsAlive(pid: number): boolean {
+    if (!Number.isInteger(pid) || pid <= 0) return false;
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e: any) {
+      return e?.code === "EPERM";
+    }
+  }
+
+  private acquireWriterLock(): string {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const token = `${process.pid}:${randomUUID()}`;
+      try {
+        const fd = openSync(this.lockFile, "wx", 0o600);
+        try { writeFileSync(fd, token + "\n"); } finally { closeSync(fd); }
+        return token;
+      } catch (e: any) {
+        if (e?.code !== "EEXIST") throw e;
+        let holderPid = 0;
+        try { holderPid = Number(readFileSync(this.lockFile, "utf8").split(":")[0]); } catch {}
+        if (this.pidIsAlive(holderPid)) throw new Error("store already has an active writer");
+        try { unlinkSync(this.lockFile); } catch (unlinkError: any) {
+          if (unlinkError?.code !== "ENOENT") throw unlinkError;
+        }
+      }
+    }
+    throw new Error("could not acquire store writer lock");
+  }
+
+  private releaseWriterLock(token: string): void {
+    try {
+      if (!existsSync(this.lockFile)) return;
+      const current = readFileSync(this.lockFile, "utf8").trim();
+      if (current !== token) throw new Error("store writer lock ownership changed");
+      unlinkSync(this.lockFile);
+    } catch (e: any) {
+      if (e?.code !== "ENOENT") throw e;
+    }
+  }
+
+  private withWriterLock<T>(fn: () => T): T {
+    if (this.persistentLockToken) return fn();
+    const token = this.acquireWriterLock();
+    try { return fn(); } finally { this.releaseWriterLock(token); }
+  }
+
+  close(): void {
+    if (!this.persistentLockToken) return;
+    const token = this.persistentLockToken;
+    this.persistentLockToken = undefined;
+    this.releaseWriterLock(token);
   }
 
   private refreshVerifiedFingerprints(): void {
@@ -75,44 +142,77 @@ export class Store {
   }
 
   private writeAnchor(file: string, anchor: Anchor): void {
-    writeFileSync(file, JSON.stringify(anchor) + "\n");
+    writeFileSync(file, JSON.stringify(anchor) + "\n", { mode: 0o600 });
+    chmodSync(file, 0o600);
   }
 
-  private acceptOwnWrite(): void {
-    if (this.hasVerifiedBaseline) this.refreshVerifiedFingerprints();
+  private invalidateBaseline(message: string): never {
+    this.hasVerifiedBaseline = false;
+    throw new Error(message);
+  }
+
+  private assertVerifiedBaselineUnchanged(): void {
+    if (!this.hasVerifiedBaseline) return;
+    for (const file of this.trackedFiles()) {
+      if (this.verifiedFingerprints.get(file) !== fingerprint(file)) {
+        this.invalidateBaseline("tracked store file changed outside the verified write path");
+      }
+    }
+  }
+
+  private acceptOwnWrite(changedFiles: string[]): void {
+    if (!this.hasVerifiedBaseline) return;
+    const changed = new Set(changedFiles);
+
+    for (const file of this.trackedFiles()) {
+      if (changed.has(file)) continue;
+      if (this.verifiedFingerprints.get(file) !== fingerprint(file)) {
+        this.invalidateBaseline("tracked store file changed while committing a local write");
+      }
+    }
+
+    for (const file of changed) this.verifiedFingerprints.set(file, fingerprint(file));
   }
 
   append(event: EaiEvent): Line {
-    const prev = this.lines.at(-1)?.hash ?? GENESIS;
+    return this.withWriterLock(() => {
+      this.assertVerifiedBaselineUnchanged();
+      const prev = this.lines.at(-1)?.hash ?? GENESIS;
     const line: Line = { seq: this.next(), prev, hash: digest(prev, event), event };
-    appendFileSync(this.file, JSON.stringify(line) + "\n");
+    appendFileSync(this.file, JSON.stringify(line) + "\n", { encoding: "utf8", mode: 0o600 });
+    chmodSync(this.file, 0o600);
     this.lines.push(line);
     this.expectedEventHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.eventHeadFile, this.expectedEventHead);
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("events", this.expectedEventHead);
     }
-    this.acceptOwnWrite();
-    return line;
+      this.acceptOwnWrite([this.file, this.eventHeadFile]);
+      return line;
+    });
   }
 
   recordRejection(rejection: Rejection): RejectionLine {
-    const prev = this.rejectionLines.at(-1)?.hash ?? GENESIS;
+    return this.withWriterLock(() => {
+      this.assertVerifiedBaselineUnchanged();
+      const prev = this.rejectionLines.at(-1)?.hash ?? GENESIS;
     const line: RejectionLine = {
       seq: this.rejectionLines.length + 1,
       prev,
       hash: digest(prev, rejection),
       rejection,
     };
-    appendFileSync(this.rejectionFile, JSON.stringify(line) + "\n");
+    appendFileSync(this.rejectionFile, JSON.stringify(line) + "\n", { encoding: "utf8", mode: 0o600 });
+    chmodSync(this.rejectionFile, 0o600);
     this.rejectionLines.push(line);
     this.expectedRejectionHead = { seq: line.seq, hash: line.hash };
     this.writeAnchor(this.rejectionHeadFile, this.expectedRejectionHead);
     if (this.witness && "record" in this.witness) {
       (this.witness as AnchorWitness).record("rejections", this.expectedRejectionHead);
     }
-    this.acceptOwnWrite();
-    return line;
+      this.acceptOwnWrite([this.rejectionFile, this.rejectionHeadFile]);
+      return line;
+    });
   }
 
   /** Full replay-grade verification. Use at startup, for audits and after external file changes. */
@@ -206,12 +306,14 @@ export class Store {
   }
 
   bootstrapWitness(witness: AnchorWitness): { ok: boolean; badAt?: number; log?: "events" | "rejections"; reason?: string } {
-    if (this.witness) throw new Error("witness already configured");
-    const local = this.verify();
-    if (!local.ok) return local;
-    witness.record("events", this.expectedEventHead);
-    witness.record("rejections", this.expectedRejectionHead);
-    this.witness = witness;
-    return this.verify();
+    return this.withWriterLock(() => {
+      if (this.witness) throw new Error("witness already configured");
+      const local = this.verify();
+      if (!local.ok) return local;
+      witness.record("events", this.expectedEventHead);
+      witness.record("rejections", this.expectedRejectionHead);
+      this.witness = witness;
+      return this.verify();
+    });
   }
 }

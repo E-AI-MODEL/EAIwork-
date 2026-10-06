@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -148,6 +148,28 @@ test("no token or inherited object property: 401", async () => {
   assert.equal((await fetch(base + "/state", { headers: { authorization: "Bearer constructor" } })).status, 401);
 });
 
+test("server owns the datastore writer lock and secures local permissions", () => {
+  assert.throws(
+    () => new Store(dir, witness, { exclusiveWriter: true }),
+    /active writer/,
+  );
+
+  const competing = new Store(dir, witness);
+  assert.throws(
+    () => competing.recordRejection({
+      at: "2026-10-05",
+      actor: { kind: "model", id: "model:competing" },
+      attempted: { type: "future.magic" },
+      reason: "rejected",
+    }),
+    /active writer/,
+  );
+
+  assert.equal(statSync(dir).mode & 0o777, 0o700);
+  const eventFile = join(dir, "events.jsonl");
+  if (existsSync(eventFile)) assert.equal(statSync(eventFile).mode & 0o777, 0o600);
+});
+
 test("authorization is default-deny per atom and does not leak hidden metadata", async () => {
   const before = await get(LIMITED_TOKEN, "/state");
   assert.deepEqual(Object.keys(before.atoms), ["a.fin.017"]);
@@ -232,7 +254,7 @@ test("existing verified logs can be explicitly bootstrapped into a signed witnes
 test("5,000 rejected writes stay on the constant-time integrity path", () => {
   const stressDir = mkdtempSync(join(tmpdir(), "eai-stress-"));
   const counting = new CountingWitness();
-  const stressStore = new Store(stressDir, counting);
+  const stressStore = new Store(stressDir, counting, { exclusiveWriter: true });
 
   assert.equal(stressStore.verify().ok, true);
   const fullAfterStartup = counting.full;
@@ -254,6 +276,99 @@ test("5,000 rejected writes stay on the constant-time integrity path", () => {
 
   appendFileSync(join(stressDir, "rejections.jsonl"), "{}\n");
   assert.equal(stressStore.verifyCurrent().ok, false);
+  stressStore.close();
+});
+
+test("a local rejection cannot bless an event-log tamper that happens after the fast integrity check", () => {
+  const raceDir = mkdtempSync(join(tmpdir(), "eai-race-"));
+  const raceWitnessDir = mkdtempSync(join(tmpdir(), "eai-race-witness-"));
+  const raceWitness = new SignedFileAnchorWitness(raceWitnessDir, privateKeyPem, publicKeyPem);
+  const raceStore = new Store(raceDir, raceWitness);
+
+  raceStore.append({
+    id: "race-1", at: "2026-10-05",
+    actor: { kind: "person", id: "person:race" },
+    type: "answer.proposed", atom: "a.plan.003", value: "yes",
+  });
+  assert.equal(raceStore.verify().ok, true);
+  assert.equal(raceStore.verifyCurrent().ok, true);
+
+  const eventFile = join(raceDir, "events.jsonl");
+  const original = readFileSync(eventFile, "utf8");
+  const tampered = original.replace('"value":"yes"', '"value":"no"');
+  writeFileSync(eventFile, tampered);
+
+  assert.throws(
+    () => raceStore.recordRejection({
+      at: "2026-10-05",
+      actor: { kind: "model", id: "model:race" },
+      attempted: { type: "future.magic" },
+      reason: "rejected",
+    }),
+    /tracked store file changed/,
+  );
+  assert.equal(raceStore.rejections.length, 0);
+  assert.equal(raceStore.verifyCurrent().ok, false);
+  assert.equal(raceStore.verify().ok, false);
+});
+
+test("post-commit integrity failures still refresh state before a later deterministic check", async () => {
+  const staleDir = mkdtempSync(join(tmpdir(), "eai-stale-snapshot-"));
+  const staleWitnessDir = mkdtempSync(join(tmpdir(), "eai-stale-witness-"));
+  const delegate = new SignedFileAnchorWitness(staleWitnessDir, privateKeyPem, publicKeyPem);
+  let injected = false;
+  const tamperingWitness = {
+    verify: (log: "events" | "rejections", anchor: { seq: number; hash: string }) =>
+      delegate.verify(log, anchor),
+    verifyCurrent: (log: "events" | "rejections", anchor: { seq: number; hash: string }) =>
+      delegate.verifyCurrent(log, anchor),
+    record: (log: "events" | "rejections", anchor: { seq: number; hash: string }) => {
+      delegate.record(log, anchor);
+      if (log === "events" && !injected) {
+        injected = true;
+        writeFileSync(join(staleDir, "rejections.jsonl"), "");
+      }
+    },
+  };
+
+  const isolated = makeServer({
+    dir: staleDir,
+    pack,
+    today: () => "2026-10-05",
+    tokens,
+    checks,
+    witness: tamperingWitness,
+  });
+  await new Promise<void>((resolve) => isolated.server.listen(0, "127.0.0.1", resolve));
+  const isolatedBase = `http://127.0.0.1:${(isolated.server.address() as AddressInfo).port}`;
+
+  const proposed = await fetch(isolatedBase + "/events", {
+    method: "POST",
+    headers: { authorization: "Bearer " + PERSON_TOKEN },
+    body: JSON.stringify({ type: "answer.proposed", atom: "a.fin.017", value: "yes" }),
+  });
+  assert.equal(proposed.status, 500);
+  assert.equal(isolated.store.events.length, 1);
+
+  const injectedFile = join(staleDir, "rejections.jsonl");
+  if (existsSync(injectedFile)) unlinkSync(injectedFile);
+
+  const stateAfterFailure = await (
+    await fetch(isolatedBase + "/state", { headers: { authorization: "Bearer " + PERSON_TOKEN } })
+  ).json() as any;
+  assert.equal(stateAfterFailure.atoms["a.fin.017"].value, "yes");
+
+  const checked = await fetch(isolatedBase + "/checks/budget-approved", {
+    method: "POST",
+    headers: { authorization: "Bearer " + CHECK_TOKEN },
+    body: "{}",
+  });
+  assert.equal(checked.status, 201);
+  assert.equal((await checked.json() as any).passed, true);
+
+  await new Promise<void>((resolve, reject) =>
+    isolated.server.close((err) => err ? reject(err) : resolve()),
+  );
 });
 
 test("audit endpoints require explicit audit permission", async () => {
@@ -413,14 +528,12 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   assert.equal(store.verifyCurrent().ok, false);
   assert.equal(store.verify().ok, false);
   assert.equal(new Store(dir, witness).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
 
   writeFileSync(file, original);
   assert.equal(new Store(dir, witness).verify().ok, true);
 
   writeFileSync(file, originalLines.slice(0, -1).join("\n") + "\n");
   assert.equal(new Store(dir, witness).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
   writeFileSync(file, original);
 
   const headFile = join(dir, "events.head");
@@ -435,6 +548,31 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   writeFileSync(file, original);
   writeFileSync(headFile, originalHead);
   assert.equal(new Store(dir, witness).verify().ok, true);
+});
+
+test("server startup releases its writer lock after failing closed on a tampered log", () => {
+  const startupDir = mkdtempSync(join(tmpdir(), "eai-startup-tamper-"));
+  const startupWitnessDir = mkdtempSync(join(tmpdir(), "eai-startup-witness-"));
+  const startupWitness = new SignedFileAnchorWitness(startupWitnessDir, privateKeyPem, publicKeyPem);
+  const writer = new Store(startupDir, startupWitness, { exclusiveWriter: true });
+  assert.equal(writer.verify().ok, true);
+  writer.append({
+    id: "startup-1", at: "2026-10-05",
+    actor: { kind: "person", id: "person:startup" },
+    type: "answer.proposed", atom: "a.plan.003", value: "yes",
+  });
+  writer.close();
+
+  const file = join(startupDir, "events.jsonl");
+  writeFileSync(file, readFileSync(file, "utf8").replace('"value":"yes"', '"value":"no"'));
+
+  assert.throws(
+    () => makeServer({ dir: startupDir, pack, tokens, checks, witness: startupWitness }),
+    /integrity check failed/,
+  );
+
+  const probe = new Store(startupDir, startupWitness, { exclusiveWriter: true });
+  probe.close();
 });
 
 test("state exposes pack and dependency metadata for the workbench", async () => {
