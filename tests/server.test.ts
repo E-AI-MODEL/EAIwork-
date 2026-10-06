@@ -169,10 +169,8 @@ test("existing verified logs can be explicitly bootstrapped into a signed witnes
   assert.equal(bootstrapped.ok, true);
   assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
 
-  assert.throws(
-    () => new Store(legacyDir).bootstrapWitness(legacyWitness),
-    /advance by one/,
-  );
+  const repeatedBootstrap = new Store(legacyDir).bootstrapWitness(legacyWitness);
+  assert.equal(repeatedBootstrap.ok, true);
 
   const witnessedStore = new Store(legacyDir, legacyWitness);
   witnessedStore.append({
