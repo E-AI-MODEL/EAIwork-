@@ -85,6 +85,15 @@ test("weak, placeholder, or unscoped principals are rejected at startup", () => 
   );
 });
 
+test("witness rejects a mismatched Ed25519 key pair", () => {
+  const other = generateKeyPairSync("ed25519");
+  const otherPublic = other.publicKey.export({ format: "pem", type: "spki" }).toString();
+  assert.throws(
+    () => new SignedFileAnchorWitness(mkdtempSync(join(tmpdir(), "eai-witness-bad-")), privateKeyPem, otherPublic),
+    /does not match/,
+  );
+});
+
 test("no token or inherited object property: 401", async () => {
   assert.equal((await fetch(base + "/state")).status, 401);
   assert.equal((await fetch(base + "/state", { headers: { authorization: "Bearer constructor" } })).status, 401);
