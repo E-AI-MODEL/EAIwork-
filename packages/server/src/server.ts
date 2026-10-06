@@ -364,6 +364,13 @@ export function makeServer(cfg: Config) {
         const atomDef = atoms.get(atomId);
         if (!atomDef?.worker) return json(res, 404, { error: "unknown or non-worker atom" });
 
+        if (
+          canRead(principal, atomId) &&
+          (atomDef.worker.reads ?? []).some((read) => !canRead(principal, read.atom))
+        ) {
+          return json(res, 403, { error: "worker output read requires access to every worker input" });
+        }
+
         const runtimeId = atomDef.worker.runtime ?? "default";
         const runtime = cfg.workers?.[runtimeId];
         if (!runtime) return json(res, 503, { error: "worker runtime unavailable" });
