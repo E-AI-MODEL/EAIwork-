@@ -431,8 +431,7 @@ test("server-owned worker gets only its atom capsule and writes an assumption", 
   assert.equal((await get(PERSON_TOKEN, "/state")).atoms["a.fin.017"].status, "assumption");
 
   const orchestratorState = await fetch(base + "/state", { headers: { authorization: "Bearer " + ORCHESTRATOR_TOKEN } });
-  assert.equal(orchestratorState.status, 200);
-  assert.deepEqual(Object.keys(((await orchestratorState.json()) as any).atoms), []);
+  assert.equal(orchestratorState.status, 403);
   assert.equal((await post(ORCHESTRATOR_TOKEN, { type: "answer.proposed", atom: "a.fin.017", value: "yes" })).status, 403);
 
   assert.deepEqual(Object.keys(lastWorkerCapsule).sort(), ["context", "inputs", "options", "question"]);
@@ -530,9 +529,12 @@ test("an isolated worker cannot replace an answer once non-model evidence exists
   const before = await get(PERSON_TOKEN, "/state");
   assert.equal(before.atoms["a.fin.017"].status, "proven");
   workerAnswers["Is the budget approved by the budget holder?"] = { yes: 0.05, no: 0.9, unknown: 0.05 };
+  const rejectionsBefore = store.rejections.length;
   const r = await post(ORCHESTRATOR_TOKEN, {}, "/workers/a.fin.017");
-  assert.equal(r.status, 422);
-  assert.match((await r.json() as any).reason, /cannot replace an answer that has non-model evidence/);
+  assert.equal(r.status, 204);
+  assert.equal(await r.text(), "");
+  assert.equal(store.rejections.length, rejectionsBefore + 1);
+  assert.match(store.rejections.at(-1)!.reason, /cannot replace an answer that has non-model evidence/);
   const after = await get(PERSON_TOKEN, "/state");
   assert.equal(after.atoms["a.fin.017"].value, "yes");
   assert.equal(after.atoms["a.fin.017"].status, "proven");
