@@ -17,6 +17,7 @@ const BLIND_CHECK_TOKEN = "b".repeat(40);
 const LIMITED_TOKEN = "l".repeat(40);
 const ALL_ARRAY_TOKEN = "a".repeat(40);
 const RULE_SCOPE_TOKEN = "r".repeat(40);
+const TARGET_ONLY_WORKER_TOKEN = "t".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
     actor: { kind: "person", id: "person:jan" } as const,
@@ -45,6 +46,10 @@ const tokens = {
   [RULE_SCOPE_TOKEN]: {
     actor: { kind: "person", id: "person:rule-scope" } as const,
     access: { read: ["a.fin.017", "a.plan.003"], write: [] },
+  },
+  [TARGET_ONLY_WORKER_TOKEN]: {
+    actor: { kind: "system", id: "system:target-only-worker" } as const,
+    access: { read: ["a.fin.017"], write: [], workers: ["a.fin.017"] },
   },
 };
 const checks = {
@@ -410,6 +415,18 @@ test("audit endpoints require explicit audit permission", async () => {
   const allowed = await fetch(base + "/log/verify", { headers: { authorization: "Bearer " + PERSON_TOKEN } });
   assert.equal(allowed.status, 200);
   assert.equal((await allowed.json() as any).ok, true);
+});
+
+test("worker target cannot become an oracle for an unread dependency", async () => {
+  const before = await get(TARGET_ONLY_WORKER_TOKEN, "/state");
+  assert.deepEqual(Object.keys(before.atoms), ["a.fin.017"]);
+
+  const run = await post(TARGET_ONLY_WORKER_TOKEN, {}, "/workers/a.fin.017");
+  assert.equal(run.status, 403);
+  assert.match((await run.json() as any).error, /requires access to every worker input/);
+
+  const after = await get(TARGET_ONLY_WORKER_TOKEN, "/state");
+  assert.equal(after.atoms["a.fin.017"].value, before.atoms["a.fin.017"].value);
 });
 
 test("server-owned worker gets only its atom capsule and writes an assumption", async () => {
