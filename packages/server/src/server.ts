@@ -173,7 +173,7 @@ export function makeServer(cfg: Config) {
       clusters: cfg.pack.clusters
         .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((id) => visible.has(id)) }))
         .filter((cluster) => cluster.atoms.length > 0),
-      rules: principal.access.read === "*" ? cfg.pack.rules : [],
+      rules: visible.size === cfg.pack.atoms.length ? cfg.pack.rules : [],
     };
     const visibleState = Object.fromEntries(Object.entries(r.state).filter(([id]) => visible.has(id)));
     const visibleDerived = Object.fromEntries(Object.entries(r.derived).filter(([id]) => visible.has(id)));
