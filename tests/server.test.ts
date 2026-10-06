@@ -6,7 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { makeServer } from "../packages/server/src/server.ts";
-import { SignedFileAnchorWitness } from "../packages/server/src/witness.ts";
+import { SignedFileAnchorVerifier, SignedFileAnchorWitness } from "../packages/server/src/witness.ts";
+import { Store } from "../packages/server/src/store.ts";
 import { ask, mockProvider } from "../packages/gateway/src/gateway.ts";
 
 const pack = JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json", import.meta.url), "utf8"));
@@ -15,6 +16,7 @@ const MODEL_TOKEN = "m".repeat(40);
 const CHECK_TOKEN = "c".repeat(40);
 const BLIND_CHECK_TOKEN = "b".repeat(40);
 const LIMITED_TOKEN = "l".repeat(40);
+const ALL_ARRAY_TOKEN = "a".repeat(40);
 const tokens = {
   [PERSON_TOKEN]: {
     actor: { kind: "person", id: "person:jan" } as const,
@@ -35,6 +37,10 @@ const tokens = {
   [LIMITED_TOKEN]: {
     actor: { kind: "person", id: "person:limited" } as const,
     access: { read: ["a.fin.017"], write: ["a.fin.017"] },
+  },
+  [ALL_ARRAY_TOKEN]: {
+    actor: { kind: "person", id: "person:all-array" } as const,
+    access: { read: ["a.fin.016", "a.fin.017", "a.plan.003"], write: [] },
   },
 };
 const checks = {
@@ -125,6 +131,33 @@ test("authorization is default-deny per atom and does not leak hidden metadata",
   assert.equal((await post(MODEL_TOKEN, { type: "answer.proposed", atom: "a.plan.003", value: "yes" })).status, 201);
   const after = await get(LIMITED_TOKEN, "/state");
   assert.equal(after.checksum, checksumBefore);
+});
+
+test("explicit all-atom read scope preserves rule output", async () => {
+  const state = await get(ALL_ARRAY_TOKEN, "/state");
+  assert.ok(state.flags.some((flag: any) => flag.rule === "R-uncertain-fixed"));
+});
+
+test("existing verified logs can be explicitly bootstrapped into a signed witness", () => {
+  const legacyDir = mkdtempSync(join(tmpdir(), "eai-legacy-"));
+  const legacyWitnessDir = mkdtempSync(join(tmpdir(), "eai-legacy-witness-"));
+  const legacy = new Store(legacyDir);
+  legacy.append({
+    id: "legacy-1", at: "2026-10-05",
+    actor: { kind: "person", id: "person:legacy" },
+    type: "answer.proposed", atom: "a.plan.003", value: "yes",
+  });
+  assert.equal(legacy.verify().ok, true);
+
+  const verifierBefore = new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem);
+  const before = new Store(legacyDir, verifierBefore).verify();
+  assert.equal(before.ok, false);
+  assert.match(before.reason ?? "", /missing external witness/);
+
+  const legacyWitness = new SignedFileAnchorWitness(legacyWitnessDir, privateKeyPem, publicKeyPem);
+  const bootstrapped = new Store(legacyDir).bootstrapWitness(legacyWitness);
+  assert.equal(bootstrapped.ok, true);
+  assert.equal(new Store(legacyDir, new SignedFileAnchorVerifier(legacyWitnessDir, publicKeyPem)).verify().ok, true);
 });
 
 test("audit endpoints require explicit audit permission", async () => {
@@ -282,7 +315,6 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   const first = JSON.parse(tampered[0]); first.event.value = "no"; tampered[0] = JSON.stringify(first);
   writeFileSync(file, tampered.join("\n") + "\n");
   assert.equal(store.verify().ok, false);
-  const { Store } = await import("../packages/server/src/store.ts");
   assert.equal(new Store(dir, witness).verify().ok, false);
   assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
 
