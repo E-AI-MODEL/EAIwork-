@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -148,6 +148,28 @@ test("no token or inherited object property: 401", async () => {
   assert.equal((await fetch(base + "/state", { headers: { authorization: "Bearer constructor" } })).status, 401);
 });
 
+test("server owns the datastore writer lock and secures local permissions", () => {
+  assert.throws(
+    () => new Store(dir, witness, { exclusiveWriter: true }),
+    /active writer/,
+  );
+
+  const competing = new Store(dir, witness);
+  assert.throws(
+    () => competing.recordRejection({
+      at: "2026-10-05",
+      actor: { kind: "model", id: "model:competing" },
+      attempted: { type: "future.magic" },
+      reason: "rejected",
+    }),
+    /active writer/,
+  );
+
+  assert.equal(statSync(dir).mode & 0o777, 0o700);
+  const eventFile = join(dir, "events.jsonl");
+  if (statSync(eventFile).isFile()) assert.equal(statSync(eventFile).mode & 0o777, 0o600);
+});
+
 test("authorization is default-deny per atom and does not leak hidden metadata", async () => {
   const before = await get(LIMITED_TOKEN, "/state");
   assert.deepEqual(Object.keys(before.atoms), ["a.fin.017"]);
@@ -232,7 +254,7 @@ test("existing verified logs can be explicitly bootstrapped into a signed witnes
 test("5,000 rejected writes stay on the constant-time integrity path", () => {
   const stressDir = mkdtempSync(join(tmpdir(), "eai-stress-"));
   const counting = new CountingWitness();
-  const stressStore = new Store(stressDir, counting);
+  const stressStore = new Store(stressDir, counting, { exclusiveWriter: true });
 
   assert.equal(stressStore.verify().ok, true);
   const fullAfterStartup = counting.full;
@@ -254,6 +276,7 @@ test("5,000 rejected writes stay on the constant-time integrity path", () => {
 
   appendFileSync(join(stressDir, "rejections.jsonl"), "{}\n");
   assert.equal(stressStore.verifyCurrent().ok, false);
+  stressStore.close();
 });
 
 test("a local rejection cannot bless an event-log tamper that happens after the fast integrity check", () => {
@@ -446,14 +469,12 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   assert.equal(store.verifyCurrent().ok, false);
   assert.equal(store.verify().ok, false);
   assert.equal(new Store(dir, witness).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
 
   writeFileSync(file, original);
   assert.equal(new Store(dir, witness).verify().ok, true);
 
   writeFileSync(file, originalLines.slice(0, -1).join("\n") + "\n");
   assert.equal(new Store(dir, witness).verify().ok, false);
-  assert.throws(() => makeServer({ dir, pack, tokens, checks, witness }), /integrity check failed/);
   writeFileSync(file, original);
 
   const headFile = join(dir, "events.head");
@@ -468,6 +489,31 @@ test("log hash chain verifies, detects tampering, and makeServer fails closed", 
   writeFileSync(file, original);
   writeFileSync(headFile, originalHead);
   assert.equal(new Store(dir, witness).verify().ok, true);
+});
+
+test("server startup releases its writer lock after failing closed on a tampered log", () => {
+  const startupDir = mkdtempSync(join(tmpdir(), "eai-startup-tamper-"));
+  const startupWitnessDir = mkdtempSync(join(tmpdir(), "eai-startup-witness-"));
+  const startupWitness = new SignedFileAnchorWitness(startupWitnessDir, privateKeyPem, publicKeyPem);
+  const writer = new Store(startupDir, startupWitness, { exclusiveWriter: true });
+  assert.equal(writer.verify().ok, true);
+  writer.append({
+    id: "startup-1", at: "2026-10-05",
+    actor: { kind: "person", id: "person:startup" },
+    type: "answer.proposed", atom: "a.plan.003", value: "yes",
+  });
+  writer.close();
+
+  const file = join(startupDir, "events.jsonl");
+  writeFileSync(file, readFileSync(file, "utf8").replace('"value":"yes"', '"value":"no"'));
+
+  assert.throws(
+    () => makeServer({ dir: startupDir, pack, tokens, checks, witness: startupWitness }),
+    /integrity check failed/,
+  );
+
+  const probe = new Store(startupDir, startupWitness, { exclusiveWriter: true });
+  probe.close();
 });
 
 test("state exposes pack and dependency metadata for the workbench", async () => {
