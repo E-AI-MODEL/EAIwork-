@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { executeAtomWorker, type ModelProvider } from "../../gateway/src/gateway.ts";
 import { validateBenchmarkSuite, type BenchmarkCase, type BenchmarkSuite, type FailureKind } from "./evaluate.ts";
-import { localOllamaHost } from "../../gateway/src/ollama-provider.ts";
+import { localOllamaHost, OllamaOutputError, type OllamaOutputIssue } from "../../gateway/src/ollama-provider.ts";
 import type { PackAtom } from "../../core/src/index.ts";
 import { localDecisionInstruction } from "../../gateway/src/decision-contract.ts";
 
@@ -20,8 +20,8 @@ export interface ComparedTrial {
   caseId: string;
   expected: string;
   category: BenchmarkCase["category"];
-  atom: { predicted?: string; confidence?: number; error?: FailureKind; elapsedMs: number };
-  whole: { predicted?: string; confidence?: number; error?: FailureKind };
+  atom: { predicted?: string; confidence?: number; error?: FailureKind; outputIssue?: OllamaOutputIssue; elapsedMs: number };
+  whole: { predicted?: string; confidence?: number; error?: FailureKind; outputIssue?: OllamaOutputIssue };
 }
 export interface ArmScore {
   total: number;
@@ -132,6 +132,7 @@ export async function compareAtomVsWhole(
       trials[i].atom.confidence = result.probabilities[result.value];
     } catch (error) {
       trials[i].atom.error = errorCode(error);
+      if (error instanceof OllamaOutputError) trials[i].atom.outputIssue = error.code;
     } finally {
       trials[i].atom.elapsedMs = Math.round(performance.now() - t0);
     }
@@ -156,10 +157,14 @@ export async function compareAtomVsWhole(
         trials[i].whole.confidence = answer.confidence;
       } catch (error) {
         trials[i].whole.error = errorCode(error);
+        if (error instanceof OllamaOutputError) trials[i].whole.outputIssue = error.code;
       }
     }
   } catch (error) {
-    for (const trial of trials) trial.whole.error = errorCode(error);
+    for (const trial of trials) {
+      trial.whole.error = errorCode(error);
+      if (error instanceof OllamaOutputError) trial.whole.outputIssue = error.code;
+    }
   }
   const wholeElapsedMs = Math.round(performance.now() - wholeStart);
 
