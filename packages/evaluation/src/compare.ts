@@ -176,7 +176,19 @@ export function ollamaWholeTaskProvider(config: { model: string; host?: string; 
         headers: { "content-type": "application/json" },
         signal: AbortSignal.timeout(timeoutMs),
         body: JSON.stringify({
-          model: config.model, stream: false, format: "json",
+          model: config.model, stream: false,
+          format: {
+            type: "object",
+            properties: Object.fromEntries(questions.map(q => [q.caseId, {
+              type: "object",
+              properties: Object.fromEntries(q.options.map(option => [option, { type: "number", minimum: 0 }])),
+              required: [...q.options],
+              additionalProperties: false,
+            }])),
+            required: questions.map(q => q.caseId),
+            additionalProperties: false,
+          },
+          options: { temperature: 0, num_predict: 1200 },
           messages: [{ role: "user", content: JSON.stringify({
             instruction: "For each caseId, return an object mapping ONLY its options to nonnegative numeric probabilities. Return a JSON object keyed by caseId. Never assume missing evidence proves approval. Do not emit any other text.",
             questions,
