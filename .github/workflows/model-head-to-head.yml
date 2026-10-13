@@ -50,6 +50,7 @@ jobs:
         run: ollama pull "$MODEL"
       - name: Compare atoms and whole-task baseline
         env:
+          EAI_BENCH_WHOLE_TIMEOUT_MS: "300000"
           EAI_BENCH_MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
         run: node benchmarks/compare-model.ts benchmarks/evidence-controls.dev.json head-to-head-report.json
       - name: Preserve diagnostics including failed model runs
