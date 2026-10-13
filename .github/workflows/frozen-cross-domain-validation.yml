@@ -1,0 +1,52 @@
+name: frozen-cross-domain-validation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/frozen-cross-domain-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: frozen-cross-domain-validation
+  cancel-in-progress: false
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ['qwen2.5:3b', 'qwen2.5:7b']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start local provider
+        run: |
+          ollama serve > /tmp/eai-validation-ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Ollama did not start"
+          exit 1
+      - name: Download frozen model
+        env:
+          MODEL: ${{ matrix.model }}
+        run: ollama pull "$MODEL"
+      - name: Run fixed validation suite with both context boundaries
+        env:
+          EAI_BENCH_MODEL: ${{ matrix.model }}
+        run: node benchmarks/compare-model.ts benchmarks/validation/cross-domain.v1.frozen.json validation-report.json
+      - name: Preserve non-sensitive validation diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validation-${{ matrix.model == 'qwen2.5:3b' && 'qwen3b' || 'qwen7b' }}
+          path: validation-report.json
+          if-no-files-found: warn
+          retention-days: 30
