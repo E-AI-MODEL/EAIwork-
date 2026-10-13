@@ -88,7 +88,7 @@ export function validateBenchmarkSuite(suite: BenchmarkSuite): void {
     ids.add(c.id);
     if (!CATEGORIES.has(c.category)) throw new Error("Invalid benchmark category");
     if (typeof c.question !== "string" || !c.question.trim()) throw new Error("Empty benchmark question");
-    if (c.decision !== undefined && (c.decision.kind !== "verify-claim" || typeof c.decision.claim !== "string" || !c.decision.claim.trim() || c.decision.claim.length > 2000 || Object.keys(c.decision).some(k => k !== "kind" && k !== "claim") || c.type !== "yesno")) throw new Error("Invalid atom-local decision contract");
+    if (c.decision !== undefined && (!c.decision || typeof c.decision !== "object" || Array.isArray(c.decision) || c.decision.kind !== "verify-claim" || typeof c.decision.claim !== "string" || !c.decision.claim.trim() || c.decision.claim.length > 2000 || Object.keys(c.decision).some(k => k !== "kind" && k !== "claim") || c.type !== "yesno")) throw new Error("Invalid atom-local decision contract");
     if (c.type !== "yesno" && c.type !== "choice") throw new Error("Invalid benchmark answer type");
     const allowed = choices(c);
     if (c.type === "choice" && (!Array.isArray(c.options) || c.options.length < 2)) throw new Error("Choice case has insufficient options");
