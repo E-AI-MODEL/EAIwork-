@@ -6,6 +6,8 @@ on:
       - '.github/workflows/model-head-to-head.yml'
       - 'benchmarks/evidence-controls.dev.json'
       - 'packages/gateway/src/decision-contract.ts'
+      - 'benchmarks/compare-model.ts'
+      - 'packages/evaluation/src/compare.ts'
       - 'packages/evaluation/src/compare.ts'
       - 'benchmarks/compare-model.ts'
   workflow_dispatch:
@@ -51,7 +53,15 @@ jobs:
       - name: Compare anatomical workers and whole-task baseline
         env:
           EAI_BENCH_MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
-        run: node benchmarks/compare-model.ts benchmarks/evidence-controls.dev.json head-to-head.json
+        run: node benchmarks/compare-model.ts benchmarks/evidence-controls.dev.json head-to-head-report.json
+      - name: Preserve comparison results even on test failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: head-to-head-diagnostics
+          path: head-to-head-report.json
+          if-no-files-found: warn
+          retention-days: 14 head-to-head.json
       - name: Preserve case diagnostics even when a model call fails
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
