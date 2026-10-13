@@ -1,5 +1,6 @@
 import { optionsFor, route, temperatureScale } from "../../core/src/index.ts";
 import type { Pack, PackAtom, Route, State } from "../../core/src/index.ts";
+import { observeLocalEvidence, type EvidenceObservationResult } from "../../evidence/src/observe.ts";
 
 export interface AtomCapsule {
   /** The model sees no atom id, cluster, pack, project goal, status, evidence or downstream use. */
@@ -16,8 +17,25 @@ export interface SourceBroker {
   read(handle: string): Promise<string[]> | string[];
 }
 
+/** Untrusted, local excerpt coordinates. No repository or source handles reach the model. */
+export interface LocalReferenceProposal {
+  contextIndex: number;
+  start: number;
+  end: number;
+  quote: string;
+}
+
+export interface ModelProposal {
+  probabilities: Record<string, number>;
+  /** Optional proposed text anchors. Empty means the model found no anchor. */
+  references: LocalReferenceProposal[];
+}
+
 export interface ModelSession {
+  /** Legacy and default path: available on every provider. */
   answer(capsule: AtomCapsule): Promise<Record<string, number>>;
+  /** Optional capability: richer models can provide references without changing the default path. */
+  propose?(capsule: AtomCapsule): Promise<ModelProposal>;
   close?(): Promise<void> | void;
 }
 
@@ -27,11 +45,18 @@ export interface ModelProvider {
   openSession(): Promise<ModelSession> | ModelSession;
 }
 
+export type EvidenceSidecar =
+  | { status: "provider-unsupported" }
+  | { status: "observed"; observation: EvidenceObservationResult };
+
 export interface WorkerResult {
   providerId: string;
   value: string;
+  /** Existing provisional response route; evidence proposals do not grant authority. */
   route: Route;
   probabilities: Record<string, number>;
+  /** Present only when opt-in observation was requested. Never an evidence attachment. */
+  evidence?: EvidenceSidecar;
 }
 
 const boundedContext = async (
@@ -86,13 +111,25 @@ export async function executeAtomWorker(
   atom: PackAtom,
   state: State,
   broker: SourceBroker,
-  opts: { temperature?: number } = {},
+  opts: { temperature?: number; observeEvidence?: boolean } = {},
 ): Promise<WorkerResult> {
   const capsule = await buildAtomCapsule(atom, state, broker);
   const session = await provider.openSession();
   let raw: Record<string, number>;
+  let proposal: ModelProposal | undefined;
   try {
-    raw = await session.answer(structuredClone(capsule));
+    if (opts.observeEvidence && session.propose) {
+      // The model sees only a fresh, bounded capsule. No source handles or sibling context.
+      proposal = await session.propose(structuredClone(capsule));
+      if (!proposal || typeof proposal !== "object" ||
+          !proposal.probabilities || typeof proposal.probabilities !== "object" ||
+          !Array.isArray(proposal.references)) {
+        throw new Error("Invalid structured proposal");
+      }
+      raw = proposal.probabilities;
+    } else {
+      raw = await session.answer(structuredClone(capsule));
+    }
   } finally {
     await session.close?.();
   }
@@ -107,11 +144,39 @@ export async function executeAtomWorker(
   if (opts.temperature) p = temperatureScale(p, opts.temperature);
 
   const value = Object.entries(p).sort((a, b) => b[1] - a[1])[0][0];
+  let evidence: EvidenceSidecar | undefined;
+  if (opts.observeEvidence) {
+    if (!proposal) {
+      evidence = { status: "provider-unsupported" };
+    } else {
+      const sources = capsule.context.map((content, i) => ({
+        handle: "local." + i, content,
+      }));
+      const proposedReferences = proposal.references.map((ref) => ({
+        handle: Number.isSafeInteger(ref?.contextIndex) ?
+          "local." + ref.contextIndex : "invalid-local-index",
+        start: ref?.start, end: ref?.end, quote: ref?.quote,
+      }));
+      evidence = {
+        status: "observed",
+        observation: observeLocalEvidence({
+          claim: capsule.decision?.claim ?? capsule.question,
+          answer: value === "yes" || value === "no" ? value : "unknown",
+          authorizedHandles: sources.map(s => s.handle),
+          sources,
+          proposedReferences,
+          // Trusted policy comes from the atom, not from the model response.
+          policy: { impact: atom.impact ?? "low" },
+        }),
+      };
+    }
+  }
   return {
     providerId: provider.id,
     value,
     route: route(p, atom.impact ?? "low"),
     probabilities: p,
+    ...(evidence ? { evidence } : {}),
   };
 }
 
