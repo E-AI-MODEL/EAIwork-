@@ -40,6 +40,8 @@ Every token maps to a principal with explicit `read`, `write`, `checks`, `worker
 
 Model workers are isolated differently from ordinary API principals. A pack declares each worker's allowed dependency values, opaque source handles and context limits. The server builds an `AtomCapsule` containing its local question, optional typed claim-verification contract, choices and bounded authorized inputs. The model never receives the atom id, pack, cluster, sibling atoms, status, evidence, lineage, project goal or caller-supplied context. Public API tokens may not represent model actors, and every atom execution opens a fresh single-use model session. The worker scheduler can be execute-only: no state read, no normal event writes and a bodyless 204 response that does not reveal the model result or whether that result was accepted into state. See [docs/worker-isolation.md](docs/worker-isolation.md) and [docs/atomic-claim-contract.md](docs/atomic-claim-contract.md).
 
+**Model freedom, bounded authority:** provider choice and reasoning ability are separate from evidence promotion. Optional, richer model adapters may suggest exact passages from the atom's local context; an independent, read-only observer checks that those passages exist, **not** that they prove the claim. Strong models are not required to use UMDT/SSL or a citation heuristic. Default model outputs, response routes, actor permissions and append-only evidence/status rules remain unchanged. See [Model-capability-neutral design](docs/model-capability-neutral.md).
+
 ## System shape
 
 ```text
@@ -116,7 +118,8 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 | `packages/core` | Derivation, validation, replay, rules, analysis, agreement and calibration. No network. |
 | `packages/server` | Token-derived identity, hash-chained event storage and HTTP API. |
 | `packages/client` | Dependency-free evidence-first workbench. |
-| `packages/gateway` | AtomCapsule builder and single-use typed model sessions. Mock provider only in v0.1. |
+| `packages/gateway` | AtomCapsule builder, local-only Ollama provider, mock adapter and optional citation proposals. |
+| `packages/evidence` | Pure source-reference integrity observer. No semantic proof or status writer. |
 | `packages/cli` | Pack linting, replay, explanation, reports, agreement and log verification. |
 | `schema/v0.1` | Draft JSON Schema. Not yet enforced in code. |
 | `conformance` | Behavioral vectors any compatible implementation should pass. |
@@ -142,7 +145,7 @@ The normative behavior lives in `conformance/vectors/`. If this README, the spec
 
 ## Current limits
 
-Not built yet: a real model provider, production authentication, a database, schema enforcement at runtime, pack authoring UI, user testing, a second domain pack and the planned top-down versus bottom-up comparison.
+Not built yet: production authentication, a database, full schema enforcement at runtime, pack authoring UI, user testing or an independently reviewed end-to-end source-provenance/semantic verification flow. A local Ollama provider, synthetic DEV benchmarks and an experimental atom-versus-whole comparator exist, but they do not establish real-world benefit.
 
 ## Interface direction
 
