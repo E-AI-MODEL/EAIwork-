@@ -27,6 +27,9 @@ test("Ollama provider sends only its capsule and falls back on unsupported think
     assert.equal(requests.length, 2);
     assert.equal(requests[0].think, false);
     assert.equal(requests[1].think, undefined);
+    assert.deepEqual(requests[0].format.required, ["yes", "no", "unknown"]);
+    assert.equal(requests[0].format.additionalProperties, false);
+    assert.equal(requests[0].format.properties.unknown.type, "number");
     assert.equal(requests[0].messages.length, 1);
     assert.equal(requests[0].messages[0].role, "user");
     assert.deepEqual(JSON.parse(requests[0].messages[0].content).context, ["allowed snippet"]);
