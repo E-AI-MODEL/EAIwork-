@@ -8,6 +8,25 @@ export interface OllamaConfig {
   disableThinking?: boolean;
 }
 
+/** Fixed, non-sensitive diagnostics. Never place raw generated text in exception messages. */
+export type OllamaOutputIssue =
+  | "non-json"
+  | "invalid-object"
+  | "missing-option"
+  | "invalid-probability"
+  | "extra-option"
+  | "zero-probability"
+  | "empty-content";
+
+export class OllamaOutputError extends Error {
+  readonly code: OllamaOutputIssue;
+  constructor(code: OllamaOutputIssue) {
+    super("Invalid model response: " + code);
+    this.name = "OllamaOutputError";
+    this.code = code;
+  }
+}
+
 const unsupportedThinking = new Set<string>();
 
 /** Local-only by default. Remote model endpoints require a separately governed adapter. */
@@ -32,19 +51,21 @@ export async function discoverLocalOllamaModels(host?: string, timeoutMs = 5000)
 }
 
 function parseProbabilities(content: string, allowed: string[]): Record<string, number> {
-  const parsed: unknown = JSON.parse(content);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Invalid model response");
+  let parsed: unknown;
+  try { parsed = JSON.parse(content); } catch { throw new OllamaOutputError("non-json"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new OllamaOutputError("invalid-object");
   const obj = parsed as Record<string, unknown>;
   const output: Record<string, number> = {};
   for (const option of allowed) {
+    if (!Object.hasOwn(obj, option)) throw new OllamaOutputError("missing-option");
     const value = obj[option];
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-      throw new Error("Missing or invalid probability for " + option);
+      throw new OllamaOutputError("invalid-probability");
     }
     output[option] = value;
   }
-  if (Object.keys(obj).some(k => !allowed.includes(k))) throw new Error("Model returned an unapproved option");
-  if (Object.values(output).reduce((a, b) => a + b, 0) <= 0) throw new Error("Empty probability distribution");
+  if (Object.keys(obj).some(k => !allowed.includes(k))) throw new OllamaOutputError("extra-option");
+  if (Object.values(output).reduce((a, b) => a + b, 0) <= 0) throw new OllamaOutputError("zero-probability");
   return output;
 }
 
@@ -99,8 +120,9 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
               error.detail = raw.slice(0, 300);
               throw error;
             }
-            const payload = JSON.parse(raw) as { message?: { content?: string } };
-            if (!payload.message?.content) throw new Error("Empty Ollama response");
+            let payload: { message?: { content?: string } };
+            try { payload = JSON.parse(raw); } catch { throw new OllamaOutputError("non-json"); }
+            if (!payload.message?.content) throw new OllamaOutputError("empty-content");
             return parseProbabilities(payload.message.content, capsule.options);
           };
           const withThink = !!config.disableThinking && !unsupportedThinking.has(key);
