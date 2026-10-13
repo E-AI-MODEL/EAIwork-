@@ -21,9 +21,17 @@ export interface AtomWorkerPolicy {
   max_context_chars?: number;
 }
 
+/** A local, predeclared fact-checking task. A worker cannot edit these semantics. */
+export interface AtomDecisionContract {
+  kind: "verify-claim";
+  claim: string;
+}
+
 export interface PackAtom {
   id: string;
   question: string;
+  /** Optional local proposition, with fixed support/refutation/unknown semantics. */
+  decision?: AtomDecisionContract;
   type: "yesno" | "choice" | "score";
   options?: string[];
   depends_on?: string[];
@@ -62,6 +70,14 @@ export function lintPack(p: Pack): string[] {
     if (ids.has(a.id)) err.push(`duplicate atom id ${a.id}`);
     ids.add(a.id);
     if (!a.question?.trim()) err.push(`${a.id}: empty question`);
+    if (a.decision !== undefined) {
+      const d = a.decision as unknown as Record<string, unknown>;
+      if (!d || typeof d !== "object" || Array.isArray(d) || d.kind !== "verify-claim" ||
+          typeof d.claim !== "string" || !d.claim.trim() || d.claim.length > 2000 ||
+          Object.keys(d).some(k => k !== "kind" && k !== "claim") || a.type !== "yesno") {
+        err.push(`${a.id}: invalid local claim-verification contract`);
+      }
+    }
     if (!["yesno", "choice", "score"].includes(a.type)) err.push(`${a.id}: unknown type ${a.type}`);
     if (a.type === "choice" && (!a.options || a.options.length < 2)) err.push(`${a.id}: choice needs at least 2 options`);
     if (a.valid_for_days !== undefined && !(a.valid_for_days > 0)) err.push(`${a.id}: valid_for_days must be > 0`);
