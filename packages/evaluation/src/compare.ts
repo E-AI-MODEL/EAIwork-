@@ -47,6 +47,9 @@ export interface ComparisonReport {
   atomContextItems: number;
   wholeContextItems: number;
   trials: ComparedTrial[];
+  /** One failed batch request can make all cases unassessed; count request failure separately. */
+  wholeRequestFailure?: FailureKind;
+  wholeRequestOutputIssue?: OllamaOutputIssue;
   warning: string;
 }
 
@@ -144,6 +147,8 @@ export async function compareAtomVsWhole(
   const atomElapsedMs = Math.round(performance.now() - atomStart);
 
   const wholeStart = performance.now();
+  let wholeRequestFailure: FailureKind | undefined;
+  let wholeRequestOutputIssue: OllamaOutputIssue | undefined;
   try {
     // One explicit call sees ALL questions and allowed snippets. No production authority.
     const output = await wholeProvider.answerAll(structuredClone(questions));
@@ -161,6 +166,8 @@ export async function compareAtomVsWhole(
       }
     }
   } catch (error) {
+    wholeRequestFailure = errorCode(error);
+    if (error instanceof OllamaOutputError) wholeRequestOutputIssue = error.code;
     for (const trial of trials) {
       trial.whole.error = errorCode(error);
       if (error instanceof OllamaOutputError) trial.whole.outputIssue = error.code;
@@ -176,6 +183,8 @@ export async function compareAtomVsWhole(
     atomElapsedMs, wholeElapsedMs,
     atomContextItems, wholeContextItems: atomContextItems,
     trials,
+    ...(wholeRequestFailure ? { wholeRequestFailure } : {}),
+    ...(wholeRequestOutputIssue ? { wholeRequestOutputIssue } : {}),
     warning: "DEV EXPLORATION ONLY. Synthetic cases, different context boundaries, batch prompts, request counts and decoding budgets; these results cannot establish causal benefit or harm of worker isolation. Model confidence is uncalibrated. No authority promotion.",
   };
 }
@@ -185,7 +194,7 @@ export function ollamaWholeTaskProvider(config: { model: string; host?: string; 
   const host = localOllamaHost(config.host);
   if (!config.model?.trim()) throw new Error("model required");
   const timeoutMs = config.timeoutMs ?? 120000;
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 1) throw new Error("invalid timeout");
+  if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) throw new Error("invalid timeout");
   return {
     id: "whole:ollama:" + config.model,
     async answerAll(questions) {
@@ -215,9 +224,10 @@ export function ollamaWholeTaskProvider(config: { model: string; host?: string; 
       });
       if (!response.ok) throw new Error("whole-task HTTP error " + response.status);
       const payload = await response.json() as { message?: { content?: string } };
-      if (typeof payload.message?.content !== "string") throw new Error("empty whole-task response");
-      const parsed: unknown = JSON.parse(payload.message.content);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid whole-task response");
+      if (typeof payload.message?.content !== "string" || !payload.message.content.trim()) throw new OllamaOutputError("empty-content");
+      let parsed: unknown;
+      try { parsed = JSON.parse(payload.message.content); } catch { throw new OllamaOutputError("non-json"); }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new OllamaOutputError("invalid-object");
       return parsed as Record<string, Record<string, number>>;
     },
   };
