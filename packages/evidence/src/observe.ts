@@ -29,7 +29,6 @@ export type ReferenceIssue =
   | "INVALID_RANGE"
   | "QUOTE_MISMATCH"
   | "DUPLICATE_REFERENCE"
-  | "REFERENCE_LIMIT"
   | "INVALID_INPUT";
 
 export interface AuthorizedSource {
@@ -110,6 +109,20 @@ export function observeLocalEvidence(input: LocalEvidenceObservationInput): Evid
       input.authorizedHandles.length > limits.sources ||
       input.claim.length > 2000) {
     flags.push("INPUT_LIMIT_EXCEEDED");
+    return result("INVALID_REFERENCES", "ROUTE_TO_HUMAN");
+  }
+
+  if (input.policy !== undefined && (
+      !input.policy || typeof input.policy !== "object" || Array.isArray(input.policy) ||
+      (input.policy.mode !== undefined && !["observe", "review"].includes(input.policy.mode)) ||
+      (input.policy.impact !== undefined && !["low", "high"].includes(input.policy.impact)) ||
+      (input.policy.independentConflictReported !== undefined &&
+        typeof input.policy.independentConflictReported !== "boolean") ||
+      (input.policy.disallowAutomatedReview !== undefined &&
+        typeof input.policy.disallowAutomatedReview !== "boolean") ||
+      Object.keys(input.policy).some(k => !["mode", "impact", "independentConflictReported", "disallowAutomatedReview"].includes(k))
+    )) {
+    flags.push("INVALID_REVIEW_POLICY");
     return result("INVALID_REFERENCES", "ROUTE_TO_HUMAN");
   }
 
