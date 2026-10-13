@@ -30,6 +30,7 @@ De pack builder ziet het geheel en bepaalt vooraf:
 De atom worker ziet uitsluitend:
 
 - de lokale vraag;
+- het optionele, vooraf vastgelegde **lokale** claimverificatiecontract (zonder benchmarklabel of projectdoel);
 - vaste antwoordopties;
 - gealiaste waarden van expliciet toegestane dependencies;
 - begrensde tekstsnippets uit expliciet toegestane bronhandles.
@@ -98,13 +99,14 @@ De modelprovider ontvangt exact dit soort object:
 ```ts
 interface AtomCapsule {
   question: string;
+  decision?: { kind: "verify-claim"; claim: string };
   options: string[];
   inputs: Record<string, string | null>;
   context: string[];
 }
 ```
 
-Geen andere pack- of statevelden worden doorgestuurd.
+Geen andere pack- of statevelden worden doorgestuurd. Een declaratief lokaal claimcontract is geen toestemming om het globale projectdoel of een andere atom door te geven. Zie [Atomic claim contract](atomic-claim-contract.md) voor de vaste betekenis van yes/no/unknown.
 
 ## Source broker
 
@@ -241,6 +243,7 @@ Een in-process provideradapter is onderdeel van de trusted computing base. De ex
 Wijzigingen aan workers moeten blijven aantonen dat:
 
 - een worker geen atom-id ziet;
+- een optioneel lokaal claimcontract geen expected/gold-label of globale projectcontext meeneemt;
 - een worker geen pack/cluster ziet;
 - sibling-atoms ontbreken;
 - evidence/status/lineage ontbreken;
