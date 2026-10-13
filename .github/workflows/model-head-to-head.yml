@@ -2,7 +2,10 @@ name: model-head-to-head
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/model-head-to-head.yml']
+    paths:
+      - '.github/workflows/model-head-to-head.yml'
+      - 'benchmarks/evidence-controls.dev.json'
+      - 'packages/gateway/src/decision-contract.ts'
   workflow_dispatch:
     inputs:
       model:

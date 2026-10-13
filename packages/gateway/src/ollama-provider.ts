@@ -1,4 +1,5 @@
 import type { ModelProvider, AtomCapsule } from "./gateway.ts";
+import { localDecisionInstruction } from "./decision-contract.ts";
 
 export interface OllamaConfig {
   host?: string;
@@ -81,7 +82,8 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
                 messages: [{
                   role: "user",
                   content: JSON.stringify({
-                    instruction: "Return only a JSON object with a nonnegative numeric probability for each listed option. No other keys.",
+                    instruction: localDecisionInstruction(capsule.decision?.kind === "verify-claim"),
+                    ...(capsule.decision ? { decision: capsule.decision } : {}),
                     question: capsule.question,
                     options: capsule.options,
                     inputs: capsule.inputs,

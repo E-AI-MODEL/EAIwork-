@@ -8,8 +8,9 @@ import { executeAtomWorker, type ModelProvider } from "../../gateway/src/gateway
 import { validateBenchmarkSuite, type BenchmarkCase, type BenchmarkSuite } from "./evaluate.ts";
 import { localOllamaHost } from "../../gateway/src/ollama-provider.ts";
 import type { PackAtom } from "../../core/src/index.ts";
+import { localDecisionInstruction } from "../../gateway/src/decision-contract.ts";
 
-export interface WholeTaskQuestion { caseId: string; question: string; options: string[]; context: string[] }
+export interface WholeTaskQuestion { caseId: string; question: string; decision?: { kind: "verify-claim"; claim: string }; options: string[]; context: string[] }
 export interface WholeTaskProvider {
   id: string;
   /** Receives all task questions in one request. Never used as an atom worker. */
@@ -89,7 +90,9 @@ export async function compareAtomVsWhole(
 ): Promise<ComparisonReport> {
   validateBenchmarkSuite(suite);
   const questions: WholeTaskQuestion[] = suite.cases.map(c => ({
-    caseId: c.id, question: c.question, options: choices(c),
+    caseId: c.id, question: c.question,
+    ...(c.decision ? { decision: { ...c.decision } } : {}),
+    options: choices(c),
     context: (() => { const snippets: string[] = []; let chars = 0; for (const handle of c.allowedSources) { for (const s of c.sources[handle]) { if (snippets.length >= 6 || chars >= 12000) return snippets; const clipped = s.slice(0, 12000 - chars); if (!clipped) return snippets; snippets.push(clipped); chars += clipped.length; } } return snippets; })(),
   }));
   const atomContextItems = questions.reduce((n, q) => n + q.context.length, 0);
@@ -104,6 +107,7 @@ export async function compareAtomVsWhole(
   const runAtom = async (c: BenchmarkCase, i: number): Promise<void> => {
     const atom: PackAtom = {
       id: "a.eval." + i, question: c.question, type: c.type,
+      ...(c.decision ? { decision: { ...c.decision } } : {}),
       options: c.options, impact: c.impact ?? "low",
       worker: { sources: [...c.allowedSources], max_context_items: 6, max_context_chars: 12000 },
     };
@@ -190,7 +194,7 @@ export function ollamaWholeTaskProvider(config: { model: string; host?: string; 
           },
           options: { temperature: 0, num_predict: 1200 },
           messages: [{ role: "user", content: JSON.stringify({
-            instruction: "For each caseId, return an object mapping ONLY its options to nonnegative numeric probabilities. Return a JSON object keyed by caseId. Never assume missing evidence proves approval. Do not emit any other text.",
+            instruction: "For each caseId, assess only that local question and its context. " + localDecisionInstruction(questions.some(q => q.decision?.kind === "verify-claim")) + " Return a JSON object keyed by caseId, with one nonnegative probability per allowed option. Do not emit any other text.",
             questions,
           }) }],
         }),

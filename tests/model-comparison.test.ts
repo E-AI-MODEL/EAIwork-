@@ -44,8 +44,10 @@ test("head-to-head uses truly isolated capsules and a separate all-task baseline
   assert.equal(seenWhole.length, 1);
   assert.equal(seenWhole[0].length, suite.cases.length);
   for (const capsule of received) {
-    assert.deepEqual(Object.keys(capsule).sort(), ["context", "inputs", "options", "question"]);
+    assert.deepEqual(Object.keys(capsule).sort(), ["context", "decision", "inputs", "options", "question"]);
     assert.deepEqual(capsule.inputs, {});
+    assert.equal(capsule.decision?.kind, "verify-claim");
+    assert.ok(capsule.decision?.claim);
     assert.equal(JSON.stringify(capsule).includes("expected"), false);
     assert.equal(JSON.stringify(capsule).includes("caseId"), false);
     assert.equal(JSON.stringify(capsule).includes("a.eval."), false);
