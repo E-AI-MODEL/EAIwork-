@@ -14,7 +14,7 @@ test("DEV evidence controls validate, including unknown and adversarial scenario
   }
   assert.throws(() => validateBenchmarkSuite({ ...fixture, cases: [fixture.cases[0], fixture.cases[0]] }), /duplicate/);
   assert.throws(() => validateBenchmarkSuite({ ...fixture, cases: [{ ...fixture.cases[0], expected: "not-an-option" }] }), /not an allowed/);
-  assert.throws(() => validateBenchmarkSuite({ ...fixture, cases: [{ ...fixture.cases[0], sources: { extra: ["leak"] } }] }), /Undeclared/);
+  assert.throws(() => validateBenchmarkSuite({ ...fixture, cases: [{ ...fixture.cases[0], sources: { ...fixture.cases[0].sources, extra: ["leak"] } }] }), /Undeclared/);
 });
 
 test("evaluation runs through fresh AtomCapsules without giving truth, sibling cases, or project structure to workers", async () => {
