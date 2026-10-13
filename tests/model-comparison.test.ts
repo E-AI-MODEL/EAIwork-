@@ -84,6 +84,9 @@ test("whole-task endpoint gets one request and only explicitly allowed evidence"
     const result = await provider.answerAll([{ caseId: "case1", question: "Check this?", options: ["yes", "no", "unknown"], context: ["authorized fragment"] }]);
     assert.equal(result.case1.unknown, 0.9);
     assert.equal(received.length, 1);
+    assert.deepEqual((received[0] as any).format.required, ["case1"]);
+    assert.deepEqual((received[0] as any).format.properties.case1.required, ["yes", "no", "unknown"]);
+    assert.equal((received[0] as any).format.additionalProperties, false);
     const payload = (received[0] as any).messages[0].content;
     assert.deepEqual(JSON.parse(payload).questions[0].context, ["authorized fragment"]);
     assert.equal(JSON.stringify(received[0]).includes("expected"), false);
