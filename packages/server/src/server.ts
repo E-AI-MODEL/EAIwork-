@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
@@ -311,7 +311,7 @@ export function makeServer(cfg: Config) {
         }
         const atomDef = atoms.get(raw.atom);
         if (!atomDef) return reject(`unknown atom ${raw.atom}`);
-        const eventId = `ev${store.next()}`;
+        const eventId = `ev-${randomUUID()}`;
         let event: EaiEvent;
 
         try {
@@ -413,7 +413,7 @@ export function makeServer(cfg: Config) {
           });
         } else {
           const event: EaiEvent = {
-            id: `ev${store.next()}`,
+            id: `ev-${randomUUID()}`,
             at: today(),
             actor,
             type: "answer.proposed",
@@ -474,7 +474,7 @@ export function makeServer(cfg: Config) {
         }
         if (!passed) return json(res, 422, { passed: false });
 
-        const eventId = `ev${store.next()}`;
+        const eventId = `ev-${randomUUID()}`;
         const event: EaiEvent = {
           id: eventId,
           at: today(),

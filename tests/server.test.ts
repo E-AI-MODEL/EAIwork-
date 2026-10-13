@@ -516,6 +516,80 @@ test("scoped writers cannot infer hidden worker outcomes from global event seque
   assert.equal(await second.text(), "");
 });
 
+
+test("scoped flag and evidence IDs do not expose hidden worker outcomes", async () => {
+  const isolatedDir = mkdtempSync(join(tmpdir(), "eai-opaque-ids-"));
+  const isolatedWitnessDir = mkdtempSync(join(tmpdir(), "eai-opaque-witness-"));
+  const isolated = makeServer({
+    dir: isolatedDir, pack, today: () => "2026-10-05",
+    tokens, checks, workers,
+    witness: new SignedFileAnchorWitness(isolatedWitnessDir, privateKeyPem, publicKeyPem),
+  });
+  await new Promise<void>((resolve) => isolated.server.listen(0, "127.0.0.1", resolve));
+  const isolatedBase = `http://127.0.0.1:${(isolated.server.address() as AddressInfo).port}`;
+  const send = (token: string, body: unknown, path = "/events") => fetch(isolatedBase + path, {
+    method: "POST",
+    headers: { authorization: "Bearer " + token },
+    body: JSON.stringify(body),
+  });
+  const inspect = async () => {
+    const response = await fetch(isolatedBase + "/explain/a.plan.003", {
+      headers: { authorization: "Bearer " + SEQUENCE_PROBE_WORKER_TOKEN },
+    });
+    assert.equal(response.status, 200);
+    return response.json() as Promise<any>;
+  };
+  const opaqueId = /^ev-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  try {
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {
+      type: "answer.proposed", atom: "a.plan.003", value: "yes",
+    })).status, 201);
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {
+      type: "evidence.attached", atom: "a.plan.003",
+      evidence: { source: "probe", mode: "reported", supports: true },
+    })).status, 201);
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {
+      type: "flag.raised", atom: "a.plan.003", message: "before",
+    })).status, 201);
+
+    const before = await inspect();
+    assert.match(before.evidence[0].id.replace(/:evidence$/, ""), opaqueId);
+    assert.match(before.flags[0].id, opaqueId);
+
+    const acceptedBefore = isolated.store.events.length;
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {}, "/workers/a.fin.017")).status, 204);
+    assert.equal(isolated.store.events.length, acceptedBefore + 1);
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {
+      type: "flag.raised", atom: "a.plan.003", message: "after accepted worker",
+    })).status, 201);
+
+    assert.equal((await send(PERSON_TOKEN, {
+      type: "evidence.attached", atom: "a.fin.017",
+      evidence: { source: "independent review", mode: "reported", supports: true },
+    })).status, 201);
+
+    const rejectedBefore = isolated.store.rejections.length;
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {}, "/workers/a.fin.017")).status, 204);
+    assert.equal(isolated.store.rejections.length, rejectedBefore + 1);
+    assert.equal((await send(SEQUENCE_PROBE_WORKER_TOKEN, {
+      type: "flag.raised", atom: "a.plan.003", message: "after rejected worker",
+    })).status, 201);
+
+    const after = await inspect();
+    const ids = after.flags.map((flag: any) => flag.id);
+    assert.equal(ids.length, 3);
+    assert.equal(new Set(ids).size, 3);
+    for (const id of ids) assert.match(id, opaqueId);
+    assert.equal(after.evidence[0].id, before.evidence[0].id);
+    assert.equal(after.flags[0].id, before.flags[0].id);
+    assert.equal(ids.some((id: string) => /^ev\\d+$/.test(id)), false);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      isolated.server.close((err) => err ? reject(err) : resolve()),
+    );
+  }
+});
+
 test("server-owned worker gets only its atom capsule and writes an assumption", async () => {
   const callsBefore = workerCalls;
   const injected = await post(

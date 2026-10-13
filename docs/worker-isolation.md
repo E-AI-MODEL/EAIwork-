@@ -204,6 +204,8 @@ De worker-capability staat los van gewone state-toegang. Een execute-only orches
 
 Zodra een principal het target-atom zelf wél mag lezen, geldt een extra invariant: alle gedeclareerde worker-inputatoms moeten ook leesbaar zijn voor die principal. Anders wordt de worker-run geweigerd. Zo kan een zichtbaar target niet als indirect orakel voor een verborgen dependency fungeren.
 
+Nieuw uitgegeven event-ID's, evidence-ID's en flag-ID's zijn willekeurig en niet afgeleid van de globale eventvolgorde. Een caller met beperkte leesrechten kan daardoor niet via opeenvolgende ID's afleiden of een verborgen workerresultaat is geaccepteerd.
+
 De server haalt de gedeclareerde dependencywaarden zelf uit state en bouwt daarmee de capsule. Een afgehandelde worker-run antwoordt met HTTP `204 No Content`, ook wanneer het modelresultaat intern door de evidence-regels wordt geweigerd. De scheduler krijgt dus geen state, event-hash, modeluitkomst, probabilities of accept/reject-signaal terug.
 
 ## Consistentie tijdens generatie

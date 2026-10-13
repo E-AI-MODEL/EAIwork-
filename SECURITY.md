@@ -18,6 +18,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Every atom execution opens a fresh single-use model session. Direct worker-to-worker messaging, shared scratchpads and swarm blackboards are outside the worker API.
 - Worker execution is a separate capability from read/write access. An execute-only scheduler can run atoms without seeing `/state` or writing `/events`; completed worker calls return bodyless 204 responses and do not reveal model output or internal acceptance/rejection.
 - Global event sequence/hash receipts are returned only to principals with `audit: true` and read access to every atom. Scoped writers and scoped check runners receive no global sequence metadata.
+- HTTP-issued event, evidence and flag identifiers are opaque random UUID-based IDs, not global event sequence counters. Internal log sequence numbers stay available for audit and integrity verification.
 - If a principal can read a worker target, it must also be able to read every declared worker input before executing that worker. This prevents the readable target from becoming an oracle over hidden dependencies.
 - If a principal can read a worker target, it must also be allowed to read every dependency value declared in that worker policy. Otherwise worker execution is denied, preventing a readable target from becoming an oracle over hidden inputs.
 - Public `/events` requests cannot create `check.passed` events.
