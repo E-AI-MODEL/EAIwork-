@@ -43,6 +43,13 @@ test("head-to-head uses truly isolated capsules and a separate all-task baseline
   assert.ok(result.whole.highConfidenceErrors > 0);
   assert.equal(seenWhole.length, 1);
   assert.equal(seenWhole[0].length, suite.cases.length);
+  assert.deepEqual(seenWhole[0].map((q: any) => q.caseId),
+    suite.cases.map((_, i) => "q" + String(i + 1).padStart(4, "0")));
+  for (const wholeQuestion of seenWhole[0]) {
+    assert.equal(suite.cases.some(c => c.id === wholeQuestion.caseId), false);
+    assert.equal(JSON.stringify(wholeQuestion).includes('"expected"'), false);
+    assert.equal(JSON.stringify(wholeQuestion).includes('"category"'), false);
+  }
   for (const capsule of received) {
     assert.deepEqual(Object.keys(capsule).sort(), ["context", "decision", "inputs", "options", "question"]);
     assert.deepEqual(capsule.inputs, {});
@@ -105,4 +112,24 @@ test("failures in the whole baseline are not reported as correct unknowns", asyn
   assert.equal(result.whole.valid, 0);
   assert.equal(result.whole.errors, 1);
   assert.equal(result.whole.accuracyOnValid, null);
+});
+
+test("case diagnostics classify failures without echoing private source content", async () => {
+  const privateText = "DO_NOT_LEAK_PRIVATE_SOURCE_123";
+  const sample = { ...suite, cases: suite.cases.slice(0, 2) };
+  const report = await compareAtomVsWhole({
+    id: "mock:error-atom",
+    openSession: () => ({
+      answer: async () => { throw new Error("Invalid model response: " + privateText); },
+    }),
+  }, {
+    id: "mock:error-whole",
+    answerAll: async () => { throw Object.assign(new Error("Ollama HTTP 429: " + privateText), { status: 429 }); },
+  }, sample);
+  assert.equal(report.atom.errors, 2);
+  assert.equal(report.whole.errors, 2);
+  assert.deepEqual(report.trials.map(x => x.atom.error), ["invalid-response", "invalid-response"]);
+  assert.deepEqual(report.trials.map(x => x.whole.error), ["transport", "transport"]);
+  assert.equal(report.trials[0].caseId, sample.cases[0].id);
+  assert.equal(JSON.stringify(report).includes(privateText), false);
 });

@@ -5,7 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { executeAtomWorker, type ModelProvider } from "../../gateway/src/gateway.ts";
-import { validateBenchmarkSuite, type BenchmarkCase, type BenchmarkSuite } from "./evaluate.ts";
+import { validateBenchmarkSuite, type BenchmarkCase, type BenchmarkSuite, type FailureKind } from "./evaluate.ts";
 import { localOllamaHost } from "../../gateway/src/ollama-provider.ts";
 import type { PackAtom } from "../../core/src/index.ts";
 import { localDecisionInstruction } from "../../gateway/src/decision-contract.ts";
@@ -20,8 +20,8 @@ export interface ComparedTrial {
   caseId: string;
   expected: string;
   category: BenchmarkCase["category"];
-  atom: { predicted?: string; confidence?: number; error?: string; elapsedMs: number };
-  whole: { predicted?: string; confidence?: number; error?: string };
+  atom: { predicted?: string; confidence?: number; error?: FailureKind; elapsedMs: number };
+  whole: { predicted?: string; confidence?: number; error?: FailureKind };
 }
 export interface ArmScore {
   total: number;
@@ -66,7 +66,15 @@ function safeDistribution(value: unknown, allowed: string[]): { predicted: strin
   const ranked = allowed.map(k => [k, (obj[k] as number) / sum] as const).sort((a,b) => b[1] - a[1]);
   return { predicted: ranked[0][0], confidence: ranked[0][1] };
 }
-const errorCode = (_error: unknown) => "failed"; // Deliberately no raw responses or secrets in reports.
+/** Deliberately discard all exception strings: providers may include private source text in errors. */
+function errorCode(error: unknown): FailureKind {
+  const e = error as { name?: string; message?: string; status?: number };
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") return "timeout";
+  if (typeof e?.status === "number" || e?.name === "TypeError" ||
+      /^whole-task HTTP error [0-9]+$/.test(e?.message ?? "")) return "transport";
+  if (/probability|JSON|Syntax|invalid|missing or invalid|empty ollama|unapproved|unexpected|zero probability/i.test(e?.message ?? "")) return "invalid-response";
+  return "other";
+}
 
 function score(trials: ComparedTrial[], arm: "atom" | "whole"): ArmScore {
   const valid = trials.filter(t => !!t[arm].predicted);
@@ -90,7 +98,8 @@ export async function compareAtomVsWhole(
 ): Promise<ComparisonReport> {
   validateBenchmarkSuite(suite);
   const questions: WholeTaskQuestion[] = suite.cases.map(c => ({
-    caseId: c.id, question: c.question,
+    // Neutral surrogate IDs: never send benchmark IDs (e.g. "missing-evidence") to the whole-task model.
+    caseId: "q" + String(suite.cases.indexOf(c) + 1).padStart(4, "0"), question: c.question,
     ...(c.decision ? { decision: { ...c.decision } } : {}),
     options: choices(c),
     context: (() => { const snippets: string[] = []; let chars = 0; for (const handle of c.allowedSources) { for (const s of c.sources[handle]) { if (snippets.length >= 6 || chars >= 12000) return snippets; const clipped = s.slice(0, 12000 - chars); if (!clipped) return snippets; snippets.push(clipped); chars += clipped.length; } } return snippets; })(),
@@ -137,12 +146,12 @@ export async function compareAtomVsWhole(
   try {
     // One explicit call sees ALL questions and allowed snippets. No production authority.
     const output = await wholeProvider.answerAll(structuredClone(questions));
-    const expectedIds = new Set(suite.cases.map(c => c.id));
+    const expectedIds = new Set(questions.map(q => q.caseId));
     if (!output || typeof output !== "object" || Array.isArray(output) ||
       Object.keys(output).some(k => !expectedIds.has(k))) throw new Error("unexpected case IDs");
     for (let i = 0; i < suite.cases.length; i++) {
       try {
-        const answer = safeDistribution(output[suite.cases[i].id], choices(suite.cases[i]));
+        const answer = safeDistribution(output[questions[i].caseId], choices(suite.cases[i]));
         trials[i].whole.predicted = answer.predicted;
         trials[i].whole.confidence = answer.confidence;
       } catch (error) {
@@ -162,7 +171,7 @@ export async function compareAtomVsWhole(
     atomElapsedMs, wholeElapsedMs,
     atomContextItems, wholeContextItems: atomContextItems,
     trials,
-    warning: "DEV EXPLORATION ONLY. Same source evidence, different context boundaries and request counts. Not a controlled model quality, cost or security certification. No authority promotion.",
+    warning: "DEV EXPLORATION ONLY. Synthetic cases, different context boundaries, batch prompts, request counts and decoding budgets; these results cannot establish causal benefit or harm of worker isolation. Model confidence is uncalibrated. No authority promotion.",
   };
 }
 
