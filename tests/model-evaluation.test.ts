@@ -53,8 +53,10 @@ test("evaluation runs through fresh AtomCapsules without giving truth, sibling c
   assert.equal(report.unknownTotal, fixture.cases.filter(c => c.expected === "unknown").length * 2);
   assert.ok(/OBSERVATIONAL ONLY/.test(formatBenchmarkSummary(report)));
   for (const capsule of received) {
-    assert.deepEqual(Object.keys(capsule).sort(), ["context", "inputs", "options", "question"]);
+    assert.deepEqual(Object.keys(capsule).sort(), ["context", "decision", "inputs", "options", "question"]);
     assert.deepEqual(capsule.inputs, {});
+    assert.equal(capsule.decision?.kind, "verify-claim");
+    assert.ok(capsule.decision?.claim);
     const text = JSON.stringify(capsule);
     for (const forbidden of ["caseId", "expected", "benchmarks", "verified-yes", "scope-boundary", "a.eval.local", "s.record"]) {
       assert.equal(text.includes(forbidden), false, forbidden);
