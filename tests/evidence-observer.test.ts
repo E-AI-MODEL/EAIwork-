@@ -92,6 +92,9 @@ test("bad source policy, oversized input, and malformed data are fail-closed", (
   assert.equal(observeLocalEvidence({ ...basic(), proposedReferences: Array(13).fill(basic().proposedReferences[0]) }).route, "ROUTE_TO_HUMAN");
   assert.equal(observeLocalEvidence(null as any).route, "ROUTE_TO_HUMAN");
   assert.equal(observeLocalEvidence({ ...basic(), answer: "maybe" as any }).route, "ROUTE_TO_HUMAN");
+  assert.equal(observeLocalEvidence({ ...basic(), policy: { impact: "medium" as any } }).route, "ROUTE_TO_HUMAN");
+  assert.equal(observeLocalEvidence({ ...basic(), policy: { independentConflictReported: "false" as any } }).route, "ROUTE_TO_HUMAN");
+  assert.equal(observeLocalEvidence({ ...basic(), policy: { mode: "intervene" as any } }).route, "ROUTE_TO_HUMAN");
 });
 
 test("determinism and non-leakage: equal inputs yield exactly equal audit data", () => {
