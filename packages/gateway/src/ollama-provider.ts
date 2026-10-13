@@ -70,7 +70,13 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
               body: JSON.stringify({
                 model: config.model,
                 stream: false,
-                format: "json",
+                format: {
+                  type: "object",
+                  properties: Object.fromEntries(capsule.options.map(option => [option, { type: "number", minimum: 0 }])),
+                  required: [...capsule.options],
+                  additionalProperties: false,
+                },
+                options: { temperature: 0, num_predict: 220 },
                 ...(withThink ? { think: false } : {}),
                 messages: [{
                   role: "user",

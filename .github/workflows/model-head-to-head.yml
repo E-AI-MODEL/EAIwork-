@@ -1,0 +1,49 @@
+name: model-head-to-head
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/model-head-to-head.yml']
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Locally installed or downloaded Ollama model"
+        required: true
+        default: "qwen2.5:3b"
+        type: choice
+        options:
+          - "qwen2.5:1.5b"
+          - "qwen2.5:3b"
+          - "qwen2.5:7b"
+permissions:
+  contents: read
+concurrency:
+  group: model-head-to-head
+  cancel-in-progress: false
+jobs:
+  comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start local model endpoint
+        run: |
+          ollama serve > /tmp/eai-ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Ollama failed readiness check"
+          exit 1
+      - name: Pull benchmark model
+        env:
+          MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
+        run: ollama pull "$MODEL"
+      - name: Compare anatomical workers and whole-task baseline
+        env:
+          EAI_BENCH_MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
+        run: node benchmarks/compare-model.ts benchmarks/evidence-controls.dev.json
