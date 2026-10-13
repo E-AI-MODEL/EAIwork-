@@ -6,6 +6,7 @@ export interface AccessPolicy {
   read: Scope;
   write: Scope;
   checks?: Scope;
+  workers?: Scope;
   audit?: boolean;
 }
 
@@ -20,6 +21,7 @@ const inScope = (scope: Scope | undefined, id: string) =>
 export const canRead = (principal: Principal, atom: string) => inScope(principal.access.read, atom);
 export const canWrite = (principal: Principal, atom: string) => inScope(principal.access.write, atom);
 export const canRunCheck = (principal: Principal, id: string) => inScope(principal.access.checks, id);
+export const canRunWorker = (principal: Principal, atom: string) => inScope(principal.access.workers, atom);
 export const canAudit = (principal: Principal) => principal.access.audit === true;
 
 const validateScope = (scope: unknown, allowed: Set<string>, label: string, required: boolean) => {
@@ -41,6 +43,7 @@ export function validatePrincipals(
   if (!entries.length) throw new Error("at least one access token is required");
   const atoms = new Set(pack.atoms.map((atom) => atom.id));
   const checks = new Set(checkIds);
+  const workerAtoms = new Set(pack.atoms.filter((atom) => atom.worker).map((atom) => atom.id));
 
   for (const [token, principal] of entries) {
     if (token.length < 32) throw new Error("access tokens must be at least 32 characters");
@@ -52,6 +55,8 @@ export function validatePrincipals(
     validateScope(principal.access.read, atoms, "read", true);
     validateScope(principal.access.write, atoms, "write", true);
     validateScope(principal.access.checks, checks, "checks", false);
+    validateScope(principal.access.workers, workerAtoms, "workers", false);
+    if (principal.actor.kind === "model") throw new Error("model actors cannot hold public API tokens");
     if (principal.access.write === "*" && principal.access.read !== "*") {
       throw new Error("write scope must be a subset of read scope");
     }
