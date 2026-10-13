@@ -133,3 +133,33 @@ test("case diagnostics classify failures without echoing private source content"
   assert.equal(report.trials[0].caseId, sample.cases[0].id);
   assert.equal(JSON.stringify(report).includes(privateText), false);
 });
+
+
+test("one failed whole-task request is counted once, while dependent case outputs remain unassessed", async () => {
+  const sample = { ...suite, cases: suite.cases.slice(0, 3) };
+  const provider: ModelProvider = { id: "mock:atomic", openSession: () => ({ answer: async () => distribution("unknown") }) };
+  const result = await compareAtomVsWhole(provider, {
+    id: "mock:expired-batch", answerAll: async () => {
+      throw Object.assign(new Error("The operation timed out with confidential source details"), { name: "TimeoutError" });
+    },
+  }, sample);
+  assert.equal(result.wholeRequestFailure, "timeout");
+  assert.equal(result.whole.errors, 3);
+  assert.equal(result.whole.valid, 0);
+  assert.equal(result.whole.accuracyOnValid, null);
+  assert.ok(result.trials.every(t => t.whole.error === "timeout"));
+  assert.ok(!JSON.stringify(result).includes("confidential"));
+});
+
+test("invalid whole-task JSON is a sanitized output issue, not a false epistemic answer", async () => {
+  const original = globalThis.fetch;
+  const sample = { ...suite, cases: suite.cases.slice(0, 2) };
+  try {
+    globalThis.fetch = async () => Response.json({ message: { content: "not-json-CONFIDENTIAL" } });
+    const provider: ModelProvider = { id: "mock:atomic", openSession: () => ({ answer: async () => distribution("unknown") }) };
+    const result = await compareAtomVsWhole(provider, ollamaWholeTaskProvider({ model: "fixture", timeoutMs: 20000 }), sample);
+    assert.equal(result.wholeRequestFailure, "invalid-response");
+    assert.equal(result.wholeRequestOutputIssue, "non-json");
+    assert.ok(!JSON.stringify(result).includes("CONFIDENTIAL"));
+  } finally { globalThis.fetch = original; }
+});
