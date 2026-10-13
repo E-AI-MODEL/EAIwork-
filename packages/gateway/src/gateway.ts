@@ -4,6 +4,8 @@ import type { Pack, PackAtom, Route, State } from "../../core/src/index.ts";
 export interface AtomCapsule {
   /** The model sees no atom id, cluster, pack, project goal, status, evidence or downstream use. */
   question: string;
+  /** Present only for atom-local claim verification; not a project-wide prompt. */
+  decision?: { kind: "verify-claim"; claim: string };
   options: string[];
   inputs: Record<string, string | null>;
   context: string[];
@@ -72,6 +74,7 @@ export async function buildAtomCapsule(
   );
   return {
     question: atom.question,
+    ...(atom.decision ? { decision: { kind: atom.decision.kind, claim: atom.decision.claim } } : {}),
     options: optionsFor(atom),
     inputs,
     context,
