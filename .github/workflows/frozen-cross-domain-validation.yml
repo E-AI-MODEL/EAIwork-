@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/frozen-cross-domain-validation.yml'
+      - 'packages/evaluation/src/compare.ts'
+      - 'benchmarks/compare-model.ts'
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,6 +42,7 @@ jobs:
         run: ollama pull "$MODEL"
       - name: Run fixed validation suite with both context boundaries
         env:
+          EAI_BENCH_WHOLE_TIMEOUT_MS: "300000"
           EAI_BENCH_MODEL: ${{ matrix.model }}
         run: node benchmarks/compare-model.ts benchmarks/validation/cross-domain.v1.frozen.json validation-report.json
       - name: Preserve non-sensitive validation diagnostics
