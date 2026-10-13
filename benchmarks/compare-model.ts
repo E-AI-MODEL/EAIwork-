@@ -34,7 +34,7 @@ if (!suitePath || !model) {
     console.log("Case diagnostics (confidence = model-assigned probability, not calibrated):");
     console.log("Case | expected | isolated | whole");
     const display = (t: typeof report.trials[number]["atom"]): string =>
-      t.error ? "ERROR(" + t.error + ")" :
+      t.error ? "ERROR(" + t.error + (t.outputIssue ? ":" + t.outputIssue : "") + ")" :
       t.predicted ? t.predicted + " " + ((t.confidence ?? 0) * 100).toFixed(0) + "%" :
       "ERROR(other)";
     for (const trial of report.trials) {
