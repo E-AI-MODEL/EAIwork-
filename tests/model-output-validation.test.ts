@@ -59,7 +59,7 @@ test("real Ollama adapter distinguishes malformed outputs without exposing sourc
     for (const [modelText, code] of responses) {
       globalThis.fetch = async () => Response.json({message:{content:modelText}});
       await assert.rejects(
-        () => ollamaProvider({model:"sandbox"}).openSession().then(s=>s.answer(capsule)),
+        async () => { const s = await ollamaProvider({model:"sandbox"}).openSession(); await s.answer(capsule); },
         (e: unknown) => {
           assert.ok(e instanceof OllamaOutputError);
           assert.equal(e.code, code);
