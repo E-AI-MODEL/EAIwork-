@@ -1,0 +1,46 @@
+name: live-ollama-smoke
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Ollama model for the three-worker live smoke test"
+        required: true
+        default: "qwen2.5:1.5b"
+        type: choice
+        options:
+          - "qwen2.5:1.5b"
+          - "llama3.2:1b"
+permissions:
+  contents: read
+concurrency:
+  group: live-ollama-smoke
+  cancel-in-progress: false
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Install local Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start Ollama and wait for health
+        run: |
+          ollama serve > /tmp/ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Ollama did not start"
+          exit 1
+      - name: Pull selected model
+        env:
+          MODEL: ${{ inputs.model }}
+        run: ollama pull "$MODEL"
+      - name: Three-worker live test
+        env:
+          EAI_LIVE_OLLAMA_MODEL: ${{ inputs.model }}
+          EAI_LIVE_OLLAMA_HOST: http://127.0.0.1:11434
+        run: node --test tests/ollama-live-smoke.test.ts
