@@ -31,6 +31,17 @@ if (!suitePath || !model) {
     console.log(line("Isolated atoms", report.atom));
     console.log(line("Whole task", report.whole));
     console.log("Wall time: isolated " + report.atomElapsedMs + " ms, whole " + report.wholeElapsedMs + " ms (different request shapes)");
+    console.log("Case diagnostics (confidence = model-assigned probability, not calibrated):");
+    console.log("Case | expected | isolated | whole");
+    const display = (t: typeof report.trials[number]["atom"]): string =>
+      t.error ? "ERROR(" + t.error + ")" :
+      t.predicted ? t.predicted + " " + ((t.confidence ?? 0) * 100).toFixed(0) + "%" :
+      "ERROR(other)";
+    for (const trial of report.trials) {
+      console.log(trial.caseId + " | " + trial.expected +
+        " | " + display(trial.atom) + " | " + display(trial.whole));
+    }
+    console.log("A valid model answer is not proof of an evidence-backed answer.");
     console.log(report.warning);
     if (process.argv[3]) {
       writeFileSync(process.argv[3], JSON.stringify(report, null, 2) + "\n", { flag: "wx", mode: 0o600 });
