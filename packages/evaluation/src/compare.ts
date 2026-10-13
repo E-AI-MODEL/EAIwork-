@@ -90,7 +90,7 @@ export async function compareAtomVsWhole(
   validateBenchmarkSuite(suite);
   const questions: WholeTaskQuestion[] = suite.cases.map(c => ({
     caseId: c.id, question: c.question, options: choices(c),
-    context: c.allowedSources.flatMap(handle => [...c.sources[handle]]).slice(0, 6).map(s => s.slice(0, 12000)),
+    context: (() => { const snippets: string[] = []; let chars = 0; for (const handle of c.allowedSources) { for (const s of c.sources[handle]) { if (snippets.length >= 6 || chars >= 12000) return snippets; const clipped = s.slice(0, 12000 - chars); if (!clipped) return snippets; snippets.push(clipped); chars += clipped.length; } } return snippets; })(),
   }));
   const atomContextItems = questions.reduce((n, q) => n + q.context.length, 0);
   const trials: ComparedTrial[] = suite.cases.map(c => ({
@@ -101,7 +101,7 @@ export async function compareAtomVsWhole(
   // The worker interface is the only information boundary available to the atom model.
   // Run these first and record the measured wall time for the concurrent work.
   const atomStart = performance.now();
-  await Promise.all(suite.cases.map(async (c, i) => {
+  const runAtom = async (c: BenchmarkCase, i: number): Promise<void> => {
     const atom: PackAtom = {
       id: "a.eval." + i, question: c.question, type: c.type,
       options: c.options, impact: c.impact ?? "low",
@@ -122,7 +122,11 @@ export async function compareAtomVsWhole(
     } finally {
       trials[i].atom.elapsedMs = Math.round(performance.now() - t0);
     }
-  }));
+  };
+  // Bound parallelism so an 8-case benchmark does not overload a single local model.
+  for (let i = 0; i < suite.cases.length; i += 2) {
+    await Promise.all(suite.cases.slice(i, i + 2).map((c, j) => runAtom(c, i + j)));
+  }
   const atomElapsedMs = Math.round(performance.now() - atomStart);
 
   const wholeStart = performance.now();
