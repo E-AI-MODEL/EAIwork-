@@ -46,6 +46,7 @@ export interface ModelProvider {
 }
 
 export type EvidenceSidecar =
+  | { status: "not-applicable" }
   | { status: "provider-unsupported" }
   | { status: "observed"; observation: EvidenceObservationResult };
 
@@ -115,10 +116,13 @@ export async function executeAtomWorker(
 ): Promise<WorkerResult> {
   const capsule = await buildAtomCapsule(atom, state, broker);
   const session = await provider.openSession();
+  // A citation-support check applies only to local yes/no claim verification,
+  // never to free-form choice/score tasks just because they also have a model.
+  const observe = opts.observeEvidence && atom.type === "yesno" && atom.decision?.kind === "verify-claim";
   let raw: Record<string, number>;
   let proposal: ModelProposal | undefined;
   try {
-    if (opts.observeEvidence && session.propose) {
+    if (observe && session.propose) {
       // The model sees only a fresh, bounded capsule. No source handles or sibling context.
       proposal = await session.propose(structuredClone(capsule));
       if (!proposal || typeof proposal !== "object" ||
@@ -146,7 +150,9 @@ export async function executeAtomWorker(
   const value = Object.entries(p).sort((a, b) => b[1] - a[1])[0][0];
   let evidence: EvidenceSidecar | undefined;
   if (opts.observeEvidence) {
-    if (!proposal) {
+    if (!observe) {
+      evidence = { status: "not-applicable" };
+    } else if (!proposal) {
       evidence = { status: "provider-unsupported" };
     } else {
       const sources = capsule.context.map((content, i) => ({
