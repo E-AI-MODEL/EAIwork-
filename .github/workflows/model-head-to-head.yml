@@ -5,15 +5,13 @@ on:
     paths:
       - '.github/workflows/model-head-to-head.yml'
       - 'benchmarks/evidence-controls.dev.json'
+      - 'benchmarks/compare-model.ts'
       - 'packages/gateway/src/decision-contract.ts'
-      - 'benchmarks/compare-model.ts'
       - 'packages/evaluation/src/compare.ts'
-      - 'packages/evaluation/src/compare.ts'
-      - 'benchmarks/compare-model.ts'
   workflow_dispatch:
     inputs:
       model:
-        description: "Locally installed or downloaded Ollama model"
+        description: "Local Ollama model for DEV comparison"
         required: true
         default: "qwen2.5:3b"
         type: choice
@@ -50,23 +48,15 @@ jobs:
         env:
           MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
         run: ollama pull "$MODEL"
-      - name: Compare anatomical workers and whole-task baseline
+      - name: Compare atoms and whole-task baseline
         env:
           EAI_BENCH_MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
         run: node benchmarks/compare-model.ts benchmarks/evidence-controls.dev.json head-to-head-report.json
-      - name: Preserve comparison results even on test failure
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: head-to-head-diagnostics
-          path: head-to-head-report.json
-          if-no-files-found: warn
-          retention-days: 14 head-to-head.json
-      - name: Preserve case diagnostics even when a model call fails
+      - name: Preserve diagnostics including failed model runs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: case-diagnostics
-          path: head-to-head.json
+          path: head-to-head-report.json
           if-no-files-found: warn
           retention-days: 14
