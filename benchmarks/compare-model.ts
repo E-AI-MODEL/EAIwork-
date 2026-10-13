@@ -14,9 +14,11 @@ if (!suitePath || !model) {
   try {
     const suite = JSON.parse(readFileSync(suitePath, "utf8")) as BenchmarkSuite;
     const host = process.env.EAI_BENCH_OLLAMA_HOST;
+    const wholeTimeoutMs = Number(process.env.EAI_BENCH_WHOLE_TIMEOUT_MS ?? "300000");
+    if (!Number.isInteger(wholeTimeoutMs) || wholeTimeoutMs < 10000 || wholeTimeoutMs > 600000) throw new Error("Whole batch timeout must be 10000–600000 ms");
     const report = await compareAtomVsWhole(
       ollamaProvider({ model, host, timeoutMs: 120000, disableThinking: true }),
-      ollamaWholeTaskProvider({ model, host, timeoutMs: 120000 }),
+      ollamaWholeTaskProvider({ model, host, timeoutMs: wholeTimeoutMs }),
       suite,
     );
     const line = (name: string, arm: typeof report.atom) =>
@@ -42,6 +44,8 @@ if (!suitePath || !model) {
         " | " + display(trial.atom) + " | " + display(trial.whole));
     }
     console.log("A valid model answer is not proof of an evidence-backed answer.");
+    if (report.wholeRequestFailure) console.log("Whole batch request: ERROR(" + report.wholeRequestFailure + (report.wholeRequestOutputIssue ? ":" + report.wholeRequestOutputIssue : "") + "); " + report.whole.errors + " cases unassessed from this SINGLE failed request.");
+    console.log("Configured whole-task timeout: " + wholeTimeoutMs + " ms.");
     console.log(report.warning);
     if (process.argv[3]) {
       writeFileSync(process.argv[3], JSON.stringify(report, null, 2) + "\n", { flag: "wx", mode: 0o600 });
