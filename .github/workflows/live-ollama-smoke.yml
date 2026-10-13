@@ -1,5 +1,8 @@
 name: live-ollama-smoke
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/live-ollama-smoke.yml']
   workflow_dispatch:
     inputs:
       model:
@@ -37,10 +40,10 @@ jobs:
           exit 1
       - name: Pull selected model
         env:
-          MODEL: ${{ inputs.model }}
+          MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
         run: ollama pull "$MODEL"
       - name: Three-worker live test
         env:
-          EAI_LIVE_OLLAMA_MODEL: ${{ inputs.model }}
+          EAI_LIVE_OLLAMA_MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
           EAI_LIVE_OLLAMA_HOST: http://127.0.0.1:11434
         run: node --test tests/ollama-live-smoke.test.ts
