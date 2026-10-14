@@ -8,14 +8,6 @@ on:
       - 'tests/decomposition-*.test.ts'
   workflow_dispatch:
     inputs:
-      model:
-        description: 'Local CPU Ollama model, DEV only'
-        required: true
-        type: choice
-        default: 'qwen2.5:1.5b'
-        options:
-          - 'qwen2.5:1.5b'
-          - 'qwen2.5:3b'
       suite:
         description: 'DEV sample only (full can be slow on CPU)'
         required: true
@@ -37,6 +29,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'research/decomposition-lab-v1'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - { label: 'qwen25-15b', model: 'qwen2.5:1.5b' }
+          - { label: 'qwen25-7b', model: 'qwen2.5:7b' }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -59,11 +57,11 @@ jobs:
           exit 1
       - name: Download selected model
         env:
-          MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
+          MODEL: ${{ matrix.variant.model }}
         run: ollama pull "$MODEL"
       - name: Run real four-arm DEV comparison
         env:
-          EAI_DECOMP_MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
+          EAI_DECOMP_MODEL: ${{ matrix.variant.model }}
           EAI_DECOMP_TIMEOUT_MS: '45000'
           EAI_DECOMP_MAX_OUTPUT_TOKENS: '750'
           SUITE: ${{ inputs.suite || 'pilot' }}
@@ -72,7 +70,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: decomposition-dev-results
+          name: decomposition-dev-results-${{ matrix.variant.label }}
           path: |
             decomposition-dev-report.json
             /tmp/eai-decomp-ollama.log

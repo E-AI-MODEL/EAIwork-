@@ -108,12 +108,19 @@ export function localOllama(model: string): ModelCall {
       }}
     }, required: ["spans","candidates"]
   };
-  return async (_task, _stage, prompt) => {
+  return async (_task, stage, prompt) => {
+    // A blindspot probe cannot emit authoritative spans even as an intermediate response.
+    const format = stage === "probe"
+      ? { ...outputSchema, properties: {
+          ...outputSchema.properties,
+          spans: { ...outputSchema.properties.spans, maxItems: 0 }
+        }}
+      : outputSchema;
     const res = await fetch("http://127.0.0.1:11434/api/generate", {
       method:"POST",
       headers:{"content-type":"application/json"},
       signal:AbortSignal.timeout(timeout),
-      body:JSON.stringify({model,prompt,format:outputSchema,stream:false,options:{temperature:0,seed:42,num_predict:maxOutput,num_ctx:4096}})
+      body:JSON.stringify({model,prompt,format,stream:false,options:{temperature:0,seed:42,num_predict:maxOutput,num_ctx:4096}})
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const payload = await res.json() as Record<string,unknown>;

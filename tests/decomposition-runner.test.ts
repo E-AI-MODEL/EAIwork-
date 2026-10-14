@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildPrompt, runSuite } from "../experiments/decomposition/runner.ts";
+import { buildPrompt, runSuite, localOllama } from "../experiments/decomposition/runner.ts";
 import { normalizeModelOutput } from "../experiments/decomposition/spec.ts";
 const task = {id:"demo",domain:"education",text:"Maak een concept, maar verstuur niets."};
 const returned = (kind: string, quote: string) => ({content:{spans:[{kind,quote}],candidates:[]},output_tokens:10});
@@ -45,4 +45,25 @@ test("quoted model offsets are derived from unambiguous task source",()=>{
   const output=normalizeModelOutput(task,{spans:[{kind:"prohibition",quote:"verstuur niets"}]});
   const span=output.spans[0];
   assert.equal(task.text.slice(span.start,span.end),span.quote);
+});
+
+test("local Ollama contract forbids asserted source spans in a blindspot probe",async()=>{
+  const originalFetch=globalThis.fetch;
+  const sent:any[]=[];
+  globalThis.fetch=async (_url: any, init: any)=>{
+    sent.push(JSON.parse(init.body));
+    return {ok:true,json:async()=>({response:'{"spans":[],"candidates":[]}',eval_count:5,prompt_eval_count:12})} as any;
+  };
+  try {
+    const call=localOllama("qwen2.5:1.5b");
+    await call(task,"probe",buildPrompt(task,"probe"));
+    await call(task,"whole",buildPrompt(task,"whole"));
+    assert.equal(sent[0].format.properties.spans.maxItems,0);
+    assert.equal(sent[1].format.properties.spans.maxItems,undefined);
+    assert.deepEqual(sent[0].format.properties.spans.items.properties.kind.enum,
+      ["action","prohibition","condition","approval","uncertainty","deadline"]);
+    assert.equal(sent[0].options.temperature,0);
+  } finally {
+    globalThis.fetch=originalFetch;
+  }
 });
