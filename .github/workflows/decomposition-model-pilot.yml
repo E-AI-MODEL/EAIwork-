@@ -1,0 +1,80 @@
+name: decomposition-model-pilot
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/decomposition-model-pilot.yml'
+      - 'experiments/decomposition/**'
+      - 'tests/decomposition-*.test.ts'
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Local CPU Ollama model, DEV only'
+        required: true
+        type: choice
+        default: 'qwen2.5:1.5b'
+        options:
+          - 'qwen2.5:1.5b'
+          - 'qwen2.5:3b'
+      suite:
+        description: 'DEV sample only (full can be slow on CPU)'
+        required: true
+        type: choice
+        default: 'pilot'
+        options:
+          - pilot
+          - full
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decomposition-model-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  pilot:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'research/decomposition-lab-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Contract tests, including all four arms
+        run: |
+          node --test tests/decomposition-lab.test.ts tests/decomposition-runner.test.ts tests/decomposition-compare.test.ts
+          node experiments/decomposition/cli.ts validate
+      - name: Install local Ollama model runtime
+        run: curl -fsSL https://ollama.com/install.sh | sh
+      - name: Start local model endpoint
+        run: |
+          ollama serve > /tmp/eai-decomp-ollama.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Ollama readiness check failed"
+          exit 1
+      - name: Download selected model
+        env:
+          MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
+        run: ollama pull "$MODEL"
+      - name: Run real four-arm DEV comparison
+        env:
+          EAI_DECOMP_MODEL: ${{ inputs.model || 'qwen2.5:1.5b' }}
+          EAI_DECOMP_TIMEOUT_MS: '45000'
+          EAI_DECOMP_MAX_OUTPUT_TOKENS: '750'
+          SUITE: ${{ inputs.suite || 'pilot' }}
+        run: node experiments/decomposition/compare.ts "$SUITE" decomposition-dev-report.json
+      - name: Archive actual model outputs, including failed cases
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: decomposition-dev-results
+          path: |
+            decomposition-dev-report.json
+            /tmp/eai-decomp-ollama.log
+          if-no-files-found: warn
+          retention-days: 14

@@ -4,7 +4,7 @@ export type Task = { id: string; domain: string; text: string };
 export type Gold = { id: string; spans: { kind: Kind; quote: string }[] };
 export type Span = { kind: Kind; quote: string; start: number; end: number };
 export type Candidate = { text: string; status: "hypothesis"; reason: string };
-export type Prediction = { id: string; spans: Span[]; candidates: Candidate[]; failure?: string; calls?: number; elapsed_ms?: number; output_tokens?: number };
+export type Prediction = { id: string; spans: Span[]; candidates: Candidate[]; failure?: string; calls?: number; elapsed_ms?: number; output_tokens?: number; input_tokens?: number };
 const VALID = new Set<string>(KINDS);
 
 export function anchor(text: string, quote: string): { start: number; end: number } | null {
@@ -14,9 +14,9 @@ export function anchor(text: string, quote: string): { start: number; end: numbe
   return { start, end: start + quote.length };
 }
 
-export function validateFixtures(tasks: Task[], gold: Gold[]): string[] {
+export function validateFixtures(tasks: Task[], gold: Gold[], expectedCount = 30): string[] {
   const errors: string[] = [], ids = new Set<string>(), truth = new Map(gold.map(g => [g.id, g]));
-  if (tasks.length !== 30 || gold.length !== 30) errors.push("v1 fixture must contain exactly 30 tasks and 30 gold records");
+  if (tasks.length !== expectedCount || gold.length !== expectedCount) errors.push("fixture must contain exactly " + expectedCount + " tasks and gold records");
   if (truth.size !== gold.length) errors.push("duplicate gold id");
   for (const task of tasks) {
     if (ids.has(task.id)) errors.push(task.id + ": duplicate task id");
@@ -89,8 +89,8 @@ export function consensus(task: Task, a: Prediction, b: Prediction): Prediction 
   return { id: task.id, spans, candidates: [] };
 }
 const ratio = (numerator: number, denominator: number) => denominator ? numerator / denominator : null;
-export function scoreRun(tasks: Task[], gold: Gold[], predictions: Prediction[]) {
-  const valid = validateFixtures(tasks, gold);
+export function scoreRun(tasks: Task[], gold: Gold[], predictions: Prediction[], expectedCount = 30) {
+  const valid = validateFixtures(tasks, gold, expectedCount);
   if (valid.length) throw new Error("broken fixture: " + valid.join("; "));
   const taskById = new Map(tasks.map(t => [t.id, t]));
   const predById = new Map<string, Prediction>();
@@ -101,12 +101,12 @@ export function scoreRun(tasks: Task[], gold: Gold[], predictions: Prediction[])
   }
   if (predById.size !== tasks.length) throw new Error("one prediction required per task");
   const goldById = new Map(gold.map(g => [g.id, g]));
-  let tp = 0, fp = 0, fn = 0, validCases = 0, failedCases = 0, elapsed_ms = 0, calls = 0, output_tokens = 0;
+  let tp = 0, fp = 0, fn = 0, validCases = 0, failedCases = 0, elapsed_ms = 0, calls = 0, output_tokens = 0, input_tokens = 0;
   const byKind: Record<string, { tp: number; fp: number; fn: number }> =
     Object.fromEntries(KINDS.map(kind => [kind, { tp: 0, fp: 0, fn: 0 }]));
   const cases = tasks.map(task => {
     const p = predById.get(task.id)!;
-    elapsed_ms += p.elapsed_ms || 0; calls += p.calls || 0; output_tokens += p.output_tokens || 0;
+    elapsed_ms += p.elapsed_ms || 0; calls += p.calls || 0; output_tokens += p.output_tokens || 0; input_tokens += p.input_tokens || 0;
     const issues = p.failure ? [p.failure] : validatePrediction(task, p);
     if (issues.length) { failedCases++; return { id: task.id, valid: false, issues }; }
     validCases++;
@@ -124,13 +124,13 @@ export function scoreRun(tasks: Task[], gold: Gold[], predictions: Prediction[])
   // Invalid runs are not scored as zero correctness: report their coverage separately.
   const metrics = Object.fromEntries(Object.entries(byKind).map(([kind, v]) =>
     [kind, { ...v, recall: ratio(v.tp, v.tp + v.fn), precision: ratio(v.tp, v.tp + v.fp) }]));
-  return { contract: "dev-span-anchor-v1", dataset: "30 publicly inspectable synthetic DEV tasks",
+  return { contract: "dev-span-anchor-v1", dataset: expectedCount + " publicly inspectable synthetic DEV tasks",
     casesTotal: tasks.length, validCases, failedCases,
     expectedGoldSpans: expectedTotal, coveredGoldSpans: tp + fn,
     matchedSpans: tp, falsePositiveSpans: fp, missedSpansInValidCases: fn,
     precisionOnValid: ratio(tp, tp + fp), recallOnValid: ratio(tp, tp + fn),
     coverageOfGold: ratio(tp + fn, expectedTotal),
-    total_calls: calls, elapsed_ms, output_tokens,
+    total_calls: calls, elapsed_ms, input_tokens, output_tokens,
     byKind: metrics, cases,
     caveat: "Exact anchored-span proxy only: semantic correctness, causality, dependency structure and evidence authority require blind human adjudication. Do not compare arms if transport validity or token budgets differ." };
 }

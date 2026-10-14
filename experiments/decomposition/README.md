@@ -64,3 +64,19 @@ An LLM may **propose** an interpretation but never marks it as formally supporte
 Consider a later prototype outside production only when an independent reviewer finds measurable fewer lost conditions and unsafe inferred permissions on a separately frozen holdout. Include confidence intervals, false-positive cost, latency and throughput, reproducible model versions and the cost of incorrect abstentions. If C/D are not better than A/B, do not add the extra architecture.
 
 References: `docs/worker-isolation.md`, `docs/atom-vs-whole-comparison.md`, `docs/frozen-cross-domain-validation.md`. These existing tests ask a **different** question (fact checks within already specified atoms); do not interpret them as validating this decomposition lab.
+
+## Reproducible CPU model comparison (separate CI workflow)
+
+The first model-based pilot is **6 fixed public DEV tasks, one per domain**, not a strong-model benchmark or a blind holdout. It runs A/B/C/D for each task with a fixed local Ollama model, temperature 0 and seed 42, rotating arm order to reduce warm-cache bias. Real predictions, explicit transport/parser failures, source-span scores, critical constraint misses, candidate proposals, observed input/output token use, wall time, task/gold SHA-256 checksums and the local model digest are saved as an artifact.
+
+```sh
+node --test tests/decomposition-compare.test.ts
+ollama pull qwen2.5:1.5b
+EAI_DECOMP_MODEL=qwen2.5:1.5b node experiments/decomposition/compare.ts pilot /tmp/pilot.json
+# On suitably provisioned local hardware, use the full visible DEV set and a stronger model:
+EAI_DECOMP_MODEL=qwen2.5:7b node experiments/decomposition/compare.ts full /tmp/full.json
+```
+
+Workflow: `.github/workflows/decomposition-model-pilot.yml` runs on this research PR and creates a downloadable model-output artifact. It may fail before getting a model result due to installer/model availability; do not interpret such a failure as poor model quality. GitHub CPU minutes are used. The default 1.5B pilot is an **infrastructure smoke evaluation**, not the promised strong LLM comparison. A 7B/full rerun and blind expert-reviewed holdout are separate future steps.
+
+**Critical design limitation:** B is a prompted atomization annotation baseline, not a real isolated EAIwork worker run. Likewise, D cannot change C's supported spans: the probe is intentionally restricted to hypotheses, so any substantive benefit requires a separate human-reviewed usefulness metric. The quoted spans are not a test of task execution, and the annotation gold is not independent. Do not call any arm a winner based only on this pilot.
