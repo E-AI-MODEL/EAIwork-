@@ -4,7 +4,7 @@ export type Task = { id: string; domain: string; text: string };
 export type Gold = { id: string; spans: { kind: Kind; quote: string }[] };
 export type Span = { kind: Kind; quote: string; start: number; end: number };
 export type Candidate = { text: string; status: "hypothesis"; reason: string };
-export type Prediction = { id: string; spans: Span[]; candidates: Candidate[]; failure?: string; calls?: number; elapsed_ms?: number; output_tokens?: number; input_tokens?: number };
+export type Prediction = { id: string; spans: Span[]; candidates: Candidate[]; failure?: string; failure_detail?: string; rejected_raw?: unknown; calls?: number; elapsed_ms?: number; output_tokens?: number; input_tokens?: number };
 const VALID = new Set<string>(KINDS);
 
 export function anchor(text: string, quote: string): { start: number; end: number } | null {

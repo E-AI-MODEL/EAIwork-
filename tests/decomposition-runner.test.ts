@@ -27,6 +27,15 @@ test("D rejects attempt to promote a blindspot into an asserted fact",async()=>{
   assert.equal(result[0].failure,"invalid-promotion");
   assert.deepEqual(result[0].spans,[]);
 });
+test("invalid model kind remains a failed case with an inspectable DEV diagnostic", async()=>{
+  const output=await runSuite([task],"A",async()=>({content:{spans:[
+    {kind:"action|prohibition",quote:"Maak een concept"}
+  ],candidates:[]}}));
+  assert.equal(output[0].failure,"invalid-output-or-transport");
+  assert.match(output[0].failure_detail||"","invalid kind");
+  assert.equal(output[0].spans.length,0);
+  assert.ok(output[0].rejected_raw);
+});
 test("runtime failures are preserved and not converted into unknowns",async()=>{
   const output=await runSuite([task],"A",async()=>{throw new Error("timeout");});
   assert.equal(output[0].failure,"timeout");

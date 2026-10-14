@@ -6,9 +6,9 @@ export type ModelResult = { content: unknown; output_tokens?: number; input_toke
 export type ModelCall = (task: Task, stage: Stage, prompt: string) => Promise<ModelResult>;
 const common = [
   "You are annotating an instruction, not executing it. Do not take any action.",
-  "Output a single JSON object only: {\"spans\":[{\"kind\":\"action|prohibition|condition|approval|uncertainty|deadline\",\"quote\":\"exact uninterrupted source substring\"}],\"candidates\":[{\"text\":\"unverified possibility\",\"status\":\"hypothesis\",\"reason\":\"why unverified\"}]}",
-  "Quote verbatim and only once per kind. Do not hallucinate text. Do not treat an inferred permission or condition as a source-backed assertion.",
-  "Use [] if no matching spans. Candidate suggestions must never become binding actions. Respond in the original task language when describing candidates."
+  "Return JSON containing exactly two arrays: spans and candidates. Each span is an object with kind and quote. Allowed kind values: action, prohibition, condition, approval, uncertainty, deadline. Select one individual kind for each span; never join them with a pipe character.",
+  "Every quote must be an exact uninterrupted substring copied character-for-character from TASK_TEXT. Do not paraphrase, alter punctuation, use ellipses or invent new text. If unsure, omit a span instead of guessing.",
+  "Return candidates:[] unless the requested stage explicitly investigates missing context. Blindspot candidates can only have status hypothesis, not approved authority. Return spans:[] if no confident matches."
 ].join("\n");
 
 export function buildPrompt(task: Task, stage: Stage): string {
@@ -36,12 +36,22 @@ export async function runSuite(tasks: Task[], arm: Arm, modelCall: ModelCall): P
   for (const task of tasks) {
     const start = Date.now();
     let calls = 0, output_tokens = 0, input_tokens = 0;
+    let rejectedRaw: unknown;
+    let rejectionDetail: string | undefined;
     const ask = async (stage: Stage) => {
       calls++;
       const response = await modelCall(task, stage, buildPrompt(task, stage));
       output_tokens += response.output_tokens || 0;
       input_tokens += response.input_tokens || 0;
-      return normalizeModelOutput(task, response.content);
+      rejectedRaw = response.content;
+      try {
+        const normalized = normalizeModelOutput(task, response.content);
+        rejectedRaw = undefined;
+        return normalized;
+      } catch (error) {
+        rejectionDetail = error instanceof Error ? error.message.slice(0,240) : "invalid-annotation";
+        throw error;
+      }
     };
     try {
       let prediction: Prediction;
@@ -66,6 +76,7 @@ export async function runSuite(tasks: Task[], arm: Arm, modelCall: ModelCall): P
       predictions.push(prediction);
     } catch (error) {
       predictions.push({id:task.id,spans:[],candidates:[],failure:failureCode(error),
+        failure_detail: rejectionDetail, rejected_raw: rejectedRaw,
         calls,elapsed_ms:Date.now()-start,output_tokens,input_tokens});
     }
   }
@@ -77,12 +88,32 @@ export function localOllama(model: string): ModelCall {
   if (!model || model.length > 160) throw new Error("EAI_DECOMP_MODEL is required");
   const timeout = Math.max(1000, Math.min(300000, Number(process.env.EAI_DECOMP_TIMEOUT_MS || 120000)));
   const maxOutput = Math.max(128, Math.min(1600, Number(process.env.EAI_DECOMP_MAX_OUTPUT_TOKENS || 750)));
+  const outputSchema = {
+    type: "object", additionalProperties: false,
+    properties: {
+      spans: { type: "array", items: {
+        type: "object", additionalProperties: false,
+        properties: {
+          kind: { type: "string", enum: ["action","prohibition","condition","approval","uncertainty","deadline"] },
+          quote: { type: "string" }
+        }, required: ["kind","quote"]
+      }},
+      candidates: { type: "array", items: {
+        type: "object", additionalProperties: false,
+        properties: {
+          text: { type: "string" },
+          status: { type: "string", enum: ["hypothesis"] },
+          reason: { type: "string" }
+        }, required: ["text","status","reason"]
+      }}
+    }, required: ["spans","candidates"]
+  };
   return async (_task, _stage, prompt) => {
     const res = await fetch("http://127.0.0.1:11434/api/generate", {
       method:"POST",
       headers:{"content-type":"application/json"},
       signal:AbortSignal.timeout(timeout),
-      body:JSON.stringify({model,prompt,format:"json",stream:false,options:{temperature:0,seed:42,num_predict:maxOutput,num_ctx:4096}})
+      body:JSON.stringify({model,prompt,format:outputSchema,stream:false,options:{temperature:0,seed:42,num_predict:maxOutput,num_ctx:4096}})
     });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const payload = await res.json() as Record<string,unknown>;
