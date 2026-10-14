@@ -32,7 +32,7 @@ test("invalid model kind remains a failed case with an inspectable DEV diagnosti
     {kind:"action|prohibition",quote:"Maak een concept"}
   ],candidates:[]}}));
   assert.equal(output[0].failure,"invalid-output-or-transport");
-  assert.match(output[0].failure_detail||"","invalid kind");
+  assert.match(output[0].failure_detail||"",/invalid kind/);
   assert.equal(output[0].spans.length,0);
   assert.ok(output[0].rejected_raw);
 });
