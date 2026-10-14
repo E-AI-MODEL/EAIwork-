@@ -1,0 +1,472 @@
+[
+  {
+    "id": "edu01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een conceptmail"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "verstuur die niet"
+      },
+      {
+        "kind": "approval",
+        "quote": "voordat de rector schriftelijk akkoord heeft gegeven"
+      }
+    ]
+  },
+  {
+    "id": "edu02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Analyseer de toetsresultaten"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "vermeld geen leerlingnamen"
+      }
+    ]
+  },
+  {
+    "id": "edu03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Controleer of de examencommissie toestemming heeft gegeven"
+      },
+      {
+        "kind": "condition",
+        "quote": "Is dat onbekend"
+      },
+      {
+        "kind": "action",
+        "quote": "leg het besluit dan voor"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "publiceer niets"
+      }
+    ]
+  },
+  {
+    "id": "edu04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Vergelijk versie A en B"
+      },
+      {
+        "kind": "action",
+        "quote": "Pas het rooster pas aan"
+      },
+      {
+        "kind": "approval",
+        "quote": "na bevestiging door de roostermaker"
+      }
+    ]
+  },
+  {
+    "id": "edu05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak oefenvragen"
+      },
+      {
+        "kind": "action",
+        "quote": "geef de antwoordmodellen pas vrij"
+      },
+      {
+        "kind": "condition",
+        "quote": "na de toetsweek"
+      }
+    ]
+  },
+  {
+    "id": "fin01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Controleer de declaratie"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "betaal niet"
+      },
+      {
+        "kind": "condition",
+        "quote": "zolang het bonnetje ontbreekt"
+      }
+    ]
+  },
+  {
+    "id": "fin02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een kostenraming"
+      },
+      {
+        "kind": "condition",
+        "quote": "gebruik alleen bedragen uit de bijlagen"
+      }
+    ]
+  },
+  {
+    "id": "fin03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Stel de offerte op"
+      },
+      {
+        "kind": "action",
+        "quote": "vraag akkoord aan de budgethouder"
+      },
+      {
+        "kind": "approval",
+        "quote": "voordat je bestelt"
+      }
+    ]
+  },
+  {
+    "id": "fin04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Onderzoek de prijsverschillen"
+      },
+      {
+        "kind": "condition",
+        "quote": "Als de btw-status onbekend is"
+      },
+      {
+        "kind": "uncertainty",
+        "quote": "noteer dat als onzeker"
+      }
+    ]
+  },
+  {
+    "id": "fin05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een conceptfactuur"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "zonder deze te verzenden"
+      }
+    ]
+  },
+  {
+    "id": "dev01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Controleer de tests"
+      },
+      {
+        "kind": "action",
+        "quote": "maak een PR"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "merge niet naar main"
+      }
+    ]
+  },
+  {
+    "id": "dev02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Herstel de API-time-out"
+      },
+      {
+        "kind": "action",
+        "quote": "Deploy"
+      },
+      {
+        "kind": "condition",
+        "quote": "alleen als alle regressietests slagen"
+      }
+    ]
+  },
+  {
+    "id": "dev03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Inventariseer de dependencies"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "verwijder geen pakketten"
+      },
+      {
+        "kind": "condition",
+        "quote": "zonder risicoanalyse"
+      }
+    ]
+  },
+  {
+    "id": "dev04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Vergelijk de oude en nieuwe parser"
+      },
+      {
+        "kind": "condition",
+        "quote": "behoud de originele testset onveranderd"
+      }
+    ]
+  },
+  {
+    "id": "dev05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Registreer de bug"
+      },
+      {
+        "kind": "action",
+        "quote": "sluit het issue"
+      },
+      {
+        "kind": "condition",
+        "quote": "pas als een reproduceerbare test groen is"
+      }
+    ]
+  },
+  {
+    "id": "ops01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Plan een onderhoudsvenster"
+      },
+      {
+        "kind": "approval",
+        "quote": "nadat de eigenaar toestemming geeft"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "start nu geen onderhoud"
+      }
+    ]
+  },
+  {
+    "id": "ops02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Verzamel de storingsmeldingen"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "deel geen persoonsgegevens"
+      }
+    ]
+  },
+  {
+    "id": "ops03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Controleer de voorraad"
+      },
+      {
+        "kind": "condition",
+        "quote": "Als de telling afwijkt"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "doe geen bestelling"
+      },
+      {
+        "kind": "action",
+        "quote": "vraag een tweede controle"
+      }
+    ]
+  },
+  {
+    "id": "ops04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een incidentverslag"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "neem onbevestigde oorzaken niet als feiten op"
+      }
+    ]
+  },
+  {
+    "id": "ops05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Stel een back-upplan op"
+      },
+      {
+        "kind": "action",
+        "quote": "Verwijder de oude back-up"
+      },
+      {
+        "kind": "condition",
+        "quote": "alleen na een hersteltest"
+      }
+    ]
+  },
+  {
+    "id": "gov01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een conceptovereenkomst"
+      },
+      {
+        "kind": "action",
+        "quote": "markeer ontbrekende handtekeningen"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "onderteken niets namens de cliënt"
+      }
+    ]
+  },
+  {
+    "id": "gov02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Vraag toestemming voor gegevensdeling"
+      },
+      {
+        "kind": "approval",
+        "quote": "voordat je het dossier overdraagt"
+      }
+    ]
+  },
+  {
+    "id": "gov03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Verzamel sollicitatiefeedback"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "zonder privé-informatie in de samenvatting"
+      }
+    ]
+  },
+  {
+    "id": "gov04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Controleer het beleid"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "wijzig de regels niet"
+      },
+      {
+        "kind": "condition",
+        "quote": "op basis van een mondeling verzoek"
+      }
+    ]
+  },
+  {
+    "id": "gov05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Stel het besluit uit"
+      },
+      {
+        "kind": "condition",
+        "quote": "als de bewijsstukken elkaar tegenspreken"
+      }
+    ]
+  },
+  {
+    "id": "res01",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Vat drie bronnen samen"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "presenteer correlatie niet als oorzakelijk bewijs"
+      }
+    ]
+  },
+  {
+    "id": "res02",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Onderzoek de hypothese"
+      },
+      {
+        "kind": "condition",
+        "quote": "als de steekproef te klein is"
+      },
+      {
+        "kind": "uncertainty",
+        "quote": "meld de beperking"
+      }
+    ]
+  },
+  {
+    "id": "res03",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Maak een literatuuroverzicht"
+      },
+      {
+        "kind": "action",
+        "quote": "onderscheid primaire van secundaire bronnen"
+      }
+    ]
+  },
+  {
+    "id": "res04",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Ontwerp een experiment"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "zonder de bestaande meetwaarden te overschrijven"
+      }
+    ]
+  },
+  {
+    "id": "res05",
+    "spans": [
+      {
+        "kind": "action",
+        "quote": "Analyseer de resultaten"
+      },
+      {
+        "kind": "prohibition",
+        "quote": "stel geen effect vast"
+      },
+      {
+        "kind": "condition",
+        "quote": "zolang de controlegroep ontbreekt"
+      }
+    ]
+  }
+]

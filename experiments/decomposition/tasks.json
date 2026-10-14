@@ -1,0 +1,152 @@
+[
+  {
+    "id": "edu01",
+    "domain": "education",
+    "text": "Maak een conceptmail aan ouders, maar verstuur die niet voordat de rector schriftelijk akkoord heeft gegeven."
+  },
+  {
+    "id": "edu02",
+    "domain": "education",
+    "text": "Analyseer de toetsresultaten van 5 vwo; vermeld geen leerlingnamen in het rapport."
+  },
+  {
+    "id": "edu03",
+    "domain": "education",
+    "text": "Controleer of de examencommissie toestemming heeft gegeven. Is dat onbekend, leg het besluit dan voor en publiceer niets."
+  },
+  {
+    "id": "edu04",
+    "domain": "education",
+    "text": "Vergelijk versie A en B van het rooster. Pas het rooster pas aan na bevestiging door de roostermaker."
+  },
+  {
+    "id": "edu05",
+    "domain": "education",
+    "text": "Maak oefenvragen voor leerlingen, maar geef de antwoordmodellen pas vrij na de toetsweek."
+  },
+  {
+    "id": "fin01",
+    "domain": "finance",
+    "text": "Controleer de declaratie, maar betaal niet zolang het bonnetje ontbreekt."
+  },
+  {
+    "id": "fin02",
+    "domain": "finance",
+    "text": "Maak een kostenraming; gebruik alleen bedragen uit de bijlagen."
+  },
+  {
+    "id": "fin03",
+    "domain": "finance",
+    "text": "Stel de offerte op en vraag akkoord aan de budgethouder voordat je bestelt."
+  },
+  {
+    "id": "fin04",
+    "domain": "finance",
+    "text": "Onderzoek de prijsverschillen. Als de btw-status onbekend is, noteer dat als onzeker."
+  },
+  {
+    "id": "fin05",
+    "domain": "finance",
+    "text": "Maak een conceptfactuur, zonder deze te verzenden."
+  },
+  {
+    "id": "dev01",
+    "domain": "software",
+    "text": "Controleer de tests en maak een PR, maar merge niet naar main."
+  },
+  {
+    "id": "dev02",
+    "domain": "software",
+    "text": "Herstel de API-time-out. Deploy alleen als alle regressietests slagen."
+  },
+  {
+    "id": "dev03",
+    "domain": "software",
+    "text": "Inventariseer de dependencies; verwijder geen pakketten zonder risicoanalyse."
+  },
+  {
+    "id": "dev04",
+    "domain": "software",
+    "text": "Vergelijk de oude en nieuwe parser, en behoud de originele testset onveranderd."
+  },
+  {
+    "id": "dev05",
+    "domain": "software",
+    "text": "Registreer de bug; sluit het issue pas als een reproduceerbare test groen is."
+  },
+  {
+    "id": "ops01",
+    "domain": "operations",
+    "text": "Plan een onderhoudsvenster nadat de eigenaar toestemming geeft; start nu geen onderhoud."
+  },
+  {
+    "id": "ops02",
+    "domain": "operations",
+    "text": "Verzamel de storingsmeldingen, maar deel geen persoonsgegevens met de leverancier."
+  },
+  {
+    "id": "ops03",
+    "domain": "operations",
+    "text": "Controleer de voorraad. Als de telling afwijkt, doe geen bestelling en vraag een tweede controle."
+  },
+  {
+    "id": "ops04",
+    "domain": "operations",
+    "text": "Maak een incidentverslag, maar neem onbevestigde oorzaken niet als feiten op."
+  },
+  {
+    "id": "ops05",
+    "domain": "operations",
+    "text": "Stel een back-upplan op. Verwijder de oude back-up alleen na een hersteltest."
+  },
+  {
+    "id": "gov01",
+    "domain": "governance",
+    "text": "Maak een conceptovereenkomst en markeer ontbrekende handtekeningen; onderteken niets namens de cliënt."
+  },
+  {
+    "id": "gov02",
+    "domain": "governance",
+    "text": "Vraag toestemming voor gegevensdeling voordat je het dossier overdraagt."
+  },
+  {
+    "id": "gov03",
+    "domain": "governance",
+    "text": "Verzamel sollicitatiefeedback, zonder privé-informatie in de samenvatting."
+  },
+  {
+    "id": "gov04",
+    "domain": "governance",
+    "text": "Controleer het beleid; wijzig de regels niet op basis van een mondeling verzoek."
+  },
+  {
+    "id": "gov05",
+    "domain": "governance",
+    "text": "Stel het besluit uit als de bewijsstukken elkaar tegenspreken."
+  },
+  {
+    "id": "res01",
+    "domain": "research",
+    "text": "Vat drie bronnen samen, maar presenteer correlatie niet als oorzakelijk bewijs."
+  },
+  {
+    "id": "res02",
+    "domain": "research",
+    "text": "Onderzoek de hypothese; als de steekproef te klein is, meld de beperking."
+  },
+  {
+    "id": "res03",
+    "domain": "research",
+    "text": "Maak een literatuuroverzicht en onderscheid primaire van secundaire bronnen."
+  },
+  {
+    "id": "res04",
+    "domain": "research",
+    "text": "Ontwerp een experiment zonder de bestaande meetwaarden te overschrijven."
+  },
+  {
+    "id": "res05",
+    "domain": "research",
+    "text": "Analyseer de resultaten; stel geen effect vast zolang de controlegroep ontbreekt."
+  }
+]
