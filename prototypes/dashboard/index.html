@@ -311,7 +311,10 @@ function renderShell(){
    (onExecutionServer()?(s.liveOps?'Lokale server':'Niet verbonden'):'Demonstratie')+'</span>'+
    (onExecutionServer()?'':'<span class="top-desktop-actions">'+btn('Herstellen','reset','small')+
    btn('Export','export','small')+'</span>')+'</div>';
- if(onExecutionServer())document.querySelector('.footer-note').textContent='EAIwork · lokale werkruimte. Alleen servergegevens en werkelijk uitgevoerde acties worden getoond.';
+ if(onExecutionServer()){
+   document.title='EAIwork | Lokale werkruimte';
+   document.querySelector('.footer-note').textContent='EAIwork · lokale werkruimte. Alleen servergegevens en werkelijk uitgevoerde acties worden getoond.';
+ }
 }
 function header(title,desc,actions=''){return `<div class="page-head"><div><h1>${title}</h1><p>${desc}</p></div>${actions?`<div class="actionbar">${actions}</div>`:''}</div>`}
 
@@ -1404,6 +1407,8 @@ function realMissions(){
   if(!s.liveOps)return header('Echte uitvoering','Voer twee kleine taken uit met lokale, geteste workers.')+
     section('Verbind de beveiligde server','<div class="card pad"><p>Verbind eerst via Contracten en registratie. De server gebruikt alleen ingebouwde tekstbewerkingen. Er wordt geen externe AI of zoekmachine aangeroepen.</p>'+btn('Naar registratie','nav-registration','primary')+'</div>');
   const all=Object.values(s.liveOps.missions||{}),selected=all.find(m=>m.plan.id===s.selectedRealMission)||all[0];
+  const activeWorkerCount=new Set(all.flatMap(m=>Object.values(m.tasks||{}))
+    .filter(t=>t.status==='running').map(t=>t.run?.workerId).filter(Boolean)).size;
   const tasks=selected?selected.plan.tasks.map(t=>{
     const rec=selected.tasks[t.id];
     return '<div class="status-row"><span class="indicator '+(rec.status==='done'?'green':rec.status==='failed'?'red':'amber')+'"></span><div><h3>'+h(t.title)+'</h3>'+
@@ -1430,7 +1435,7 @@ function realMissions(){
     '<div class="grid cols-4 mb"><div class="card metric"><div class="caption">Opdrachten</div><strong>'+all.length+'</strong><small>In het serverlog</small></div>'+
     '<div class="card metric"><div class="caption">Geregistreerde workers</div><strong>'+Object.keys(s.liveOps.workers||{}).length+'</strong><small>Niet allemaal actief</small></div>'+
     '<div class="card metric"><div class="caption">Toegelaten workers</div><strong>'+Object.values(s.liveOps.workers||{}).filter(w=>w.stage==='ready').length+'</strong><small>Alleen met een contract</small></div>'+
-    '<div class="card metric"><div class="caption">Actieve workers</div><strong>0</strong><small>Geen blijvende agents; uitvoering per stap</small></div></div>'+
+    '<div class="card metric"><div class="caption">Actieve workers</div><strong>'+activeWorkerCount+'</strong><small>Volgens de actieve taken; geen blijvende agents</small></div></div>'+
     '<div class="grid cols-2"><div>'+section('Nieuw goedgekeurd taakplan','<div class="card pad"><p class="muted smalltext">Deze proef maakt een plan met twee afhankelijke stappen: tekst opschonen en vervolgens woorden tellen. De persoon keurt het plan goed. Gebruik alleen niet-vertrouwelijke voorbeeldtekst.</p>'+
       '<form id="realMissionForm" class="form-stack"><div><label for="realMissionTitle" class="field-label">Opdrachtnaam</label><input class="field" id="realMissionTitle" maxlength="100" required placeholder="Naam van je taak" style="width:100%"></div>'+
       '<div><label for="realMissionText" class="field-label">Tekst voor lokale verwerking</label><textarea id="realMissionText" required maxlength="2000" placeholder="Vul de tekst in die je lokaal wilt laten verwerken" style="width:100%"></textarea></div>'+
