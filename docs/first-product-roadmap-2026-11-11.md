@@ -35,7 +35,7 @@ De eindcontrole staat in `examples/multifile-smoke/acceptance/final-product.test
 - `npm test`: test de gewone repositoryfunctionaliteit; de productproef met Docker wordt hierbij overgeslagen als Docker niet is aangezet.
 - `npm run proof:first-product`: voert via de echte lokale HTTP-API de twee voorstel-, test- en akkoordstappen uit, gebruikt de bestaande Docker-runner, en controleert als laatste met een afzonderlijke Node-test het complete resultaat. Deze proef gebruikt een **nagebootst Ollama-antwoord** om de uitvoeringsroute herhaalbaar te testen. Dit is geen bewijs dat een lokaal AI-model de code zelfstandig correct maakt.
 
-Het resultaat is een werkende voorbeeldapplicatie in een tijdelijke projectmap. De proef publiceert niets en verwijdert de tijdelijke testmap na afloop. Een werkelijk model en de Mac-interface worden apart beproefd.
+De proef voert het werk in een tijdelijke projectmap uit. GitHub Actions slaat na geslaagde controles ook een **downloadbare kopie van de gewijzigde bestanden**, de testbestanden, de onafhankelijke eindtest, `OPLEVERING.md` en `PROEFRESULTAAT.json` op als `eaiwork-first-product-proof`. Het artifact is een controleerbaar voorbeeld, geen publicatie of zelfstandige complete applicatie. De testmap wordt na afloop verwijderd. Een werkelijk model en de Mac-interface worden apart beproefd. De artifact-download staat bij de bijbehorende geslaagde GitHub Actions-run.
 
 ## PR-inventaris: niet blind samenvoegen
 
