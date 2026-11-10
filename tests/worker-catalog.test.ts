@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { WORKER_BLUEPRINTS, workerCatalog, draftContractFromBlueprint } from "../packages/operations/src/catalog.ts";
 import { selectWorker, catalogOverview } from "../packages/operations/src/selector.ts";
 import { applyOps, emptyOps, type OpsEnvelope, type OpsEvent } from "../packages/operations/src/registry.ts";
@@ -85,4 +86,21 @@ test("open defect and quarantine prevent selection",()=>{
   assert.equal(selectWorker({taskKind:"web-search"},s,runtime()).selectedWorkerId,null);
   s=apply(s,{type:"worker.quarantine",id:"websearch",reason:"defect under review"},check);
   assert.equal(selectWorker({taskKind:"web-search"},s,runtime()).matches[0].reason,"not-released");
+});
+
+test("dashboard blueprint snapshot matches the real catalog without claiming active workers",()=>{
+  const html=readFileSync(new URL("../prototypes/dashboard/index.html",import.meta.url),"utf8");
+  const match=html.match(/^const catalogSeed=(.+);$/m);
+  assert.ok(match,"catalog snapshot missing");
+  const items=JSON.parse(match[1]) as {id:string;group:string;suggestedModel:string;requiredCapabilities:string[];registryStage:string;activeInstances:null}[];
+  assert.equal(items.length,WORKER_BLUEPRINTS.length);
+  for(const bp of WORKER_BLUEPRINTS){
+    const clone=items.find(x=>x.id===bp.id);
+    assert.ok(clone,"missing blueprint "+bp.id);
+    assert.equal(clone.group,bp.group);
+    assert.equal(clone.suggestedModel,bp.suggestedModel);
+    assert.deepEqual(clone.requiredCapabilities,bp.requiredCapabilities);
+    assert.equal(clone.registryStage,"unregistered");
+    assert.equal(clone.activeInstances,null);
+  }
 });
