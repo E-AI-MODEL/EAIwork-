@@ -74,6 +74,14 @@ test("authenticated queue API is read-only and returns no source text",async()=>
     assert.ok(data.rows.some((x:any)=>x.missionId==="mission-demo-automatic"));
     assert.equal(JSON.stringify(data).includes("Hallo  EAIwork"),false);
     assert.ok(data.rows.every((x:any)=>!("input" in x)&&!("output" in x)));
+    for(const type of ["task.lease.claim","task.lease.renew","task.lease.expire"]){
+      const rejected=await fetch(host+"/ops/events",{method:"POST",
+        headers:{Authorization:"Bearer "+demo.token,"content-type":"application/json"},
+        body:JSON.stringify({type,missionId:"mission-demo-automatic",
+          taskId:"task-clean-auto",runId:"fake",leaseId:"fake"}),
+      });
+      assert.equal(rejected.status,403);
+    }
     assert.equal((await get()).status,200);
   }finally{await demo.close()}
 });
