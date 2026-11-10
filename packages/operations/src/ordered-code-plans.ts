@@ -35,7 +35,9 @@ const writePlan=(fd:number,data:PlanRecord)=>{
 export class OrderedCodePlans {
   private readonly folder:string;
   private busy=false;
-  constructor(private readonly workspace:LocalCodeWorkspace){
+  private readonly workspace:LocalCodeWorkspace;
+  constructor(workspace:LocalCodeWorkspace){
+    this.workspace=workspace;
     this.folder=workspace.planDir;
     if(existsSync(this.folder)){
       const stat=lstatSync(this.folder);
