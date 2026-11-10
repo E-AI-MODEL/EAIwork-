@@ -247,7 +247,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(actor.kind!=="person"||actor.id!==mission.createdBy)
       fail("mission extension requires the original human approver");
     validateMissionExtension(mission,e.plan,e.expectedRevision);
-    for(const task of e.plan.tasks.slice(old.tasks.length))
+    for(const task of e.plan.tasks.slice(mission.plan.tasks.length))
       mission.tasks[task.id]={spec:structuredClone(task),status:"queued"};
     mission.plan=structuredClone(e.plan);
     mission.revision++;
