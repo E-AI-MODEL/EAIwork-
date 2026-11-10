@@ -459,6 +459,22 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:event.missionId,constraintId:event.constraintId,seq:entry.seq});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
+        const retryTask=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/tasks\/([a-z][a-z0-9-]{2,63})\/retry$/.exec(url.pathname);
+        if(req.method==="POST"&&retryTask){
+          if(actor.kind!=="person")throw new HttpError(403,"a person must approve retry of interrupted work");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(x=>x!=="reason"))
+            throw new HttpError(422,"expected retry justification");
+          try{
+            const event={type:"task.retry" as const,missionId:retryTask[1],taskId:retryTask[2],
+              reason:(body as {reason:string}).reason};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.missionId,taskId:event.taskId,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         const missionAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/(run|pause|resume)$/.exec(url.pathname);
         if(req.method==="POST"&&missionAction){
           if(actor.kind!=="person")throw new HttpError(403,"only a person may control mission execution");
@@ -485,7 +501,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed"].includes((raw as any).type)) {
+          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
