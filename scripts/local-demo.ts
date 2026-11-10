@@ -14,6 +14,7 @@ import {evaluateBuiltin,runMissionUntilBlocked} from "../packages/operations/src
 import {proposeComposedWorker} from "../packages/operations/src/builder.ts";
 import type {WorkerContract,OpsEvent,OpsActor} from "../packages/operations/src/registry.ts";
 import type {PlanningModel} from "../packages/operations/src/planner.ts";
+import type {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
 import type {GitHubReader} from "../packages/operations/src/github-actions.ts";
 
 const person:OpsActor={kind:"person",id:"person:demo"};
@@ -27,7 +28,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string}={}){
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string;codeWorkspace?:LocalCodeWorkspace}={}){
   const profile=options.persistentDir?openLocalProfile(options.persistentDir):null;
   const root=profile?.root??mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=profile?.witnessDir??mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
@@ -44,6 +45,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     dir:profile?.evidenceDir??join(root,"evidence"),operationsDir:profile?.operationsDir??join(root,"operations"),
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
+    codeWorkspace:options.codeWorkspace,
     githubActionReader:options.githubActionReader,
     githubReadToken:options.githubReadToken,
     maxArtifactBytes:options.maxArtifactBytes,
