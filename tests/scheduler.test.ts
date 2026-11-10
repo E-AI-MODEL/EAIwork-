@@ -6,6 +6,7 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {OpsStore} from "../packages/operations/src/store.ts";
 import {LocalMissionScheduler} from "../packages/operations/src/scheduler.ts";
+import {buildMissionTrace} from "../packages/operations/src/trace.ts";
 import {evaluateBuiltin} from "../packages/operations/src/execution.ts";
 import type {OpsEvent,OpsActor,WorkerContract} from "../packages/operations/src/registry.ts";
 
@@ -200,6 +201,10 @@ test("restart requeues a known pure interrupted calculation without double spend
     assert.equal(m.tasks["task-clean"].status,"queued");
     assert.equal(m.tasks["task-clean"].attempts?.[0].runId,"run-interrupted");
     assert.equal(m.tasks["task-clean"].attempts?.[0].recovery?.reason,"process-restart");
+    const trace=buildMissionTrace(ctx.store.snapshot(),id);
+    assert.equal(trace.events.at(-1)?.type,"task.recover");
+    assert.equal(trace.tasks[0].attempts[0].status,"interrupted");
+    assert.equal(trace.tasks[0].attempts[0].interruptionReason,"process-restart");
     assert.throws(()=>ctx.append({type:"task.recover",missionId:id,taskId:"task-clean",
       runId:"run-interrupted"},schedulerActor),/no matching in-flight task/);
     assert.deepEqual(scheduler.tick().stopped,[{missionId:id,reason:"complete"}]);
