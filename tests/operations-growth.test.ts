@@ -153,3 +153,26 @@ test("worker and quality transitions do not mutate a previous staged state",()=>
   assert.equal(measurements.workers[worker.id].stage,"candidate");
   assert.equal(ready.measurements.length,1);
 });
+
+
+test("a mutation stages only the target mission and cannot touch other committed missions",()=>{
+  const first=applyOps(emptyOps(),envelope(1));
+  const state=applyOps(first,envelope(2));
+  const prior=structuredClone(state);
+  const event:OpsEnvelope={
+    id:"pause-growth-1",at:"2026-11-10T09:00:00Z",actor,
+    event:{type:"mission.pause",missionId:"mission-growth-1"},
+  };
+  const staged=stageOps(state,event,new Set(["growth-1","growth-2"]));
+  assert.equal(staged.missions["mission-growth-1"].paused,true);
+  assert.equal(staged.missions["mission-growth-2"].paused,false);
+  assert.equal(state.missions["mission-growth-1"].paused,false);
+  assert.deepEqual(state,prior);
+  assert.strictEqual(staged.missions["mission-growth-2"],state.missions["mission-growth-2"]);
+  assert.notStrictEqual(staged.missions["mission-growth-1"],state.missions["mission-growth-1"]);
+  assert.throws(()=>stageOps(staged,{...event,id:"unpermitted",
+    actor:{kind:"check",id:"check:other"}},new Set(["growth-1","growth-2"])),
+    /person required to pause/);
+  assert.equal(staged.missions["mission-growth-1"].paused,true);
+  assert.equal(staged.history.length,2);
+});
