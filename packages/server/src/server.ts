@@ -544,15 +544,19 @@ export function makeServer(cfg: Config) {
             return json(res,200,await plans.exclusive(async()=>{
               plans.assertProposal(request.planId as string,request.proposalId as string,"review");
               const pre=workspace.inspect(request.proposalId as string);
-              if(!pre.canApply||pre.testReport?.status!=="passed"||
-                 !pre.testReport.testsExecuted||pre.replacementSha256!==request.expectedSha256||
-                 !plans.projectPreApproved(request.planId as string,request.proposalId as string))
-                throw new Error("Goedgekeurde Docker-test of voorstelversie ontbreekt");
+              const projectMode=plans.view(request.planId as string).suitePolicy==="project-node-v1";
+              if(pre.replacementSha256!==request.expectedSha256||
+                 (projectMode?
+                   (!pre.sourceUnchanged||!pre.replacementHashMatches||
+                    pre.preflight.status==="failed"||
+                    !plans.projectPreApproved(request.planId as string,request.proposalId as string)):
+                   (!pre.canApply||pre.testReport?.status!=="passed"||!pre.testReport.testsExecuted)))
+                throw new Error("De vereiste tests en goedkeuring horen niet bij deze codeversie");
               recordCodeAction("apply-started",{id:pre.id,...pre},"pending");
               const applied=workspace.apply({
                 proposalId:request.proposalId as string,
                 expectedSha256:request.expectedSha256 as string,approve:true
-              },actor.id);
+              },actor.id,{projectSuiteApproved:projectMode});
               recordCodeAction("applied",{id:pre.id,...pre},"applied");
               return {applied,plan:plans.view(request.planId as string)};
             }));
