@@ -1520,59 +1520,94 @@ function updateAutomationPolling(){
 }
 
 function realMissions(){
-  if(!onExecutionServer())return header('Echte uitvoering','Deze openbare versie demonstreert het werkproces. Hij start geen workers en bewaart geen opdrachten.')+
-    section('Alleen op de EAIwork-server','<div class="card pad"><p>Start de afgeschermde EAIwork-server en open daar <code>/dashboard</code>. Contracten, tests en opdrachten komen dan uit de eigen serveromgeving. Er worden hier geen toegangstokens gevraagd.</p></div>');
-  if(!s.liveOps)return header('Echte uitvoering','Voer twee kleine taken uit met lokale, geteste workers.')+
-    section('Verbind de beveiligde server','<div class="card pad"><p>Verbind eerst via Contracten en registratie. De server gebruikt alleen ingebouwde tekstbewerkingen. Er wordt geen externe AI of zoekmachine aangeroepen.</p>'+btn('Naar registratie','nav-registration','primary')+'</div>');
-  const all=Object.values(s.liveOps.missions||{}),selected=all.find(m=>m.plan.id===s.selectedRealMission)||all[0];
-  const activeWorkerCount=new Set(all.flatMap(m=>Object.values(m.tasks||{}))
-    .filter(t=>t.status==='running').map(t=>t.run?.workerId).filter(Boolean)).size;
+  if(!onExecutionServer())return header('Opdrachten','Dit deel werkt alleen op je eigen EAIwork-server.')+
+    section('Alleen lokaal','<div class="card pad">Open het dashboard op je eigen computer om opdrachten uit te voeren.</div>');
+  if(!s.liveOps)return localConnectView();
+  const all=Object.values(s.liveOps.missions||{});
+  const selected=all.find(m=>m.plan.id===s.selectedRealMission)||all[0];
+  const workerRecords=Object.values(s.liveOps.workers||{});
+  const textWorkers=['text-normalize','text-metrics'].every(kind=>
+    workerRecords.some(w=>w.stage==='ready'&&w.contract.taskKinds.includes(kind)));
   const tasks=selected?selected.plan.tasks.map(t=>{
-    const rec=selected.tasks[t.id];
-    return '<div class="status-row"><span class="indicator '+(rec.status==='done'?'green':rec.status==='failed'?'red':'amber')+'"></span><div><h3>'+h(t.title)+'</h3>'+
-      '<p>'+h(t.id)+' · '+h(t.taskKind)+' · '+h(rec.status)+(t.dependsOn.length?' · wacht op '+h(t.dependsOn.join(', ')):'')+'</p>'+
-      ((t.evidenceAtomIds||[]).length?
-        '<p class="smalltext">Gekoppelde uitspraken: '+t.evidenceAtomIds.map(atom=>
-          '<button class="btn small" data-action="evidence-open" data-id="'+h(atom)+'">'+h(atom)+'</button>').join(' ')+'</p>':'')+
-      (rec.run?'<p class="smalltext">Worker: '+h(rec.run.workerId)+' v'+h(rec.run.workerVersion)+' · '+h(rec.run.verification)+' · '+h(rec.run.elapsedMs??'—')+' ms</p>':'')+
-      (rec.run?.output?'<pre class="contract-code">'+h(JSON.stringify(rec.run.output,null,2))+'</pre>':'')+
-      (rec.run?.errorCode?'<p class="contract-error">'+h(rec.run.errorCode)+'</p>':'')+
-      ((rec.attempts||[]).length?
-        '<div class="contract-code"><b>Vorige pogingen</b>'+
-        rec.attempts.map(run=>'<p class="smalltext">'+h(run.runId)+' · '+h(run.adapterId)+
-          ' · '+h(run.startedAt)+' · beoordeling: '+h(run.retryReview?.by||'niet geregistreerd')+
-          ' · '+h(run.retryReview?.reason||'geen reden vastgelegd')+'</p>').join('')+'</div>':'')+
-
+    const rec=selected.tasks[t.id]||{status:'queued'};
+    const name=rec.run?.workerId;
+    const record=name?s.liveOps.workers?.[name]:null;
+    const assigned=record?workerDisplayName(record):(name||'Nog niet uitgevoerd');
+    const state=rec.status==='done'?'Afgerond':rec.status==='running'?'Bezig':
+      rec.status==='failed'?'Er ging iets mis':'Wacht op vorige stap of start';
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(t.title)+'</b>'+badge(rec.status==='done'?'done':rec.status==='failed'?'blocked':'queued')+
+      '</div><p class="smalltext">'+h(state)+'</p>'+
+      '<p class="smalltext">Uitgevoerd door: '+h(assigned)+'</p>'+
+      (rec.run?.errorCode?'<p class="contract-error">Deze stap is mislukt. Bekijk het resultaat en controleer de oorzaak.</p>':'')+
+      (rec.run?.output||rec.run?.errorCode||rec.attempts?.length?
+        '<details><summary>Bekijk het resultaat en de details</summary>'+
+          (rec.run?.output?'<pre class="contract-code" style="white-space:pre-wrap">'+
+            h(JSON.stringify(rec.run.output,null,2))+'</pre>':'')+
+          (rec.run?.errorCode?'<p class="contract-error">'+h(rec.run.errorCode)+'</p>':'')+
+          (rec.attempts?.length?'<p class="smalltext">'+
+            rec.attempts.map(a=>h(a.runId)+' · '+h(a.retryReview?.reason||'Geen uitleg opgeslagen')).join(' · ')+'</p>':'')+
+          '<small>Taak-ID: '+h(t.id)+' · soort: '+h(t.taskKind)+'</small></details>':'')+
       (['running','failed'].includes(rec.status)&&(!t.effect||t.effect==='local')?
-        '<div class="mt"><label class="field-label" for="retry-'+h(selected.plan.id)+'-'+h(t.id)+'">Motivering voor opnieuw starten</label>'+
-        '<input class="field" id="retry-'+h(selected.plan.id)+'-'+h(t.id)+'" maxlength="600" style="width:100%" placeholder="Controleer eerst of de vorige poging geen externe actie uitvoerde">'+
-        btn('Gecontroleerd opnieuw starten','real-task-retry','small','data-id="'+h(t.id)+'" data-mission="'+h(selected.plan.id)+'"')+'</div>':'')+'</div></div>';
+        '<div class="mt"><label class="field-label" for="retry-'+h(selected.plan.id)+'-'+h(t.id)+
+        '">Waarom wil je deze stap opnieuw uitvoeren?</label>'+
+        '<input class="field" id="retry-'+h(selected.plan.id)+'-'+h(t.id)+
+        '" maxlength="600" style="width:100%" placeholder="Vertel wat je eerst hebt gecontroleerd">'+
+        btn('Probeer deze stap opnieuw','real-task-retry','small',
+          'data-id="'+h(t.id)+'" data-mission="'+h(selected.plan.id)+'"')+'</div>':'')+
+      '</div>';
   }).join(''):'';
   const p=selected?liveMissionProgress(selected):null;
-  return header('Echte uitvoering','De server voert afgebakende taken uit. Dit is nog geen automatische AI-planner of langdurige autonome loop.',btn('Workers toelaten','nav-registration'))+
-    '<div class="grid cols-4 mb"><div class="card metric"><div class="caption">Opdrachten</div><strong>'+all.length+'</strong><small>In het serverlog</small></div>'+
-    '<div class="card metric"><div class="caption">Geregistreerde workers</div><strong>'+Object.keys(s.liveOps.workers||{}).length+'</strong><small>Niet allemaal actief</small></div>'+
-    '<div class="card metric"><div class="caption">Toegelaten workers</div><strong>'+Object.values(s.liveOps.workers||{}).filter(w=>w.stage==='ready').length+'</strong><small>Alleen met een contract</small></div>'+
-    '<div class="card metric"><div class="caption">Actieve workers</div><strong>'+activeWorkerCount+'</strong><small>Volgens de actieve taken; geen blijvende agents</small></div></div>'+
-    '<div class="grid cols-2"><div>'+section('Nieuw goedgekeurd taakplan','<div class="card pad"><p class="muted smalltext">Deze proef maakt een plan met twee afhankelijke stappen: tekst opschonen en vervolgens woorden tellen. De persoon keurt het plan goed. Gebruik alleen niet-vertrouwelijke voorbeeldtekst.</p>'+
-      '<form id="realMissionForm" class="form-stack"><div><label for="realMissionTitle" class="field-label">Opdrachtnaam</label><input class="field" id="realMissionTitle" maxlength="100" required placeholder="Naam van je taak" style="width:100%"></div>'+
-      '<div><label for="realMissionText" class="field-label">Tekst voor lokale verwerking</label><textarea id="realMissionText" required maxlength="2000" placeholder="Vul de tekst in die je lokaal wilt laten verwerken" style="width:100%"></textarea></div>'+
-      '<div><label for="realEvidenceAtom" class="field-label">Bewijsverwijzing (optioneel)</label>'+
-      '<input class="field" id="realEvidenceAtom" maxlength="128" placeholder="Bijvoorbeeld een atoom-ID uit Bewijs en herkomst" style="width:100%">'+
-      '<p class="muted smalltext">Deze verwijzing telt niet als bewijs van juistheid. De server controleert of de verwijzing bestaat en voor alle auditgebruikers leesbaar is.</p></div>'+
-      '<p class="muted smalltext">Werkplan: text-normalize → text-metrics. Geen zelfgekozen code of externe verwerking.</p>'+
-      '<button class="btn primary" type="submit">Plan goedkeuren en registreren</button></form></div>')+'</div>'+
-    '<div>'+section('Bestaande opdrachten','<div class="contract-table">'+(all.length?all.map(m=>{
-      const g=liveMissionProgress(m);
-      return '<button class="contract-entry '+(m===selected?'selected':'')+'" data-action="real-mission-select" data-id="'+h(m.plan.id)+'"><strong>'+h(m.plan.title)+'</strong><small>'+g.done+'/'+g.total+' afgerond · '+g.status+'</small></button>';
-    }).join(''):'<p class="muted">Nog geen echte opdrachten op deze server.</p>')+'</div>')+'</div></div>'+
-    (selected?'<div class="mt">'+section('Uitvoering · '+h(selected.plan.title),'<div class="card pad"><div class="row"><b>'+h(p.status)+'</b><span>'+p.done+'/'+p.total+' taken afgerond</span></div>'+
-       '<div class="mt row">'+btn('Voer volgende stap uit','real-mission-step','primary', 'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
-       btn('Voer beschikbare stappen uit','real-mission-loop','small','data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
-       btn(selected.paused?'Hervat opdracht':'Pauzeer opdracht',selected.paused?'real-mission-resume':'real-mission-pause','small','data-id="'+h(selected.plan.id)+'"')+'</div>'+
-       '<div class="notice mt">Voor deze stap is een ingeschreven, geteste en toegelaten lokale worker vereist. Een afgeronde technische taak is nog geen inhoudelijk gecontroleerde conclusie.</div></div>'+
-       '<div class="status-list">'+tasks+'</div>'+missionGates(selected))+'</div>'+automationPanel(selected)+missionTracePanel(selected):'')+
-    plannerProposalPanel()+
+  const selectedControls=selected?
+    '<div class="card pad"><div class="row" style="justify-content:space-between;gap:12px">'+
+    '<b>'+h(selected.plan.title)+'</b><b>'+p.done+'/'+p.total+' stappen klaar</b></div>'+
+    '<p class="smalltext">'+h(p.status)+'</p>'+
+    '<div class="mt row" style="gap:8px;flex-wrap:wrap">'+
+      btn('Start volgende stap','real-mission-step','primary',
+        'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
+      btn('Ga verder met beschikbare stappen','real-mission-loop','small',
+        'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
+      btn(selected.paused?'Hervat':'Pauzeer',selected.paused?'real-mission-resume':'real-mission-pause',
+        'small','data-id="'+h(selected.plan.id)+'"')+'</div>'+
+    (!p.ready&&p.done<p.total?
+      '<p class="muted smalltext">Er kan nu geen stap starten. Controleer de vorige stap, de toegelaten workers of eventuele toestemming.</p>':'')+
+    '<div class="mt">'+tasks+'</div></div>':'<div class="card pad">Kies of maak een opdracht.</div>';
+  const list=all.map(m=>{
+    const progress=liveMissionProgress(m);
+    return '<button class="contract-entry '+(m===selected?'selected':'')+
+      '" data-action="real-mission-select" data-id="'+h(m.plan.id)+'">'+
+      '<b>'+h(m.plan.title)+'</b><small>'+progress.done+'/'+progress.total+
+      ' stappen klaar · '+h(progress.status)+'</small></button>';
+  }).join('');
+  const jobForm='<div class="card pad"><p class="smalltext">'+
+    'Laat EAIwork tekst opschonen en daarna woorden tellen. Andere soorten opdrachten zijn nog niet via dit formulier beschikbaar.</p>'+
+    (!textWorkers?'<p class="muted smalltext">Voor uitvoering zijn workers nodig die tekst kunnen opschonen en tellen. Je kunt wel alvast een taak vastleggen.</p>':'')+
+    '<form id="realMissionForm" class="form-stack">'+
+    '<label for="realMissionTitle" class="field-label">Naam van de taak</label>'+
+    '<input class="field" id="realMissionTitle" maxlength="100" required style="width:100%" placeholder="Bijvoorbeeld: tekst van website controleren">'+
+    '<label for="realMissionText" class="field-label">Welke tekst wil je laten verwerken?</label>'+
+    '<textarea id="realMissionText" required maxlength="2000" style="width:100%" placeholder="Plak hier je tekst"></textarea>'+
+    '<details><summary>Extra gegevens (optioneel)</summary>'+
+      '<label for="realEvidenceAtom" class="field-label">Verwijzing naar opgeslagen informatie</label>'+
+      '<input class="field" id="realEvidenceAtom" maxlength="128" style="width:100%" placeholder="ID van opgeslagen informatie">'+
+      '<p class="smalltext">EAIwork controleert of de verwijzing bestaat. Dat zegt nog niets over de inhoud.</p></details>'+
+    '<button class="btn primary" type="submit">Maak teksttaak</button></form></div>';
+  return header('Opdrachten','Volg de stappen, zie wie het werk heeft gedaan en bepaal wanneer je verdergaat.')+
+    '<div class="dash-columns"><div class="dash-main-column">'+
+      section('Je opdrachten','<div class="card pad">'+
+        (list||'<p class="muted smalltext">Nog geen opdrachten. Maak hieronder je eerste teksttaak.</p>')+
+        '</div>')+
+      (selected?'<div class="mt">'+section('Wat gebeurt er nu?',selectedControls)+'</div>':'')+
+      '</div><div class="dash-side-column">'+
+      section('Nieuwe teksttaak',jobForm)+
+      '<div class="mt">'+section('Een project laten aanpassen','<div class="card pad">'+
+        '<p>Wil je bestanden in een project laten wijzigen? Gebruik daarvoor Codeworker.</p>'+
+        btn('Open Codeworker','nav','small','data-id="code"')+'</div>')+'</div>'+
+      '</div></div>'+
+    (selected&&(selected.plan.constraints||[]).length?'<div class="mt">'+missionGates(selected)+'</div>':'')+
+    '<details class="card pad mt"><summary>Meer mogelijkheden en technische details</summary>'+
+      (selected?automationPanel(selected)+missionTracePanel(selected):'')+
+      plannerProposalPanel()+'</details>'+
     (s.liveRunNote?'<div class="notice mt">'+h(s.liveRunNote)+'</div>':'')+
     (s.liveError?'<p role="alert" class="contract-error">'+h(s.liveError)+'</p>':'');
 }
