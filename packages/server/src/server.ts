@@ -8,6 +8,7 @@ import {
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
+import {localStateWithoutDemo} from "../../operations/src/legacy-demo-view.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
@@ -67,6 +68,8 @@ export interface Config {
   workers?: Record<string, WorkerRuntime>;
   /** Optional separate operations journal. Existing evidence logs stay unchanged. */
   operationsDir?: string;
+  /** Hide only seed records from old local demo launches; preserve the original journal. */
+  localLiveView?:boolean;
   /** 0 disables timer for deterministic testing; default 100 milliseconds. */
   schedulerIntervalMs?: number;
   /** Administrator-allowlisted checkout; never taken from a caller or model. */
@@ -229,6 +232,11 @@ export function makeServer(cfg: Config) {
   }
 
   const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace,{suiteRunner:cfg.projectSuiteRunner}):null;
+  const readableOps=()=>{
+    if(!operations)throw new Error("Operations not configured");
+    const full=operations.snapshot();
+    return cfg.localLiveView?localStateWithoutDemo(full):full;
+  };
   const today = cfg.today ?? (() => new Date().toISOString().slice(0, 10));
   const validFor = Object.fromEntries(cfg.pack.atoms.filter((a) => a.valid_for_days).map((a) => [a.id, a.valid_for_days!]));
   const maxBodyBytes = cfg.maxBodyBytes ?? 64 * 1024;
@@ -845,14 +853,14 @@ export function makeServer(cfg: Config) {
           });
         }
         if (req.method === "GET" && url.pathname === "/ops/state") {
-          try { return json(res, 200, operations.snapshot()); }
+          try { return json(res, 200, readableOps()); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
         }
         if (req.method === "GET" && url.pathname === "/ops/production-line") {
           try {
             const integrity=operations.verify();
             if(!integrity.ok)return json(res,503,{error:"operations verification failed"});
-            const current=operations.snapshot();
+            const current=readableOps();
             return json(res,200,productionLineView(current,
               builtinInventoryForState(current,cfg.repoSearchRoot),true));
           }catch{
@@ -860,11 +868,11 @@ export function makeServer(cfg: Config) {
           }
         }
         if (req.method === "GET" && url.pathname === "/ops/queue") {
-          try{return json(res,200,projectLocalQueue(operations.snapshot()))}
+          try{return json(res,200,projectLocalQueue(readableOps()))}
           catch{return json(res,503,{error:"local queue unavailable"})}
         }
         if (req.method === "GET" && url.pathname === "/ops/catalog") {
-          try { return json(res, 200, catalogOverview(operations.snapshot())); }
+          try { return json(res, 200, catalogOverview(readableOps())); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
         }
         if (req.method === "GET" && url.pathname === "/ops/verify") {
@@ -1007,7 +1015,7 @@ export function makeServer(cfg: Config) {
         }
         if (req.method === "GET" && url.pathname === "/ops/missions") {
           try {
-            const {missions}=operations.snapshot();
+            const {missions}=readableOps();
             return json(res,200,{missions:Object.fromEntries(Object.entries(missions).map(([id,m])=>
               [id,{...m,progress:missionProgress(m)}]))});
           } catch {throw new HttpError(503,"mission journal unavailable")}
