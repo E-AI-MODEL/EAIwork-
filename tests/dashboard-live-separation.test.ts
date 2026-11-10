@@ -152,7 +152,7 @@ test("local home shows actual code plans even without mission records",()=>{
     dashControlsCard:(title:string,body:string)=>"<article>"+title+body+"</article>",
     compactDashboard:()=>"<div>Werkelijke taken</div>"
   };
-  const render=runInNewContext(src+"\\nliveOverview",context);
+  const render=runInNewContext(src+String.fromCharCode(10)+"liveOverview",context);
   const empty=render();
   assert.match(empty,/Codeplannen/);
   assert.match(empty,/Proef met twee bestanden/);
