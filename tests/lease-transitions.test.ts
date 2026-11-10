@@ -57,6 +57,8 @@ test("lease survives restart, heartbeat extends expiry, and stale completion can
     assert.throws(()=>f.put(completed),/stale task lease/);
     assert.throws(()=>f.put({...completed,leaseId:"lease-old"}),/stale task lease/);
     assert.throws(()=>f.put({...completed,leaseId:"lease-one",finishedAt:time(19000)}),/lease expired/);
+    // Backdating the result cannot make an expired lease valid again.
+    assert.throws(()=>f.put({...completed,leaseId:"lease-one"},runner,time(19000)),/lease expired/);
     f.put({...completed,leaseId:"lease-one"},runner,time(7000));
     assert.equal(f.store.snapshot().missions[plan.id].tasks["task-local"].status,"done");
     assert.throws(()=>f.put({type:"task.lease.renew",missionId:plan.id,taskId:"task-local",
