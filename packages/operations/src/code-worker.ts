@@ -246,7 +246,7 @@ export class LocalCodeWorkspace {
   }
   list(limit=20){
     if(!Number.isInteger(limit)||limit<1||limit>50)throw new Error("Ongeldige geschiedenislimiet");
-    return readdirSync(this.storage).filter(n=>/^[0-9a-f-]{36}\\.json$/.test(n))
+    return readdirSync(this.storage).filter(n=>/^[0-9a-f-]{36}\.json$/.test(n))
       .map(n=>this.record(n.slice(0,-5)))
       .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id))
       .slice(0,limit).map(r=>({
@@ -290,7 +290,7 @@ export class LocalCodeWorkspace {
     });
     return {status:"applied",proposalId:record.id,path:record.path,
       sha256:record.replacementSha256,backupRef:record.id+".original",
-      testsExecuted:record.testReport?.testsExecuted??false,preflight:checked.preflight};
+      testsExecuted:false,preflight:checked.preflight};
   }
   restore(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
