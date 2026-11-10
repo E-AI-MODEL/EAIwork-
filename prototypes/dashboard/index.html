@@ -1390,7 +1390,12 @@ function orderedPlanPanel(){
   const active=codePlans.find(p=>p.id===selectedCodePlan)||codePlans[0]||null;
   const steps=active?.steps||[];
   const current=steps.find(step=>step.active);
-  return '<div class="card pad">'+
+  const exampleMode=/[/\\]eaiwork-proef-[^/\\]+$/.test(codeWorkspaceStatus?.worktree||'');
+  const exampleRows=[
+    'src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount.',
+    'src/invoice.js | tests/invoice.test.js | Voeg een export function totalWithShipping(shipping = 0) toe. Behoud de export total.'
+  ].join(String.fromCharCode(10));
+  return '<div class="card pad" id="ordered-plan-card">'+
     '<p class="muted smalltext">Wijzig twee tot acht bestaande JavaScript-bestanden in een vaste volgorde. Elk bestand krijgt een voorstel. Bij nieuwe plannen testen we alle gekozen bestanden samen, vóór en na het toepassen. Een mislukte test blokkeert de volgende wijziging.</p>'+
     (codePlans.length?'<div class="code-history-head"><b>Bestaande plannen</b>'+btn('Ververs','code-plan-refresh','small')+'</div>'+
       codePlans.map(p=>'<button class="code-history-row" data-action="code-plan-open" data-id="'+h(p.id)+'"><b>'+
@@ -1427,11 +1432,14 @@ function orderedPlanPanel(){
       '</div>':'')+
     (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?
       '<form id="orderedCodeForm" class="form-stack mt">'+
+      (exampleMode?'<p class="smalltext"><b>De voorbeeldopdracht staat al klaar.</b> Je kunt de tekst aanpassen of direct de volgorde vastleggen.</p>':
+        '<p class="smalltext">Vul hieronder je eigen bron- en testbestanden in. De grijze tekst is alleen een voorbeeld.</p>')+
       '<label class="field-label" for="orderedTitle">Naam van de opdracht</label>'+
-      '<input id="orderedTitle" maxlength="120" required style="width:100%" placeholder="Aanpassing van twee modules">'+
+      '<input id="orderedTitle" maxlength="120" required style="width:100%" value="'+(exampleMode?'Proef met twee bestanden':'')+'" placeholder="Geef de opdracht een naam">'+
       '<label class="field-label" for="orderedSteps">Eén stap per regel: bron | test | opdracht</label>'+
-      '<textarea id="orderedSteps" required style="width:100%;min-height:110px" placeholder="src/one.js | tests/one.test.js | Verander de teller&#10;src/two.js | tests/two.test.js | Gebruik de nieuwe telling"></textarea>'+
-      '<p class="muted smalltext">Standaard: alle gekozen bron- en testbestanden draaien samen in een afgeschermde Docker-kopie. Er worden geen andere projectbestanden gekopieerd.</p>'+
+      '<textarea id="orderedSteps" required style="width:100%;min-height:110px" placeholder="src/voorbeeld.js | tests/voorbeeld.test.js | Beschrijf de wijziging">'+
+      (exampleMode?h(exampleRows):'')+'</textarea>'+
+      '<p class="muted smalltext">Docker wordt pas gebruikt bij Test alle bestanden vóór toepassing. Het vastleggen van de volgorde verandert geen code.</p>'+
       '<button class="btn primary" type="submit">Leg volgorde vast</button></form>':'')+
     '</div>';
 }
@@ -1584,7 +1592,7 @@ async function requestOrderedCodePlan(event){
   codeError='';codeNotice='';
   try{
     const title=document.getElementById('orderedTitle')?.value.trim();
-    const rows=document.getElementById('orderedSteps')?.value.split('\\n').map(v=>v.trim()).filter(Boolean)||[];
+    const rows=document.getElementById('orderedSteps')?.value.split(String.fromCharCode(10)).map(v=>v.trim()).filter(Boolean)||[];
     const steps=rows.map(row=>{
       const parts=row.split('|').map(v=>v.trim());
       if(parts.length!==3||parts.some(x=>!x))throw new Error('Gebruik per regel: bronbestand | testbestand | opdracht');
@@ -1596,6 +1604,7 @@ async function requestOrderedCodePlan(event){
     await loadCodeHistory();
   }catch(error){codeError=String(error.message||error)}
   render();
+  if(!codeError)document.getElementById('ordered-plan-card')?.scrollIntoView({block:'start',behavior:'smooth'});
 }
 async function runOrderedCodeAction(action){
   const plan=codePlans.find(p=>p.id===selectedCodePlan)||codePlans[0];
