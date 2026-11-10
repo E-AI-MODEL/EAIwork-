@@ -54,6 +54,17 @@ export function buildMissionTrace(state:OpsState,missionId:string){
         recent.interruptionReason=e.reason;
       }
     }
+    if(e.type==="task.recover"){
+      row.runId=e.runId;
+      row.reason="process-restart";
+      const attempts=traces.get(e.taskId)??[];
+      const run=attempts.find(a=>a.runId===e.runId);
+      if(run && run.status==="running"){
+        run.status="interrupted";
+        run.interruptionReason="process-restart";
+        run.recoveryApprovedBy="persisted-human-consent";
+      }
+    }
     if(e.type==="mission.gate.resolve")row.constraintId=e.constraintId;
     eventRecords.push(row);
   }
