@@ -43,7 +43,7 @@ De huidige hoofdlijn loopt via PR #23 t/m #32, daarna #38 t/m #47 en #49 t/m #57
 
 | PR | Stand ten opzichte van huidige hoofdlijn | Voorstel, nog geen merge-besluit |
 | --- | --- | --- |
-| #28 | **Wel in de doorlopende keten**: #29 heeft de branch van #28 als basis | Niet als verloren werk aanmerken; inhoudelijke review blijft nodig |
+| #28 | De werkende onderdelen zitten in de keten, maar de branch zelf heeft nog **één extra documentatiecommit** in `docs/operations-growth-v0.1.md` | Vergelijk dat document, voeg niet blind de hele branch samen |
 | #33 | Aftakking van #32: kandidaat voor aparte menselijke releasebeoordeling | Vergelijk met de bestaande uitgiftecontrole |
 | #34 | Bouwt op #33 voort: hash van uitgiftebestanden | Vergelijk bron- en artefactcontrole en neem alleen passende verschillen mee |
 | #35 | Aftakking van #33: scopes voor tekstworkers | Beoordeel toegangsgrenzen afzonderlijk |
@@ -51,7 +51,13 @@ De huidige hoofdlijn loopt via PR #23 t/m #32, daarna #38 t/m #47 en #49 t/m #57
 | #37 | Bouwt op #36 voort: gespecialiseerde lokale tekstworkers | Pas beoordelen na #35 en #36 |
 | #48 | Aftakking van de lokale codeworker: extra controle en herstel | Vergelijk zorgvuldig met #49 t/m #57, voorkom verlies of dubbel herstel |
 
-Deze inventaris is **geen bewijs** dat de afgetakte wijzigingen veilig geïntegreerd kunnen worden. Besluiten volgen na gerichte diff-review en tests. Er is geen toestemming om automatisch naar `main` te mergen.
+Gericht vergeleken met de actieve ontwikkeltak via GitHub-commitvergelijkingen (11 november 2026):
+- #33–#37 hebben nog afwijkende commits, waaronder functies voor releasebeoordeling, taakverdeling en twee extra teksttaaksoorten. De huidige lokale executor ondersteunt uitsluitend `text-normalize` en `text-metrics`; de branch van #37 ondersteunt daarnaast `text-inspect` en `reference-extract`. Die mogelijkheden zijn dus **niet automatisch behouden**.
+- #48 heeft een afzonderlijke `packages/operations/src/code-review.ts` die in de actieve ontwikkeltak ontbreekt. De actieve codeworker bevat inmiddels andere controles en herstel, maar gelijkwaardigheid van alle mogelijkheden is nog niet bewezen.
+- #28 heeft één extra documentatiecommit; niet alle branchkoppen zijn exacte voorouders van de huidige tak.
+- De actuele Codeworker- en dashboardwijzigingen zijn uitgebreid gewijzigd. Daarom **geen automatische bulkmerge** van de oude aftakkingen.
+
+Deze inventaris is geen bewijs dat de afgetakte wijzigingen veilig geïntegreerd kunnen worden. Besluiten volgen na gerichte diff-review en tests. Er is geen toestemming om automatisch naar `main` te mergen.
 
 ## Wat de eerste proef nog niet bewijst
 
