@@ -6,7 +6,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { OpsStore } from "./store.ts";
 import { selectWorker, type RuntimeInventory } from "./selector.ts";
-import { missionProgress, type MissionRecord } from "./missions.ts";
+import { blockingConstraints, missionProgress, type MissionRecord } from "./missions.ts";
 import type { OpsEvent } from "./registry.ts";
 
 export interface LocalAdapter {
@@ -91,7 +91,8 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepRe
   if(mission.paused)fail("mission paused");
   const ready=mission.plan.tasks.filter(spec=>
     mission.tasks[spec.id].status==="queued" &&
-    spec.dependsOn.every(dep=>mission.tasks[dep].status==="done"));
+    spec.dependsOn.every(dep=>mission.tasks[dep].status==="done") &&
+    blockingConstraints(mission,spec.id).length===0);
   const selected=ready.slice(0,maximum);
   const result:StepResult={
     missionId,started:[],completed:[],failed:[],blocked:[],
