@@ -58,7 +58,18 @@ export interface MissionTaskRecord {
   run?:TaskRun;
   attempts?:TaskRun[];
 }
+export type SchedulerStopReason = "complete"|"budget-exhausted"|"blocked"|"needs-review"|"interrupted"|"paused"|"user-stopped";
+export interface MissionAutomation {
+  enabled:boolean;
+  maxStarts:number;
+  starts:number;
+  approvedBy:string;
+  approvedAt:string;
+  stoppedReason?:SchedulerStopReason;
+  stoppedAt?:string;
+}
 export interface MissionRecord {
+  automation?:MissionAutomation;
   plan:MissionPlan;
   createdAt:string;
   createdBy:string;
@@ -70,6 +81,8 @@ export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.resume";missionId:string}
+  | {type:"mission.automation.start";missionId:string;maxStarts:number}
+  | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
   | {type:"task.started";missionId:string;taskId:string;run:Pick<TaskRun,"runId"|"workerId"|"workerVersion"|"adapterId"|"inputHash"|"startedAt"|"verification">}
@@ -166,6 +179,41 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   if(e.type==="mission.pause"||e.type==="mission.resume"){
     if(actor.kind!=="person")fail("person required to pause or resume");
     mission.paused=e.type==="mission.pause";
+    if(e.type==="mission.pause"&&mission.automation?.enabled){
+      mission.automation.enabled=false;
+      mission.automation.stoppedReason="paused";
+      mission.automation.stoppedAt=at;
+    }
+    return;
+  }
+  if(e.type==="mission.automation.start"){
+    if(actor.kind!=="person")fail("a person must approve automatic execution");
+    if(!Number.isInteger(e.maxStarts)||e.maxStarts<1||e.maxStarts>32)
+      fail("automatic task budget must be 1-32");
+    if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
+    const tasks=Object.values(mission.tasks);
+    if(tasks.some(t=>t.status==="running"||t.status==="failed"))
+      fail("interrupted or failed work needs manual review");
+    if(tasks.every(t=>t.status==="done"))fail("mission already complete");
+    const kinds=new Set(["text-normalize","text-metrics","text-inspect"]);
+    if(tasks.some(t=>(t.spec.effect!==undefined&&t.spec.effect!=="local")||
+         !kinds.has(t.spec.taskKind)))
+      fail("automatic execution is limited to fixed local text workers");
+    mission.automation={enabled:true,maxStarts:e.maxStarts,starts:0,
+      approvedBy:actor.id,approvedAt:at};
+    return;
+  }
+  if(e.type==="mission.automation.stop"){
+    if(!mission.automation?.enabled)fail("automatic execution is not active");
+    if(actor.kind==="person"){
+      if(e.reason!=="user-stopped")fail("person may only stop their own approval");
+    } else if(actor.kind!=="system"||actor.id!=="system:mission-scheduler"||
+       !["complete","budget-exhausted","blocked","needs-review","interrupted","paused"].includes(e.reason)){
+      fail("scheduler stop requires a trusted system actor");
+    }
+    mission.automation.enabled=false;
+    mission.automation.stoppedReason=e.reason;
+    mission.automation.stoppedAt=at;
     return;
   }
   if(e.type==="mission.gate.resolve"){
@@ -216,6 +264,11 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        typeof r.startedAt!=="string"||
        typeof r.inputHash!=="string"||!/^[a-f0-9]{64}$/.test(r.inputHash)||
        r.verification!=="not-evaluated")fail("invalid task start");
+    if(mission.automation?.enabled){
+      if(mission.automation.starts>=mission.automation.maxStarts)
+        fail("automatic task budget exhausted");
+      mission.automation.starts+=1;
+    }
     task.status="running";task.run=structuredClone(r) as TaskRun;
     return;
   }
