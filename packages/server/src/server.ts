@@ -10,7 +10,7 @@ import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
-import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
+import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
@@ -374,10 +374,21 @@ export function makeServer(cfg: Config) {
           if(!body||typeof body!=="object"||Array.isArray(body)||
              Object.keys(body).some(k=>k!=="plan"))throw new HttpError(422,"expected only plan");
           try {
-            const event={type:"mission.create" as const,plan:(body as {plan:MissionPlan}).plan};
+            const plan=(body as {plan:MissionPlan}).plan;
+            validateMissionPlan(plan);
+            const linkedAtoms=[...new Set(plan.tasks.flatMap(t=>t.evidenceAtomIds??[]))];
+            for(const atom of linkedAtoms){
+              if(!atoms.has(atom))throw new HttpError(422,"unknown evidence atom link");
+              // Until operations has per-mission authorization, audit principals
+              // must all be permitted to see any linked evidence atom ID.
+              if(!canRead(principal,atom)||
+                 Object.values(cfg.tokens).some(p=>canAudit(p)&&!canRead(p,atom)))
+                throw new HttpError(403,"evidence atom link requires shared audit read access");
+            }
+            const event={type:"mission.create" as const,plan};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
-          }catch(e){throw new HttpError(422,(e as Error).message)}
+          }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
         const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})\/evaluate$/.exec(url.pathname);
         if(req.method==="POST"&&builtinTest){
