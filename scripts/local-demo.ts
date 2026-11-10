@@ -48,7 +48,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
         access:{read:"*",write:[],audit:true}}},
     executorTokens:{
       [workerToken]:{ownerId:"executor-local-demo",
-        taskKinds:["text-normalize","text-metrics"]},
+        taskKinds:["text-normalize","text-metrics","text-inspect","reference-extract"]},
       [otherWorkerToken]:{ownerId:"executor-other-demo",
         taskKinds:["text-normalize","text-metrics"]},
     },
@@ -60,6 +60,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   for(const contract of [
     simple("text-normalize","text-normalize"),
     simple("text-metrics","text-metrics"),
+    simple("reference-extract","reference-extract"),
     simple("repo-search","repo-search","repo-search-fixture-v1"),
     proposeComposedWorker("text-inspector","Tekstinspectie").contract,
   ]){
@@ -130,7 +131,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       "Start apart: EAI_EXECUTOR_URL=http://127.0.0.1:"+port+
         " EAI_EXECUTOR_TOKEN=<token> node scripts/local-text-executor.ts\n"+
       "Open Contracten en registratie en verbind met dit tijdelijke token.\n"+
-      "Er zijn vier opdrachten en vier geteste lokale workers.\n"+
+      "Er zijn vier voorbeeldopdrachten en vijf geteste lokale workers.\n"+
       "Stop met Ctrl+C. Tijdelijke gegevens worden verwijderd.\n\n");
   });
   let closing=false;
