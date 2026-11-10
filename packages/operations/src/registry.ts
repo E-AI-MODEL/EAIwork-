@@ -5,7 +5,7 @@ import { applyMissionEvent, type MissionEvent, type MissionRecord } from "./miss
  * All event payloads originate from a trusted authenticated controller, not a model.
  */
 export type OpsActor = { kind: "person" | "system" | "check"; id: string };
-export type WorkerStage = "candidate" | "ready" | "quarantined" | "disabled";
+export type WorkerStage = "candidate" | "ready" | "quarantined" | "disabled" | "superseded";
 export interface WorkerContract {
   id: string;
   version: string;
@@ -66,15 +66,16 @@ export interface Defect {
 export type OpsEvent =
   | MissionEvent
   | { type: "worker.register"; contract: WorkerContract }
-  | { type: "worker.release"; id: string; evidenceRef: string }
+  | { type: "worker.release"; id: string; version?: string; evidenceRef: string }
+  | { type: "worker.activate-version"; id: string; version: string; rationale: string }
   | { type: "worker.quarantine"; id: string; reason: string }
   | { type: "quality.record"; measurement: QualityMeasurement }
   | { type: "defect.open"; id: string; workerId: string; reason: string; severity: "quality" | "security" }
   | { type: "repair.record"; defectId: string; attempt: RepairAttempt }
   | { type: "human.decide"; defectId: string; choice: "replace" | "rebuild" | "manual" | "pause" | "disable"; rationale: string };
 export interface OpsEnvelope { id: string; at: string; actor: OpsActor; event: OpsEvent }
-export interface OpsState { workers: Record<string, WorkerRecord>; measurements: QualityMeasurement[]; defects: Record<string, Defect>; missions: Record<string, MissionRecord>; history: OpsEnvelope[] }
-export const emptyOps = (): OpsState => ({ workers: {}, measurements: [], defects: {}, missions: {}, history: [] });
+export interface OpsState { workers: Record<string, WorkerRecord>; workerVersions: Record<string, Record<string, WorkerRecord>>; measurements: QualityMeasurement[]; defects: Record<string, Defect>; missions: Record<string, MissionRecord>; history: OpsEnvelope[] }
+export const emptyOps = (): OpsState => ({ workers: {}, workerVersions: {}, measurements: [], defects: {}, missions: {}, history: [] });
 const fail = (message: string): never => { throw new Error(message); };
 const meaningful = (s: unknown, label: string, max = 512): string => {
   if (typeof s !== "string" || !s.trim() || s.length > max) return fail(label + " is missing or invalid");
@@ -120,12 +121,18 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
          c.tools.length!==0||c.requestedPermissions.length!==0)
         fail("invalid safe worker recipe");
     }
-    if (state.workers[c.id]) fail("worker id already registered; use a new id for a new version");
-    state.workers[c.id] = {contract: structuredClone(c), stage:"candidate", registeredAt:envelope.at};
+    state.workerVersions[c.id]??={};
+    if (state.workerVersions[c.id][c.version]) fail("worker version already registered");
+    const candidate:WorkerRecord={contract:structuredClone(c),stage:"candidate",registeredAt:envelope.at};
+    state.workerVersions[c.id][c.version]=candidate;
+    if(!state.workers[c.id])state.workers[c.id]=structuredClone(candidate);
   } else if (e.type === "worker.release") {
     requireHuman(envelope.actor);
-    const w=state.workers[e.id]; if (!w) fail("unknown worker");
-    if (w.stage !== "candidate") fail("only a candidate can be released");
+    const active=state.workers[e.id];
+    const version=e.version??active?.contract.version;
+    const w=version?state.workerVersions[e.id]?.[version]:undefined;
+    if(!w)fail("unknown worker version");
+    if(w.stage!=="candidate")fail("only a candidate can be released");
     meaningful(e.evidenceRef,"test evidence");
     const validTest=state.history.some(row=>{
       const event=row.event;
@@ -140,18 +147,45 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
            m.cohort==="fixed-fixtures"));
     });
     if(!validTest)fail("release requires a passed, trusted, matching test for this exact version");
-    w.stage="ready"; w.releasedAt=envelope.at; w.releaseEvidence=e.evidenceRef;
-    // This is registration only. Runtime rights are still assigned by server authz.
+    if(Object.values(state.defects).some(d=>d.workerId===e.id&&d.version===w.contract.version&&
+        ["open","human-required"].includes(d.state)))
+      fail("cannot release a version with unresolved defects");
+    if(active && active.contract.version!==w.contract.version) {
+      // Keep old disabled/quarantined state, but demote a healthy prior release.
+      if(active.stage==="ready")active.stage="superseded";
+      state.workerVersions[e.id][active.contract.version]=structuredClone(active);
+    }
+    w.stage="ready";w.releasedAt=envelope.at;w.releaseEvidence=e.evidenceRef;
+    state.workerVersions[e.id][w.contract.version]=structuredClone(w);
+    state.workers[e.id]=structuredClone(w);
+    // This changes active registration, never grants external runtime rights.
+  } else if(e.type==="worker.activate-version"){
+    requireHuman(envelope.actor);
+    meaningful(e.rationale,"activation rationale");
+    const w=state.workerVersions[e.id]?.[e.version];
+    if(!w||w.stage!=="superseded"||!w.releaseEvidence)fail("version is not eligible for rollback");
+    if(Object.values(state.defects).some(d=>d.workerId===e.id&&d.version===e.version&&
+        ["open","human-required"].includes(d.state)))fail("cannot roll back to an unresolved defective version");
+    const active=state.workers[e.id];
+    if(active && active.contract.version!==e.version) {
+      if(active.stage==="ready")active.stage="superseded";
+      state.workerVersions[e.id][active.contract.version]=structuredClone(active);
+    }
+    w.stage="ready";
+    state.workerVersions[e.id][e.version]=structuredClone(w);
+    state.workers[e.id]=structuredClone(w);
   } else if (e.type === "worker.quarantine") {
     if (envelope.actor.kind === "person" || envelope.actor.kind === "system" || envelope.actor.kind === "check") {
       const w=state.workers[e.id]; if (!w) fail("unknown worker");
       meaningful(e.reason,"reason");
       w.stage="quarantined";
+      state.workerVersions[e.id][w.contract.version]=structuredClone(w);
     }
   } else if (e.type === "quality.record") {
     requireTrustedTest(envelope.actor);
     const m=e.measurement; if (!plain(m)) fail("missing measurement");
-    const w=state.workers[m.workerId]; if (!w || w.contract.version!==m.version) fail("measurement version mismatch");
+    const w=state.workerVersions[m.workerId]?.[m.version];
+    if(!w)fail("measurement version mismatch");
     for (const field of ["id","taskKind","dataset","suiteVersion","cohort","metric","measuredAt","evidenceRef"] as const) meaningful(m[field],field);
     positiveInt(m.numerator,"numerator"); positiveInt(m.denominator,"denominator");
     if (m.numerator>m.denominator || m.denominator===0) fail("invalid measurement fraction");
@@ -166,7 +200,10 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
       meaningful(e.reason,"reason"); meaningful(e.id,"defect id");
       if (!["quality","security"].includes(e.severity)) fail("invalid severity");
       state.defects[e.id]={id:e.id,workerId:e.workerId,version:w.contract.version,reason:e.reason,severity:e.severity,state:e.severity==="security"?"human-required":"open",attempts:[]};
-      if (e.severity==="security") w.stage="quarantined";
+      if(e.severity==="security"){
+        w.stage="quarantined";
+        state.workerVersions[e.workerId][w.contract.version]=structuredClone(w);
+      }
     }
   } else if (e.type === "repair.record") {
     requireTrustedTest(envelope.actor);
@@ -182,7 +219,10 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
       d.state="resolved";
     } else if (d.attempts.length===3) {
       d.state="human-required";
-      state.workers[d.workerId].stage="quarantined";
+      if(state.workers[d.workerId]?.contract.version===d.version){
+        state.workers[d.workerId].stage="quarantined";
+        state.workerVersions[d.workerId][d.version]=structuredClone(state.workers[d.workerId]);
+      }
     }
   } else if (e.type === "human.decide") {
     requireHuman(envelope.actor);
@@ -191,7 +231,12 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
     meaningful(e.rationale,"rationale");
     d.decision={choice:e.choice,rationale:e.rationale,by:envelope.actor.id,at:envelope.at};
     d.state="decided";
-    if (e.choice==="disable") state.workers[d.workerId].stage="disabled";
+    if(e.choice==="disable"){
+      const version=state.workerVersions[d.workerId]?.[d.version];
+      if(version)version.stage="disabled";
+      if(state.workers[d.workerId]?.contract.version===d.version)
+        state.workers[d.workerId].stage="disabled";
+    }
     // No worker is automatically re-enabled; the scheduler must honor quarantine.
   } else {
     fail("unknown operations event");
