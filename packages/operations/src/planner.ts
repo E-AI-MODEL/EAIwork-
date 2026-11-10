@@ -18,7 +18,6 @@ export interface PlanProposal {
   constraintCoverage:"not-evaluated";
   note:string;
 }
-const safeId=(v:string)=>v.replace(/[^a-z0-9-]/gi,"-").toLowerCase().replace(/^-+|-+$/g,"").slice(0,50);
 export async function proposeMissionPlan(
   sourceInstruction:string,model:PlanningModel,approvedId:string,
 ):Promise<PlanProposal>{
