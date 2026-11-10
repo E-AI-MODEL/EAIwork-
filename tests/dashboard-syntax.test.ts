@@ -12,7 +12,10 @@ test("dashboard is valid self-contained JavaScript with full product navigation"
   }
 });
 test("dashboard labels demo measurements and uses same-origin operations API",()=>{
-  assert.match(html,/Voorbeeldopdrachten/);
+  assert.match(html,/Demonstratie/);
+  assert.match(html,/dash-donut/);
+  assert.match(html,/dash-stages/);
+  assert.match(html,/dash-bargraph/);
   assert.match(html,/Workerbibliotheek/);
   assert.match(html,/fetch\('\/ops\/catalog'/);
   assert.match(html,/fictiev/);
