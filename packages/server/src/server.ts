@@ -582,6 +582,58 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
+        const releaseSubmit=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases\\/candidates$/.exec(url.pathname);
+        if(req.method==="POST"&&releaseSubmit){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person may submit a release candidate");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          const fields=["id","revision","repository","commitSha","artifactName",
+            "artifactSha256","checkRunUrl","checkCommitSha"];
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             fields.some(k=>!Object.prototype.hasOwnProperty.call(body,k))||
+             Object.keys(body).some(k=>!fields.includes(k)))
+            throw new HttpError(422,"expected exact candidate metadata");
+          try{
+            const event={type:"mission.release.propose" as const,
+              missionId:releaseSubmit[1],candidate:body as
+                import("../../operations/src/missions.ts").ReleaseCandidate};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:releaseSubmit[1],
+              candidateId:(body as {id:string}).id,status:"pending-review",seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const releaseReview=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases\\/([a-z][a-z0-9-]{2,63})\\/review$/.exec(url.pathname);
+        if(req.method==="POST"&&releaseReview){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person may review a release candidate");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="decision"&&k!=="reason")||
+             !Object.prototype.hasOwnProperty.call(body,"decision")||
+             !Object.prototype.hasOwnProperty.call(body,"reason"))
+            throw new HttpError(422,"expected review decision and reason");
+          try{
+            const {decision,reason}=body as {decision:"request-changes"|"accept-for-verification";reason:string};
+            const event={type:"mission.release.review" as const,missionId:releaseReview[1],
+              candidateId:releaseReview[2],decision,reason};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,200,{missionId:releaseReview[1],
+              candidateId:releaseReview[2],decision,publicationAllowed:false,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const releaseList=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases$/.exec(url.pathname);
+        if(req.method==="GET"&&releaseList){
+          const mission=operations.snapshot().missions[releaseList[1]];
+          if(!mission)throw new HttpError(404,"unknown mission");
+          return json(res,200,{missionId:releaseList[1],revision:mission.revision,
+            candidates:Object.values(mission.releaseCandidates??{}),
+            publicationAllowed:false,
+            note:"Submitted CI and artifact references have not been independently verified."});
+        }
         const missionExtend=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/extend$/.exec(url.pathname);
         if(req.method==="POST"&&missionExtend){
           if(actor.kind!=="person")throw new HttpError(403,"only the mission owner may approve a plan extension");
@@ -772,7 +824,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.propose","mission.release.review","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
