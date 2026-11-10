@@ -1492,8 +1492,10 @@ function codeWorkbench(){
     '<p class="muted smalltext">Oorspronkelijke inhoud voor dit oudere voorstel niet opgeslagen.</p>';
   return header('Codeworker','Lokale voorstellen en gecontroleerde wijzigingen. Geen terminalcommando’s of automatische publicatie.')+
     section('Opdracht over meerdere bestanden',orderedPlanPanel())+
+    (codeError?'<p class="contract-error" role="alert">'+h(codeError)+'</p>':'')+
+    (codeNotice?'<p class="smalltext" role="status">'+h(codeNotice)+'</p>':'')+
     section('Werkmap','<div class="card pad"><b>'+h(codeWorkspaceStatus.worktree)+'</b><p class="muted smalltext">Model: '+h(codeWorkspaceStatus.modelId)+'. Alleen een mens kan de code toepassen.</p></div>')+
-    (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?section('Los bestandsvoorstel','<form id="codeProposalForm" class="card pad">'+
+    (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?section('Los bestandsvoorstel (optioneel)','<details class="card pad"><summary>Een enkel bestand apart wijzigen</summary><form id="codeProposalForm" class="form-stack mt">'+
       '<label for="codePath" class="field-label">Relatief bestandspad</label>'+
       '<input id="codePath" required maxlength="240" placeholder="src/main.ts" style="width:100%">'+
       '<label for="codeInstruction" class="field-label mt">Wat moet veranderen?</label>'+
@@ -1501,9 +1503,7 @@ function codeWorkbench(){
       '<label for="codeTestPath" class="field-label mt">Testbestand (optioneel, alleen .js)</label>'+
       '<input id="codeTestPath" maxlength="240" placeholder="tests/counter.test.js" style="width:100%">'+
       '<p class="muted smalltext">Docker moet lokaal draaien en de afbeelding node:22-alpine moet vooraf zijn gedownload. Het project blijft ongewijzigd.</p>'+
-      '<div class="mt"><button class="btn primary" type="submit">Maak codevoorstel</button></div></form>'):'')+
-    (codeError?'<p class="contract-error" role="alert">'+h(codeError)+'</p>':'')+
-    (codeNotice?'<p class="smalltext">'+h(codeNotice)+'</p>':'')+
+      '<div class="mt"><button class="btn primary" type="submit">Maak codevoorstel</button></div></form></details>'):'')+
     section('Onderbroken acties',recovery)+
     section('Voorstelgeschiedenis',history)+
     section('Operationslog van de codeworker',trace)+
