@@ -7,6 +7,7 @@ import {
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
+import { OpsStore } from "../../operations/src/store.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -33,6 +34,8 @@ export interface Config {
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   workers?: Record<string, WorkerRuntime>;
+  /** Optional separate operations journal. Existing evidence logs stay unchanged. */
+  operationsDir?: string;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -165,6 +168,9 @@ export function makeServer(cfg: Config) {
   }
 
   const store = new Store(cfg.dir, cfg.witness, { exclusiveWriter: true });
+  let operations: OpsStore | null = null;
+  try { operations = cfg.operationsDir ? new OpsStore(cfg.operationsDir) : null; }
+  catch (e) { store.close(); throw e; }
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
     store.close();
@@ -273,6 +279,17 @@ export function makeServer(cfg: Config) {
         return res.end(readFileSync(new URL("../../client/index.html", import.meta.url)));
       }
 
+      if (req.method === "GET" && url.pathname === "/dashboard") {
+        res.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "referrer-policy": "no-referrer",
+          "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+        });
+        return res.end(readFileSync(new URL("../../../prototypes/dashboard/index.html", import.meta.url)));
+      }
       const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
       const principal = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
       if (!principal) return json(res, 401, { error: "missing or unknown token" });
@@ -283,6 +300,44 @@ export function makeServer(cfg: Config) {
       if (!bucket || nowMs - bucket.started >= 60_000) rate.set(token, { started: nowMs, count: 1 });
       else if (++bucket.count > maxRequestsPerMinute) return json(res, 429, { error: "rate limit exceeded" });
 
+      // A separate, authorized operations record. No model can raise atom evidence
+      // through this endpoint; no worker receives authority to modify other logs.
+      if (url.pathname.startsWith("/ops/")) {
+        if (!operations) return json(res, 503, { error: "operations not configured" });
+        if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        if (req.method === "GET" && url.pathname === "/ops/state") {
+          try { return json(res, 200, operations.snapshot()); }
+          catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/verify") {
+          return json(res, 200, operations.verify());
+        }
+        if (req.method === "POST" && url.pathname === "/ops/events") {
+          requireWritableIntegrity();
+          let raw: unknown;
+          try { raw = JSON.parse((await readBody(req, maxBodyBytes)) || "{}"); }
+          catch (e) {
+            if (e instanceof HttpError) throw e;
+            throw new HttpError(400, "invalid JSON");
+          }
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            throw new HttpError(422, "operations event must be an object");
+          }
+          const envelope = {
+            id: "ops-" + randomUUID(),
+            at: new Date().toISOString(),
+            actor,
+            event: raw as import("../../operations/src/registry.ts").OpsEvent,
+          };
+          try {
+            const outcome = operations.append(envelope);
+            return json(res, 201, outcome);
+          } catch (e) {
+            if (String(e).includes("changed outside writer")) throw new HttpError(503, "operations journal changed");
+            throw new HttpError(422, (e as Error).message);
+          }
+        }
+      }
       if (req.method === "POST" && url.pathname === "/events") {
         requireWritableIntegrity();
         let raw: any;
@@ -532,8 +587,8 @@ export function makeServer(cfg: Config) {
       return json(res, 500, { error: "internal server error" });
     }
   });
-  server.on("close", () => store.close());
-  return { server, store };
+  server.on("close", () => { store.close(); operations?.close(); });
+  return { server, store, operations };
 }
 
 // Run directly: EAI_TOKENS=./tokens.json EAI_DIR=./data node packages/server/src/server.ts
@@ -559,6 +614,7 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
   );
   const { server } = makeServer({
     dir: dataDir,
+    operationsDir: process.env.EAI_OPERATIONS_DIR ? resolve(process.env.EAI_OPERATIONS_DIR) : undefined,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
     witness,
