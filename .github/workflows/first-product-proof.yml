@@ -1,0 +1,35 @@
+name: first-product-proof
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/first-product-proof.yml'
+      - 'package.json'
+      - 'tests/first-product-smoke.test.ts'
+      - 'scripts/local-ollama.ts'
+      - 'scripts/local-demo.ts'
+      - 'packages/operations/src/code-worker.ts'
+      - 'packages/operations/src/ordered-code-plans.ts'
+      - 'packages/operations/src/docker-project-suite.ts'
+      - 'packages/server/src/server.ts'
+      - 'examples/multifile-smoke/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  first-product:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Prepare exact local test environment
+        run: |
+          set -euo pipefail
+          docker version
+          docker pull node:22-alpine
+      - name: Build the first product and check it
+        run: npm run proof:first-product
