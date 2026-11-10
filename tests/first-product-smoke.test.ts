@@ -9,9 +9,9 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
 import {spawnSync} from "node:child_process";
-import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync} from "node:fs";
+import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {join,dirname,resolve} from "node:path";
 import type {AddressInfo} from "node:net";
 import {fileURLToPath} from "node:url";
 import {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
@@ -41,6 +41,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
   cpSync(example,project,{recursive:true});
   mkdirSync(profile);
   const generated:string[]=[];
+  const checks:Array<{step:number;phase:string;status:string;imageId:string|null;manifestSha256:string}>=[];
   const ollama=createServer(async(req,res)=>{
     if(req.method!=="POST"||req.url!=="/api/chat"){res.writeHead(404);res.end();return}
     let body="";
@@ -107,12 +108,16 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       assert.equal(pre.data.result.status,"passed",pre.data.result.output);
       assert.equal(pre.data.result.testsExecuted,true);
       assert.match(pre.data.result.imageId,/^sha256:[a-f0-9]{64}$/);
+      checks.push({step:i+1,phase:"voor toepassing",status:pre.data.result.status,
+        imageId:pre.data.result.imageId,manifestSha256:pre.data.result.manifestSha256});
       const applied=await call("/ops/code/plan/apply",permission);
       assert.equal(applied.status,200,JSON.stringify(applied.data));
       const post=await call("/ops/code/plan/test-project-post",{planId:id,proposalId});
       assert.equal(post.status,200,JSON.stringify(post.data));
       assert.equal(post.data.result.status,"passed",post.data.result.output);
       assert.equal(post.data.result.testsExecuted,true);
+      checks.push({step:i+1,phase:"na toepassing",status:post.data.result.status,
+        imageId:post.data.result.imageId,manifestSha256:post.data.result.manifestSha256});
       assert.equal(post.data.plan.steps[i].status,"done");
     }
     assert.deepEqual(generated,steps.map(step=>step.path),
@@ -134,7 +139,35 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       gecontroleerdeBestanden:steps.map(step=>step.path),
       eindtest:"geslaagd",publicatie:"niet uitgevoerd"
     };
-    process.stdout.write("EAIwork eerste productproef: "+JSON.stringify(result)+"\n");
+    const output=process.env.EAI_FIRST_PRODUCT_OUTPUT_DIR;
+    if(output){
+      if(output.startsWith("/")||output.includes("..")||
+         !/^[a-zA-Z0-9][a-zA-Z0-9_./-]*$/.test(output))
+        throw new Error("Gebruik alleen een relatieve, veilige uitvoermap.");
+      const target=resolve(output);
+      if(existsSync(target))throw new Error("De uitvoermap bestaat al: "+target);
+      mkdirSync(dirname(target),{recursive:true});
+      cpSync(project,target,{recursive:true});
+      const delivered=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
+        cwd:target,encoding:"utf8",timeout:10000,env:acceptanceEnv()
+      });
+      assert.equal(delivered.status,0,"De gekopieerde oplevering werkt niet: "+delivered.stdout);
+      assert.match(delivered.stdout,/^# tests [1-9][0-9]*$/m);
+      writeFileSync(join(target,"OPLEVERING.md"),
+        "# EAIwork eerste productproef\\n\\n"+
+        "Dit is een klein JavaScript-voorbeeld, geen complete gebruikersapplicatie.\\n"+
+        "Twee bestanden zijn via EAIwork gewijzigd en vóór en na het toepassen samen in Docker getest.\\n"+
+        "De eindcontrole is apart uitgevoerd op het gekopieerde resultaat.\\n\\n"+
+        "**Controleer zelf:** voer in deze map uit: \\n\\n"+
+        "\\`\\`\\`sh\\nnode --test acceptance/final-product.test.js\\n\\`\\`\\`\\n\\n"+
+        "De AI-antwoorden waren voor deze herhaalbare test nagebootst. Er is niets gepubliceerd.\\n");
+      writeFileSync(join(target,"PROEFRESULTAAT.json"),JSON.stringify({
+        ...result,tests:checks,acceptatietest:"geslaagd op gekopieerde bestanden",
+        omvang:"twee bestanden, geen compleet product"
+      },null,2)+"\\n");
+      process.stdout.write("EAIwork bewijsbestanden opgeslagen in "+target+"\\n");
+    }
+    process.stdout.write("EAIwork eerste productproef: "+JSON.stringify(result)+"\\n");
   }finally{
     await app.close();
     await new Promise<void>(resolve=>ollama.close(()=>resolve()));
