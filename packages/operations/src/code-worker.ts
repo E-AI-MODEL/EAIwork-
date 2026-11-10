@@ -333,8 +333,15 @@ export class LocalCodeWorkspace {
     if(!checked.canApply)
       throw new Error("Codecontrole mislukt of het voorstel is gewijzigd");
     const backUp=join(this.storage,record.id+".original");
-    const backupFd=openSync(backUp,"wx",0o600);
-    try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
+    // An interrupted earlier attempt may have written the backup already.
+    // Reuse it only if its bytes still match this exact original revision.
+    if(existsSync(backUp)){
+      if(sha(readBounded(backUp))!==record.sourceSha256)
+        throw new Error("Eerdere back-up wijkt af; controleer het bronbestand handmatig");
+    }else{
+      const backupFd=openSync(backUp,"wx",0o600);
+      try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
+    }
     const target=file+"."+randomUUID()+".eaiwork-tmp";
     let renamed=false;
     try{
