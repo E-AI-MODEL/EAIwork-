@@ -1,6 +1,11 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import type {AddressInfo} from "node:net";
+import {createHash} from "node:crypto";
+import {mkdtempSync,rmSync,writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {OpsStore} from "../packages/operations/src/store.ts";
 import {createDemoServer} from "../scripts/local-demo.ts";
 import {applyOps,emptyOps,type OpsEnvelope} from "../packages/operations/src/registry.ts";
 
@@ -107,4 +112,57 @@ test("legacy unscoped consent can replay but has no authority to lease input",()
     /approval for this executor/);
   assert.equal(state.missions[id].tasks["task-text"].status,"queued");
   assert.equal(state.missions[id].automation?.starts,0);
+});
+
+test("a verified old journal with an existing unscoped lease still opens, but cannot grant another claim",()=>{
+  const dir=mkdtempSync(join(tmpdir(),"eai-legacy-executor-scope-"));
+  const id="mission-legacy-durable";
+  const original=plan(id);
+  const expanded={...original,tasks:[...original.tasks,
+    {id:"task-other",title:"Tweede tekst",taskKind:"text-normalize",
+      dependsOn:[],input:{text:"  Ook  deze  tekst  "}}]};
+  const person={kind:"person" as const,id:"person:legacy"};
+  const runner={kind:"system" as const,id:"system:mission-runner"};
+  const at="2026-11-10T11:00:00Z";
+  const oldRun={runId:"run-prior-executor",workerId:"text-normalize",
+    workerVersion:"1.0.0",adapterId:"text-normalize",inputHash:"a".repeat(64),
+    startedAt:at,verification:"not-evaluated" as const};
+  const events:OpsEnvelope[]=[
+    {id:"legacy-created",at,actor:person,event:{type:"mission.create",plan:expanded}},
+    {id:"legacy-consent",at,actor:person,event:{
+      type:"mission.automation.start",missionId:id,maxStarts:2,executionMode:"remote-text",
+    }},
+    {id:"legacy-started",at,actor:runner,event:{
+      type:"task.lease.claim",missionId:id,taskId:"task-text",
+      leaseId:"lease-old",ownerId:"executor-local-demo",
+      expiresAt:"2026-11-10T11:00:15Z",run:oldRun,
+    }},
+  ];
+  try{
+    let previous="0".repeat(64);
+    const lines=events.map((payload,index)=>{
+      const next=createHash("sha256").update(previous+JSON.stringify(payload)).digest("hex");
+      const item={seq:index+1,prev:previous,hash:next,payload};
+      previous=next;return JSON.stringify(item);
+    });
+    writeFileSync(join(dir,"worker-events.jsonl"),lines.join("\n")+"\n");
+    writeFileSync(join(dir,"worker-events.head"),JSON.stringify({seq:3,hash:previous})+"\n");
+    const store=new OpsStore(dir);
+    const restored=store.snapshot().missions[id];
+    assert.equal(restored.tasks["task-text"].status,"running");
+    assert.equal(restored.tasks["task-text"].run?.lease?.id,"lease-old");
+    assert.deepEqual(restored.automation?.executorIds,[]);
+    assert.equal(restored.automation?.starts,1);
+    assert.equal(store.verify().ok,true);
+    assert.throws(()=>store.append({
+      id:"new-unscoped-claim",at,actor:runner,event:{
+        type:"task.lease.claim",missionId:id,taskId:"task-other",
+        leaseId:"lease-new",ownerId:"executor-local-demo",
+        expiresAt:"2026-11-10T11:00:15Z",
+        run:{...oldRun,runId:"run-new-executor"},
+      },
+    }),/approval for this executor/);
+    assert.equal(store.snapshot().history.length,3);
+    store.close();
+  }finally{rmSync(dir,{recursive:true,force:true})}
 });
