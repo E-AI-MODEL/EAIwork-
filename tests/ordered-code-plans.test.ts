@@ -8,6 +8,7 @@ import {tmpdir} from "node:os";
 import type {AddressInfo} from "node:net";
 import {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
 import {OrderedCodePlans} from "../packages/operations/src/ordered-code-plans.ts";
+import {createDemoServer} from "../scripts/local-demo.ts";
 import type {DockerTestInput,DockerTestResult} from "../packages/operations/src/docker-code-test.ts";
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
@@ -122,4 +123,57 @@ test("plan rejects duplicate paths and stale or modified source bytes",async()=>
     assert.equal(view.steps[0].status,"blocked");
     assert.equal(view.steps[1].status,"waiting");
   }finally{await f.close()}
+});
+
+test("local API enforces ordered proposal, pretest, human apply and posttest",async()=>{
+  const f=await setup();
+  const demo=createDemoServer({codeWorkspace:f.workspace,persistentDir:f.profile,schedulerIntervalMs:0});
+  try{
+    await new Promise<void>(resolve=>demo.server.listen(0,"127.0.0.1",resolve));
+    const origin="http://127.0.0.1:"+((demo.server.address() as AddressInfo).port);
+    const request=async(path:string,body?:unknown)=>{
+      const response=await fetch(origin+path,{
+        method:body===undefined?"GET":"POST",
+        headers:{Authorization:"Bearer "+demo.token,...(body===undefined?{}:{"content-type":"application/json"})},
+        ...(body===undefined?{}:{body:JSON.stringify(body)})
+      });
+      return {status:response.status,body:await response.json()};
+    };
+    const created=await request("/ops/code/plans",{title:"Twee bestanden via API",steps:f.steps});
+    assert.equal(created.status,200);
+    const planId=created.body.id;
+    assert.equal(created.body.nextStep,0);
+    assert.equal((await request("/ops/code/propose",{
+      path:f.steps[1].path,instruction:f.steps[1].instruction,
+      testPath:f.steps[1].testPath})).status,409);
+    const first=await request("/ops/code/plan/propose",{planId});
+    assert.equal(first.status,200);
+    const proposalId=first.body.proposalId;
+    assert.equal(first.body.nextStep,0);
+    assert.equal((await request("/ops/code/plan/apply",{
+      planId,proposalId,expectedSha256:"0".repeat(64),approve:true})).status,409);
+    assert.equal((await request("/ops/code/plan/test-post",{planId,proposalId})).status,409);
+    const checked=await request("/ops/code/plan/test-pre",{planId,proposalId});
+    assert.equal(checked.status,200);
+    assert.equal(checked.body.report.status,"passed");
+    const proposal=await request("/ops/code/proposal?id="+proposalId);
+    assert.equal(proposal.status,200);
+    const applied=await request("/ops/code/plan/apply",{
+      planId,proposalId,expectedSha256:proposal.body.replacementSha256,approve:true});
+    assert.equal(applied.status,200);
+    assert.equal(applied.body.plan.steps[0].status,"needs-post-test");
+    assert.equal((await request("/ops/code/plan/propose",{planId})).status,409);
+    const post=await request("/ops/code/plan/test-post",{planId,proposalId});
+    assert.equal(post.status,200);
+    assert.equal(post.body.report.status,"passed");
+    assert.equal(post.body.plan.nextStep,1);
+    assert.equal(readFileSync(join(f.project,"src","two.js"),"utf8"),
+      "export const value = 1;\n");
+    const verify=await request("/ops/verify");
+    assert.equal(verify.status,200);
+    assert.equal(verify.body.ok,true);
+  }finally{
+    await demo.close();
+    await f.close();
+  }
 });
