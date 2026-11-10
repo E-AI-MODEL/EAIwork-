@@ -65,9 +65,9 @@ export interface Defect {
 }
 export type OpsEvent =
   | MissionEvent
-  | { type: "code.activity"; proposalId:string; action:"proposed"|"tested"|"applied"|"restored";
+  | { type: "code.activity"; proposalId:string; action:"proposed"|"imported"|"tested"|"applied"|"restored";
       path:string; sourceSha256:string; replacementSha256:string;
-      result:"review-required"|"passed"|"failed"|"unavailable"|"applied"|"restored";
+      result:"review-required"|"legacy-unverified"|"passed"|"failed"|"unavailable"|"applied"|"restored";
       modelId:string; testSha256?:string }
   | { type: "worker.register"; contract: WorkerContract }
   | { type: "worker.release"; id: string; version?: string; evidenceRef: string }
@@ -148,7 +148,7 @@ function transitionOps(
     // This journal records server-observed transitions. It is NOT an
     // authorization to modify files and carries no source-code contents.
     if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(e.proposalId)||
-       !["proposed","tested","applied","restored"].includes(e.action)||
+       !["proposed","imported","tested","applied","restored"].includes(e.action)||
        typeof e.path!=="string"||e.path.length>240||!e.path.trim()||
        e.path.includes("..")||e.path.startsWith("/")||
        !/^[0-9a-f]{64}$/.test(e.sourceSha256)||
@@ -158,19 +158,20 @@ function transitionOps(
     if(e.testSha256!==undefined&&!/^[0-9a-f]{64}$/.test(e.testSha256))
       fail("invalid code test fingerprint");
     const actionResults:Record<string,string[]> = {
-      proposed:["review-required"],tested:["passed","failed","unavailable"],
+      proposed:["review-required"],imported:["legacy-unverified"],tested:["passed","failed","unavailable"],
       applied:["applied"],restored:["restored"]
     };
     if(!actionResults[e.action]?.includes(e.result))fail("invalid code action result");
     const previous=current.history.filter(row=>
       row.event.type==="code.activity"&&row.event.proposalId===e.proposalId);
-    if(e.action==="proposed"){
-      requireHuman(envelope.actor);
+    if(e.action==="proposed"||e.action==="imported"){
+      if(e.action==="proposed")requireHuman(envelope.actor);
+      else if(envelope.actor.kind!=="system")fail("legacy import requires system actor");
       if(previous.length)fail("code proposal already recorded");
       if(e.testSha256!==undefined)fail("test fingerprint not allowed in proposal");
     }else{
       const first=previous[0]?.event;
-      if(!first||first.type!=="code.activity"||first.action!=="proposed")
+      if(!first||first.type!=="code.activity"||!["proposed","imported"].includes(first.action))
         fail("code activity requires recorded proposal");
       if(first.path!==e.path||first.sourceSha256!==e.sourceSha256||
          first.replacementSha256!==e.replacementSha256||
@@ -179,7 +180,7 @@ function transitionOps(
       if(last.type!=="code.activity")fail("invalid code history");
       if(e.action==="tested"){
         if(envelope.actor.kind!=="check")fail("code test outcome requires trusted checker");
-        if(!["proposed","tested"].includes(last.action)||!e.testSha256)
+        if(!["proposed","imported","tested"].includes(last.action)||!e.testSha256)
           fail("code test requires pending proposal and test fingerprint");
       }else if(e.action==="applied"){
         requireHuman(envelope.actor);
@@ -188,7 +189,7 @@ function transitionOps(
         if(e.testSha256!==undefined)fail("apply must not invent test evidence");
       }else if(e.action==="restored"){
         requireHuman(envelope.actor);
-        if(last.action!=="applied")fail("code restoration requires applied proposal");
+        if(last.action!=="applied"&&last.action!=="imported")fail("code restoration requires applied proposal");
         if(e.testSha256!==undefined)fail("restore must not invent test evidence");
       }
     }
