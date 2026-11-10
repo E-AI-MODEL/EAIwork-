@@ -88,6 +88,28 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     const outcome=seen.missions["mission-search"].tasks["task-find"].run.output;
     assert.equal(outcome.results[0].path,"src/example.ts");
     assert.equal(outcome.results[0].review,"candidate-not-verified");
+    assert.equal((await request("POST","/ops/builders/compose","s".repeat(40),{id:"composed-test",name:"Tester"})).status,403);
+    const built=await request("POST","/ops/builders/compose","a".repeat(40),{id:"composed-test",name:"Samengestelde worker"});
+    assert.equal(built.status,200);
+    const candidate=await built.json() as any;
+    assert.equal(candidate.status,"contract-proposal-only");
+    assert.deepEqual(candidate.contract.recipe.steps,["text-normalize","text-metrics"]);
+    assert.equal((await request("POST","/ops/events","a".repeat(40),
+      {type:"worker.register",contract:candidate.contract})).status,201);
+    const composeTest=await request("POST","/ops/workers/composed-test/evaluate","a".repeat(40),{});
+    assert.equal(composeTest.status,200);
+    const composeProof=await composeTest.json() as any;
+    assert.equal(composeProof.numerator,3);
+    assert.equal(composeProof.passed,true);
+    assert.equal((await request("POST","/ops/events","a".repeat(40),
+      {type:"worker.release",id:"composed-test",evidenceRef:composeProof.evidenceRef})).status,201);
+    const composedMission={id:"mission-builder",title:"Samengestelde worker",goal:"Normalize and count",
+      tasks:[{id:"task-inspect",title:"Inspect local text",taskKind:"text-inspect",dependsOn:[],input:{text:"  Hallo   wereld"}}]};
+    assert.equal((await request("POST","/ops/missions","a".repeat(40),{plan:composedMission})).status,201);
+    const builtRun=await(await request("POST","/ops/missions/mission-builder/run","a".repeat(40),{})).json() as any;
+    assert.equal(builtRun.stopReason,"complete");
+    const completed=await(await request("GET","/ops/missions","a".repeat(40))).json() as any;
+    assert.equal(completed.missions["mission-builder"].tasks["task-inspect"].run.output.words,2);
     assert.equal((await request("POST","/ops/events","r".repeat(40),{type:"worker.register"})).status,403);
     const contract={
       id:"proof-worker",version:"1.0.0",name:"Proof worker",specialization:"Verify test fixtures",
