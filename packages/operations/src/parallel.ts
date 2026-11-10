@@ -194,6 +194,15 @@ export async function runParallelPureText(
         current.workers[item.kind]?.contract.version===item.version;
       const finishedAt=new Date().toISOString();
       const elapsedMs=Math.round(performance.now()-item.startedMs);
+      const expiresAt=attempt.run?.lease?.expiresAt;
+      // A late subprocess is never allowed to record a backdated result.
+      // Expire the durable claim instead, leaving any retry to a person.
+      if(expiresAt&&Date.parse(finishedAt)>Date.parse(expiresAt)){
+        emit({type:"task.lease.expire",missionId,taskId:item.taskId,
+          runId:item.runId,leaseId:item.leaseId});
+        report.failed.push(item.taskId);
+        continue;
+      }
       if(!outcome.ok||!admitted){
         emit({type:"task.failed",missionId,taskId:item.taskId,runId:item.runId,
           leaseId:item.leaseId,finishedAt,elapsedMs,
