@@ -87,6 +87,16 @@ export function createDemoServer(options:{schedulerIntervalMs?:number}={}){
     tasks:[{id:"task-inspect",title:"Tekstinspectie",taskKind:"text-inspect",
       dependsOn:[],input:{text:"  EAIwork  kan  combineren  "}}],
   }});
+  emit({type:"mission.create",plan:{
+    id:"mission-demo-automatic",title:"Automatische tekstverwerking uitproberen",
+    goal:"Laat de server met een taakmaximum twee afhankelijke lokale stappen uitvoeren",
+    tasks:[
+      {id:"task-clean-auto",title:"Tekst normaliseren",taskKind:"text-normalize",
+        dependsOn:[],input:{text:"  EAIwork  voert  taken  uit  "}},
+      {id:"task-count-auto",title:"Woorden tellen",taskKind:"text-metrics",
+        dependsOn:["task-clean-auto"],textFrom:"task-clean-auto"},
+    ],
+  }});
   async function close(){
     if(server.listening)await new Promise<void>(done=>server.close(()=>done()));
     rmSync(root,{recursive:true,force:true});
@@ -103,7 +113,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       "Dashboard: http://127.0.0.1:"+port+"/dashboard\n"+
       "Toegangstoken: "+demo.token+"\n"+
       "Open Contracten en registratie en verbind met dit tijdelijke token.\n"+
-      "Er zijn drie opdrachten en vier geteste lokale workers.\n"+
+      "Er zijn vier opdrachten en vier geteste lokale workers.\n"+
       "Stop met Ctrl+C. Tijdelijke gegevens worden verwijderd.\n\n");
   });
   let closing=false;
