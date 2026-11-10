@@ -137,7 +137,7 @@ function transitionOps(
     history:current.history,
   };
   if (e.type === "mission.create" || e.type === "mission.extend" || e.type === "mission.pause" || e.type === "mission.resume" ||
-      e.type === "task.started" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
+      e.type === "task.started" || e.type === "task.lease.claim" || e.type === "task.lease.renew" || e.type === "task.lease.expire" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
     applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
   } else if (e.type === "worker.register") {
     requireHuman(envelope.actor);
