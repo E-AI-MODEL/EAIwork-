@@ -1,64 +1,54 @@
-# Lokale proef: twee bestanden samen testen met Ollama
+# EAIwork met Ollama testen op je Mac
 
-Deze proef controleert de lokale EAIwork-codeworker met twee kleine JavaScript-modules. De bestanden importeren elkaar. Er worden geen bestanden uit een echt project gewijzigd.
+Zorg dat **Ollama** en **Docker Desktop** openstaan. Je hebt ook Git en Node.js 22.18 of nieuwer nodig. Er moet minstens één Ollama-model op je Mac staan.
 
-## Voorbereiden
+## Kopieer deze terminalcommando's
 
-Gebruik de ontwikkelbranch `feature/combined-project-docker-tests-v01-20261110` van EAIwork. Hiervoor zijn Node.js 22.18 of nieuwer, Ollama, Docker en een al geïnstalleerd Ollama-model nodig.
-
-Start Ollama en Docker. Controleer het aanwezige model en de Docker-afbeelding:
+**1. Haal de testversie op**
 
 ```sh
-ollama list
+git clone -b feature/easy-local-ollama-start-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+cd ~/EAIwork-test
+```
+
+**2. Maak Docker klaar**
+
+```sh
 docker pull node:22-alpine
 ```
 
-Maak vanuit de hoofdmap van de EAIwork-repository een **afzonderlijke kopie** van het voorbeeldproject:
+**3. Start EAIwork met een veilig voorbeeldproject**
 
 ```sh
-mkdir -p "$HOME/eaiwork-voorbeeld"
-cp -R examples/multifile-smoke/. "$HOME/eaiwork-voorbeeld/"
+npm run local:ollama -- --example
 ```
 
-Start de lokale EAIwork-server met een model dat al onder `ollama list` staat. Vervang `MODELNAAM` door die naam:
+Er verschijnt automatisch een **genummerde lijst** met jouw geïnstalleerde Ollama-modellen. Typ alleen het nummer en druk op Enter. Staat er maar één model op je Mac, dan gebruikt EAIwork dat direct.
 
-```sh
-npm run local:ollama -- --model=MODELNAAM --worktree="$HOME/eaiwork-voorbeeld"
-```
+Het programma maakt zelf een nieuwe voorbeeldmap. Je hoeft geen mapnaam of modelnaam in te typen. Je eigen projecten blijven ongewijzigd.
 
-Open het lokale dashboardadres uit de terminal. Verbind met het lokale toegangstoken en ga naar **Codeworker**. Er is geen cloudfallback.
+**4. Open het dashboard**
 
-## Opdracht over twee bestanden
+Open het adres uit Terminal, meestal [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard). Verbind via **Contracten en registratie** met het toegangstoken dat Terminal toont. Ga naar **Codeworker**.
 
-Maak een plan met twee regels:
+**5. Plak deze twee regels in het nieuwe codeplan**
 
 ```text
-src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount en schrijf een volledig geldig JavaScript-bestand.
-src/invoice.js | tests/invoice.test.js | Voeg export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de bestaande export total met de waarde amount * 2. Schrijf het volledige bestand.
+src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount.
+src/invoice.js | tests/invoice.test.js | Voeg een export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de export total.
 ```
 
-EAIwork bewaart de bronversies en de volgorde. Voor ieder bestand:
+Klik **Leg volgorde vast**. Controleer per bestand het voorstel, voer de gezamenlijke Docker-test uit, keur de wijziging goed en test daarna opnieuw. De volgende stap wordt alleen vrijgegeven na een geslaagde test.
 
-1. Vraag een voorstel aan en controleer de verschillen en volledige vervangende code.
-2. Kies **Test alle bestanden vóór toepassing**. Dit test de voorgestelde vervanging samen met de actuele andere module en beide testbestanden.
-3. Bevestig de exacte wijziging. De goedkeuring geldt alleen voor deze versie.
-4. Kies **Test alle bestanden na toepassing**. Pas na een geslaagde gezamenlijke test mag de volgende stap beginnen.
+**Stoppen:** druk in Terminal op **Ctrl+C**.
 
-De testomgeving kopieert alleen de gekozen twee `.js`-bestanden en hun twee `.test.js`-bestanden, maakt daarin een minimaal `package.json` aan en voert een vaste `node --test` uit. De originele projectmap wordt niet in de container gemount. Het netwerk staat uit. Het model mag geen eigen commando's bepalen of tests uitschakelen.
+Bij een mislukte test stopt het plan. De eerdere wijziging wordt niet vanzelf teruggedraaid. Deze proef gebruikt alleen de gemaakte voorbeeldmap.
 
-## Waar let je op?
+## Werkt het niet?
 
-- Beide afzonderlijke modelvoorstellen moeten in het dashboard terug te lezen zijn, inclusief de oorspronkelijke en voorgestelde SHA-256.
-- De projecttest hoort een manifesthash, Docker-afbeelding-ID, uitvoeringsstatus en testuitvoer te tonen.
-- Bij een mislukte of ontbrekende projecttest mag EAIwork geen nieuw bestand aanpassen.
-- Een gewijzigd test- of bronbestand moet oude testtoestemming ongeldig maken.
-- Een nieuwe start van EAIwork moet het bestaande plan en de goedkeuringen terugvinden.
-- Kijk in **Operationslog van de codeworker** of de gezamenlijke tests onder `suite-tested` zijn vastgelegd.
+- **Geen modellen gevonden:** open Ollama en zorg dat er minstens één model is gedownload. Controleer eventueel met `ollama list`.
+- **Docker niet bereikbaar:** start Docker Desktop en probeer opdracht 2 opnieuw.
+- **Map bestaat al:** gebruik een andere mapnaam in opdracht 1, bijvoorbeeld `~/EAIwork-test2`, en ga daarna naar die map.
+- **Dashboard niet zichtbaar:** controleer de URL die Terminal toont.
 
-Een mislukte of ongeldige wijziging blijft geblokkeerd voor beoordeling. EAIwork draait eerder toegepaste bestanden niet automatisch terug. Test daarom uitsluitend met de kopie van dit voorbeeldproject.
-
-## Testgrenzen
-
-De gewone CI gebruikt nagebootste Ollama- en Docker-antwoorden om de volgorde, hashes en blokkades te controleren. De aparte Docker-smoketest gebruikt werkelijk Docker en twee gekoppelde modules. **Een echte Ollama-uitvoer op jouw laptop is nog niet getest.**
-
-Deze uitvoering test alleen vooraf gekozen kleine JavaScript-bronnen en bijbehorende Node-tests. Het is geen algemene `npm test` over een volledig project en geen toestemming voor automatische commits, releases of publicatie.
+Een echte proef met jouw Ollama-model moet nog worden uitgevoerd. De GitHub-tests controleren de route met nagebootste modelantwoorden en een aparte echte Docker-test.
