@@ -7,7 +7,7 @@ test("dashboard is valid self-contained JavaScript with full product navigation"
   const scripts=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(x=>x[1]);
   assert.ok(scripts.length,"inline application script missing");
   for(const script of scripts)new Script(script,{filename:"dashboard/index.html"});
-  for(const label of ["Opdrachten","Planner en taken","Workerleger","Workerbibliotheek","Contracten en registratie","Worker Builder","Kwaliteit en drift","Menselijke besluiten","Bronnen en RepoSearch","Logboek","Instellingen"]){
+  for(const label of ["Opdrachten","Echte uitvoering","Planner en taken","Workerleger","Workerbibliotheek","Contracten en registratie","Worker Builder","Kwaliteit en drift","Menselijke besluiten","Bronnen en RepoSearch","Logboek","Instellingen"]){
     assert.ok(html.includes(label),"missing product screen: "+label);
   }
 });
@@ -18,5 +18,11 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/fictiev/);
   assert.match(html,/fetch\('\/ops\/state'/);
   assert.match(html,/fetch\('\/ops\/events'/);
+  assert.match(html,/onExecutionServer/);
+  assert.match(html,/runRealMission/);
+  assert.match(html,/controlRealMission/);
+  assert.match(html,/ops\/missions/);
+  assert.match(html,/builtin-release/);
+  assert.doesNotMatch(html,/localStorage\.setItem\(/);
   assert.doesNotMatch(html,/fetch\(['"]https?:\/\//);
 });
