@@ -63,6 +63,17 @@ test("Docker test status must match candidate and unchanged test file before app
     const draft=await proposed.json() as any;
     assert.equal(draft.testPath,"tests/counter.test.js");
     assert.equal(draft.preflight.status,"passed");
+    const readAudit=async()=>fetch(address+"/ops/code/activity?proposalId="+encodeURIComponent(draft.id),
+      {headers:{Authorization:"Bearer "+demo!.token}});
+    const initialAudit=await readAudit();
+    assert.equal(initialAudit.status,200);
+    const initialEvents=(await initialAudit.json() as any).events;
+    assert.deepEqual(initialEvents.map((x:any)=>x.event.action),["proposed"]);
+    assert.equal(initialEvents[0].actor.kind,"person");
+    assert.equal(initialEvents[0].event.replacementSha256,draft.replacementSha256);
+    assert.equal(JSON.stringify(initialEvents).includes("export const"),false);
+    assert.equal((await post("/ops/events",{type:"code.activity",proposalId:draft.id})).status,403);
+
     const before=await post("/ops/code/check",{proposalId:draft.id});
     assert.equal((await before.json() as any).canApply,false);
     const premature=await post("/ops/code/apply",{proposalId:draft.id,
@@ -74,6 +85,11 @@ test("Docker test status must match candidate and unchanged test file before app
     const result=await tested.json() as DockerTestResult;
     assert.equal(result.status,"passed");
     assert.equal(result.testsExecuted,true);
+    const afterTestAudit=(await(await readAudit()).json() as any).events;
+    assert.deepEqual(afterTestAudit.map((x:any)=>x.event.action),["proposed","tested"]);
+    assert.equal(afterTestAudit[1].actor.kind,"check");
+    assert.equal(afterTestAudit[1].event.testSha256,result.testSha256);
+
     assert.equal(calls.length,1);
     assert.equal(calls[0].candidateSource,"export const count = 2;\n");
     assert.equal(calls[0].testSource,f.testSource);
@@ -94,6 +110,12 @@ test("Docker test status must match candidate and unchanged test file before app
     assert.equal((await applied.json() as any).testsExecuted,false,
       "apply response does not itself execute tests");
     assert.equal(readFileSync(join(f.work,"src","counter.js"),"utf8"),"export const count = 2;\n");
+    const appliedAudit=(await(await readAudit()).json() as any).events;
+    assert.deepEqual(appliedAudit.map((x:any)=>x.event.action),["proposed","tested","applied"]);
+    assert.equal(appliedAudit[2].actor.kind,"person");
+    assert.equal((await(await fetch(address+"/ops/verify",
+      {headers:{Authorization:"Bearer "+demo!.token}})).json() as any).ok,true);
+
   }finally{if(demo)await demo.close();await new Promise<void>(ok=>fake.close(()=>ok()));f.close()}
 });
 test("bad Docker input is rejected without invoking a shell",async()=>{
