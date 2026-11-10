@@ -145,3 +145,39 @@ test("unexpected source after crash stays blocked without overwriting files",asy
     await stub.close();f.clean();
   }
 });
+
+test("interrupted restore is reconciled without applying the same source twice",async()=>{
+  const f=fixture(),stub=await ollamaStub();
+  let first:ReturnType<typeof connect>|undefined,second:ReturnType<typeof connect>|undefined;
+  try{
+    first=connect(f,stub.url);const api=await first.start();
+    const proposal=await(await api.post("/ops/code/propose",
+      {path:"src/counter.js",instruction:"Zet teller op twee"})).json() as any;
+    assert.equal((await api.post("/ops/code/apply",
+      {proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,200);
+    assert.equal(readFileSync(f.file,"utf8"),f.target);
+    (first.worker as any).restore=()=>{
+      writeFileSync(f.file,f.source);
+      throw Error("simulated crash after source restore");
+    };
+    assert.equal((await api.post("/ops/code/restore",
+      {proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+    await first.demo.close();first=undefined;
+    second=connect(f,stub.url);const reopened=await second.start();
+    const pending=(await(await reopened.get("/ops/code/recovery")).json() as any).pending[0];
+    assert.equal(pending.action,"restore-started");
+    assert.equal(pending.outcome,"restored");
+    assert.equal((await reopened.post("/ops/code/recover",
+      {proposalId:proposal.id,approve:true})).status,200);
+    const current=(await(await reopened.get("/ops/code/proposal?id="+proposal.id)).json() as any);
+    assert.equal(current.status,"restored");
+    assert.equal(readFileSync(f.file,"utf8"),f.source);
+    assert.equal((await(await reopened.get("/ops/code/recovery")).json() as any).blocked,false);
+    assert.deepEqual((await(await reopened.get("/ops/code/activity?proposalId="+proposal.id)).json() as any)
+      .events.map((e:any)=>e.event.action),
+      ["proposed","apply-started","applied","restore-started","restored"]);
+  }finally{
+    if(first)await first.demo.close();if(second)await second.demo.close();
+    await stub.close();f.clean();
+  }
+});
