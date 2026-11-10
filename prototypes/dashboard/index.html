@@ -27,6 +27,7 @@
   .contract-error{font-size:12px;color:#ac4338}
   .contract-code{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);background:var(--paper);border-radius:7px;padding:10px}
   @media(max-width:800px){.contract-grid{grid-template-columns:1fr}.contract-form{grid-template-columns:1fr}.contract-form .wide{grid-column:auto}}
+
 /* Mobiele bediening: laat de navigatie nooit een eigen viewport-rij opvullen. */
 .nav-mobile-hint{display:none}
 @media(max-width:850px){
@@ -72,6 +73,133 @@
  .task-grid{grid-template-columns:repeat(5,168px);overflow-x:auto;scrollbar-width:thin}
  .footer-note{margin-top:18px;padding-top:13px;line-height:1.5}
 }
+
+/* Compacte EAIwork-bediening; volledige functies blijven onder Meer beschikbaar. */
+:root{--sidebar:208px}
+.nav-short{display:none}
+.nav-primary{display:flex;flex-direction:column;gap:3px}
+.sidebar{padding:16px 12px 12px}
+.sidebar .brand{padding:2px 9px 19px}
+.nav-primary>.nav-item,.nav-more>summary{min-height:38px;padding:8px 10px;font-size:12px}
+.nav-more{position:relative;min-width:0;margin-top:6px;border-top:1px solid var(--line);padding-top:7px}
+.nav-more>summary{display:flex;align-items:center;gap:12px;list-style:none;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:650}
+.nav-more>summary::-webkit-details-marker{display:none}
+.nav-more>summary:hover,.nav-more[open]>summary{background:var(--soft);color:var(--ink)}
+.nav-more>summary svg{width:17px;height:17px;flex:0 0 auto}
+.nav-more-content{display:flex;flex-direction:column;gap:2px;padding:6px 0}
+.nav-more-content .nav-item{min-height:34px;padding:7px 10px;font-size:11px}
+.nav-more-title{margin:9px 10px 3px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.nav-more-actions{display:flex;gap:6px;flex-wrap:wrap;padding:8px 5px}
+.topbar{height:56px;padding:0 22px}
+.top-location{display:flex;align-items:baseline;gap:12px;min-width:0}
+.top-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:29vw}
+.top-desktop-actions{display:inline-flex;gap:7px}
+.workspace{max-width:1420px;padding:18px 23px 35px}
+.nav-mobile-hint{display:none}
+@media(max-width:850px){
+ .sidebar{overflow:visible;height:auto;padding:9px 12px 7px;z-index:20}
+ .sidebar .brand{padding:0 0 7px;gap:8px}
+ .sidebar .brand-symbol{width:27px;height:27px}
+ .sidebar .brand-name{font-size:16px}
+ .sidebar .brand-tag{display:none}
+ .sidebar-nav{display:block;overflow:visible;max-width:none;padding:0}
+ .nav-primary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+ .nav-primary>.nav-item,.nav-more>summary{width:100%;height:48px;min-width:0;min-height:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:5px 1px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:9.5px;line-height:1.15;text-align:center}
+ .nav-primary>.nav-item.active{background:var(--lightgreen);border-color:#bfd6c9}
+ .nav-primary>.nav-item svg,.nav-more>summary svg{width:16px;height:16px}
+ .nav-primary .nav-long{display:none}
+ .nav-primary .nav-short{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;font-weight:670}
+ .nav-more{margin:0;padding:0;border:0;z-index:25}
+ .nav-more>summary{list-style:none}
+ .nav-more-content{position:absolute;right:0;top:calc(100% + 6px);width:min(320px,90vw);max-height:55vh;overflow-y:auto;background:#fff;border:1px solid #b7ccc0;border-radius:10px;box-shadow:0 16px 40px #10251c25;padding:8px;z-index:30}
+ .nav-more-content .nav-item{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;text-align:left;gap:10px;padding:10px;min-height:38px}
+ .nav-more-content .nav-long{display:block}
+ .nav-more-content .nav-short{display:none}
+ .topbar{height:42px;padding:8px 13px;flex-direction:row;align-items:center}
+ .top-title{font-size:12px}
+ .top-sub{display:none}
+ .top-actions{width:auto}
+ .top-actions .pill{font-size:9px;padding:4px 7px}
+ .top-desktop-actions{display:none}
+ .workspace{padding:15px 14px 25px}
+}
+
+/* Grafische statusweergave met cijfers uit de bestaande dashboardstaat. */
+.dash-head{display:flex;justify-content:space-between;align-items:center;gap:15px;margin-bottom:15px}
+.dash-eyebrow{display:block;color:var(--muted);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:740}
+.dash-head h1{font-size:25px;line-height:1.2;margin:2px 0 3px;font-weight:780;letter-spacing:-.05em}
+.dash-head p{margin:0;color:var(--muted);font-size:11px}
+.dash-head-actions{display:flex;gap:7px;flex-wrap:wrap}
+.dash-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:12px}
+.dash-kpi{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:99px;position:relative;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;text-align:left;color:var(--ink)}
+.dash-kpi:hover,.dash-mission:hover{border-color:#b7cdbf;background:#f5f9f6}
+.dash-kpi>span:first-child{font-size:10px;color:var(--muted);font-weight:650}
+.dash-kpi strong{font-size:25px;letter-spacing:-.045em;line-height:1.2;font-variant-numeric:tabular-nums}
+.dash-kpi small{font-size:9.5px;color:var(--muted)}
+.dash-kpi-mark{position:absolute;right:15px;top:20px;width:9px;height:9px;border:2px solid #84aaa0;border-radius:50%}
+.dash-kpi-mark.attention{background:#d79c50;border-color:#d79c50}
+.dash-card{min-width:0;border:1px solid var(--line);background:#fff;border-radius:10px;overflow:hidden}
+.dash-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:43px;padding:11px 15px;border-bottom:1px solid var(--line2)}
+.dash-card-head h2{font-size:12px;font-weight:750;margin:0}
+.dash-card-head .linkbtn{font-size:10px}
+.dash-context{color:var(--muted);font-size:10px;max-width:45%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.dash-pipeline{margin-bottom:12px}
+.dash-stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;background:var(--line2)}
+.dash-stage{min-width:0;border:0;background:#fff;display:flex;align-items:center;gap:10px;text-align:left;padding:15px 12px;cursor:pointer;flex-wrap:wrap;color:var(--ink)}
+.dash-stage:hover{background:#f4f9f5}
+.dash-stage-circle{display:grid;place-items:center;width:29px;height:29px;flex:0 0 29px;background:#f1f3f1;border:1px solid #cfd9d1;border-radius:50%;font-size:11px;font-weight:800;color:#718078}
+.dash-stage.ready .dash-stage-circle{color:#2f725e;background:#e2f1e9;border-color:#b5d2c1}
+.dash-stage.warn .dash-stage-circle{color:#986422;background:#faf0dd;border-color:#e7ce9a}
+.dash-stage.blocked .dash-stage-circle{color:#a44b45;background:#f9e7e5;border-color:#e2b7b1}
+.dash-stage-label{font-weight:700;font-size:11px;min-width:0}
+.dash-stage small{font-size:9px;color:var(--muted);flex-basis:100%;padding-left:39px;margin-top:-7px}
+.dash-next{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 14px;background:#f9fbf9;border-top:1px solid var(--line2);font-size:10.5px}
+.dash-next span{display:flex;gap:5px;align-items:center;color:var(--muted)}
+.dash-next span svg{width:13px;height:13px}
+.dash-next b{font-size:10.5px}
+.dash-next button{margin-left:auto;font-size:10px}
+.dash-columns{display:grid;grid-template-columns:minmax(0,1.48fr) minmax(305px,1fr);gap:12px;align-items:start}
+.dash-main-column,.dash-side-column{display:grid;gap:12px;min-width:0}
+.dash-mission{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 8px;align-items:center;width:100%;padding:12px 15px;border:0;border-bottom:1px solid var(--line2);background:#fff;text-align:left;color:var(--ink)}
+.dash-mission:last-child{border-bottom:0}
+.dash-mission b{display:block;font-size:11.5px}
+.dash-mission small{display:block;color:var(--muted);font-size:9.5px;margin-top:1px}
+.dash-mission-pct{font-size:11px;font-weight:700;color:#367c68;font-variant-numeric:tabular-nums}
+.dash-mission-bar{height:5px;background:#edf1ed;grid-column:1/-1;border-radius:20px;overflow:hidden}
+.dash-mission-bar i{display:block;background:#4c8a73;height:100%;border-radius:20px}
+.dash-alert,.dash-activity{display:flex;align-items:flex-start;gap:9px;padding:11px 14px;border-bottom:1px solid var(--line2)}
+.dash-alert:last-child,.dash-activity:last-child{border-bottom:0}
+.dash-alert>i{width:7px;height:7px;flex:0 0 7px;margin-top:5px;background:#cd8b4f;border-radius:50%}
+.dash-alert b,.dash-activity b{display:block;font-size:10.5px;line-height:1.4}
+.dash-alert p{font-size:10px;line-height:1.45;margin:3px 0 0;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dash-activity>i{flex:0 0 6px;height:6px;margin-top:5px;background:#75a38c;border-radius:50%}
+.dash-activity small{display:block;font-size:9.5px;color:var(--muted);margin-top:2px}
+.dash-empty{padding:14px;margin:0;color:var(--muted);font-size:11px}
+.dash-chart-row{display:flex;align-items:center;justify-content:center;gap:20px;padding:12px 16px}
+.dash-donut{width:128px;height:128px;flex:0 0 auto;max-width:43%}
+.dash-donut-number{font-size:22px;fill:var(--ink);font-weight:780}
+.dash-donut-label{font-size:9px;fill:var(--muted)}
+.dash-legend{display:grid;gap:7px;flex:1;max-width:260px}
+.dash-legend-row{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted)}
+.dash-legend-row b{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink)}
+.dash-legend-dot{display:inline-block;flex:0 0 8px;height:8px;border-radius:3px}
+.dash-status-strip{display:flex;overflow:hidden;height:7px;margin:0 15px 14px;border-radius:7px;background:#f0f3f1}
+.dash-status-strip span{display:block;min-width:0}
+.dash-bargraph{display:flex;height:88px;align-items:end;gap:16px;justify-content:space-around;padding:7px 25px 0}
+.dash-barcol{display:flex;flex:1;max-width:55px;height:100%;flex-direction:column;align-items:center;gap:5px}
+.dash-bar-pair{display:flex;justify-content:center;align-items:flex-end;gap:3px;width:100%;height:67px;border-bottom:1px solid var(--line)}
+.dash-bar-pair i{width:17px;display:block;border-radius:3px 3px 0 0}
+.dash-bar-total{background:#dae5dc}
+.dash-bar-done{background:#4c8a73}
+.dash-bar-label{font-size:9px;color:var(--muted)}
+.dash-bar-key{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--muted);font-size:9px;padding:10px 0}
+.dash-bar-key i{display:block;width:8px;height:8px;background:#dae5dc;border-radius:2px}
+.dash-bar-key i:nth-of-type(2){background:#4c8a73;margin-left:10px}
+.dash-worker-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;background:#f9fbf9;font-size:9.5px;color:var(--muted)}
+.dash-disclaimer{font-size:9.5px;color:var(--muted);line-height:1.5;margin:12px 1px}
+@media(max-width:1000px){.dash-columns{grid-template-columns:1fr 1fr}.dash-stage{padding:12px 8px;gap:7px}.dash-stage-circle{width:25px;height:25px;flex-basis:25px}.dash-stage small{padding-left:32px}}
+@media(max-width:700px){.dash-columns{grid-template-columns:minmax(0,1fr)}.dash-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-stages{grid-template-columns:repeat(5,minmax(0,1fr))}.dash-stage{display:flex;flex-direction:column;align-items:center;text-align:center;gap:5px;padding:10px 2px}.dash-stage-label{font-size:9px}.dash-stage small{padding:0;margin:0;font-size:8px;flex-basis:auto}.dash-stage-circle{width:27px;height:27px;flex-basis:27px}.dash-head{align-items:flex-start}.dash-head h1{font-size:22px}.dash-head-actions{justify-content:flex-end}.dash-head-actions .btn{padding:7px 9px;font-size:10px}.dash-chart-row{gap:14px}}
+@media(max-width:390px){.dash-head{flex-direction:column;gap:8px}.dash-head-actions{justify-content:flex-start}.dash-kpi{min-height:82px;padding:10px 12px}.dash-kpi strong{font-size:21px}.dash-stages{gap:0}.dash-stage-label{font-size:8px}.dash-stage small{font-size:7.5px}.dash-card-head{padding:10px 12px}.dash-context{max-width:40%}.dash-donut{width:112px;height:112px}}
 </style>
 </head>
 <body>
@@ -128,9 +256,36 @@ const init=()=>({missions:structuredClone(missionSeed),workers:structuredClone(w
 let s=init();let opsToken='';let opsPollTimer=null;let opsPollBusy=false;const onExecutionServer=()=>location.pathname==='/dashboard';const nav=[['overzicht','Overzicht','overview'],['opdrachten','Opdrachten (demo)','missions'],['uitvoering','Echte uitvoering','play'],['planner','Planner en taken','planner'],['workers','Workerleger','workers'],['bibliotheek','Workerbibliotheek','workers'],['registratie','Contracten en registratie','log'],['builder','Worker Builder','builder'],['kwaliteit','Kwaliteit en drift','quality'],['bewijs','Bewijs en herkomst','file-check'],['hitl','Menselijke besluiten','hitl'],['bronnen','Bronnen en RepoSearch','sources'],['browser','Browser LLM','settings'],['logboek','Logboek','log'],['instellingen','Instellingen','settings']];
 const worker=id=>s.workers.find(w=>w.id===id);const mission=id=>s.missions.find(m=>m.id===id);const task=id=>s.tasks.find(t=>t.id===id);const tasksFor=id=>s.tasks.filter(t=>t.mission===id);const completion=id=>{const t=tasksFor(id);return t.length?Math.round(100*t.filter(t=>t.state==='done').length/t.length):0};const nState=(st)=>s.tasks.filter(t=>t.state===st).length;const badge=(str)=>{const cls={done:'good',afgerond:'good',beschikbaar:'good',active:'good',actief:'good',running:'blue',bezig:'blue',queued:'dim',wachtrij:'dim',gepauzeerd:'dim',review:'warn',beperkt:'warn',monitoren:'warn',reparatie:'warn',open:'warn',blocked:'bad',geblokkeerd:'bad','HITL':'bad',proef:'blue'}[str]||'dim';const tr={done:'Afgerond',running:'Bezig',queued:'Wachtrij',review:'Controle',blocked:'Geblokkeerd'};return `<span class="pill ${cls}"><span class="dot"></span>${esc(tr[str]||str)}</span>`};const btn=(txt,action,cls='',other='')=>`<button class="btn ${cls}" data-action="${esc(action)}" ${other}>${txt}</button>`;const pct=v=>Math.max(0,Math.min(100,v));const prog=v=>`<div class="progress"><span style="width:${pct(v)}%"></span></div>`;const section=(title,body,right='')=>`<section class="card"><div class="card-head"><h2>${title}</h2>${right}</div>${body}</section>`;const todayStamp=()=>new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'});const emit=(type,title,note='')=>s.events.unshift({at:todayStamp(),type,title,note});const h=tag=>esc(tag);
 let navScrollOffset=0;
-function renderShell(){const currentNav=document.querySelector('.sidebar-nav');if(currentNav)navScrollOffset=currentNav.scrollLeft;document.getElementById('sidebar').innerHTML=`<div class="brand"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i></span><div><div class="brand-name">EAIwork</div><div class="brand-tag">WORK OPERATIONS</div></div></div><nav class="sidebar-nav" aria-label="Hoofdnavigatie">${nav.map(([id,t,ic],i)=>`${[0,5,9,12].includes(i)?`<div class="nav-group">${i===0?'Werkruimte':i===5?'Workerbeheer':i===9?'Onderzoek en controle':'Systeem'}</div>`:''}<button class="nav-item ${s.route===id?'active':''}" data-action="nav" data-id="${id}" ${s.route===id?'aria-current="page"':''}>${ico(ic)}<span>${t}</span>${id==='hitl'&&!s.liveOps&&s.hitl.some(x=>x.status==='open')?`<span class="pill warn" style="margin-left:auto;padding:2px 6px">${s.hitl.filter(x=>x.status==='open').length}</span>`:''}</button>`).join('')}</nav><div class="nav-mobile-hint">Veeg voor meer onderdelen</div><div class="nav-spacer"></div><div class="side-foot"><div><span class="live-dot"></span>${s.liveOps?'Live workerregister verbonden':'Demo, geen actieve backend'}</div><div style="margin-top:6px">Productreferentie · 0.1</div></div>`;
- const newNav=document.querySelector('.sidebar-nav');if(newNav)newNav.scrollLeft=navScrollOffset;
- const m=mission(s.selectedMission);document.getElementById('topbar').innerHTML=`<div><div class="top-title">${h(nav.find(x=>x[0]===s.route)?.[1]||'EAIwork')}</div><div class="top-sub">${s.liveOps?'EAIwork-server':h(m?.title||'Dashboard')} · ${s.liveOps?'Gegevens uit registratie':s.paused?'Simulatie gepauzeerd':'Demo gereed'}</div></div><div class="top-actions"><span class="pill ${s.liveOps?'good':'demo'}">${s.liveOps?'Verbonden met EAIwork-server':'Voorbeeldopdrachten'}</span><span class="pill dim">${s.liveOps?'Echte registratie':'Geen live uitvoering'}</span>${btn(ico('reset')+' Herstellen','reset','small')}${btn(ico('download')+' Export','export','small')}</div>`}
+
+const primaryRoutes=[['overzicht','Overzicht','overview','Home'],['opdrachten','Opdrachten','missions','Taken'],['uitvoering','Uitvoering','play','Run'],['workers','Workers','workers','Team'],['kwaliteit','Controle','shield','Check']];
+const primaryRouteIds=new Set(primaryRoutes.map(r=>r[0]));
+function renderShell(){
+ const other=nav.filter(r=>!primaryRouteIds.has(r[0]));
+ const otherActive=other.some(r=>r[0]===s.route);
+ const link=([id,label,symbol,short])=>'<button class="nav-item '+(s.route===id?'active':'')+
+   '" data-action="nav" data-id="'+id+'" '+(s.route===id?'aria-current="page"':'')+'>'+ico(symbol)+
+   '<span class="nav-long">'+h(label)+'</span><span class="nav-short">'+h(short||label)+'</span></button>';
+ document.getElementById('sidebar').innerHTML=
+   '<div class="brand"><span class="brand-symbol" aria-hidden="true"><i></i><i></i><i></i><i></i></span>'+
+   '<div><div class="brand-name">EAIwork</div><div class="brand-tag">Werkruimte</div></div></div>'+
+   '<nav class="sidebar-nav" aria-label="Hoofdnavigatie"><div class="nav-primary">'+
+   primaryRoutes.map(link).join('')+
+   '<details class="nav-more" '+(otherActive?'open':'')+'><summary>'+ico('planner')+
+   '<span class="nav-long">Meer functies</span><span class="nav-short">Meer</span></summary>'+
+   '<div class="nav-more-content"><p class="nav-more-title">Meer functies</p>'+
+   other.map(link).join('')+'<div class="nav-more-actions">'+btn('Herstellen','reset','small')+
+   btn('Export','export','small')+'</div></div></details></div></nav>'+
+   '<div class="nav-spacer"></div><div class="side-foot"><span class="live-dot"></span>'+
+   (s.liveOps?'Lokale EAIwork-server verbonden':'Demonstratie, geen live server')+'</div>';
+ const selected=mission(s.selectedMission),label=nav.find(r=>r[0]===s.route)?.[1]||'Werkoverzicht';
+ document.getElementById('topbar').innerHTML=
+   '<div class="top-location"><span class="top-title">'+h(label)+'</span>'+
+   '<span class="top-sub">'+(s.liveOps?'Lokale registratie':h(selected?.title||'Werkruimte'))+'</span></div>'+
+   '<div class="top-actions"><span class="pill '+(s.liveOps?'good':'demo')+'">'+
+   (s.liveOps?'Lokale server':'Demonstratie')+'</span>'+
+   '<span class="top-desktop-actions">'+btn('Herstellen','reset','small')+
+   btn('Export','export','small')+'</span></div>';
+}
 function header(title,desc,actions=''){return `<div class="page-head"><div><h1>${title}</h1><p>${desc}</p></div>${actions?`<div class="actionbar">${actions}</div>`:''}</div>`}
 
 function liveProductionLine(){
@@ -224,62 +379,186 @@ function liveProductionLine(){
     '<div class="contract-table">'+(content||'<p>Er zijn nog geen opdrachten geregistreerd.</p>')+'</div>'+
     '<p class="muted smalltext">Vrijgave: nog niet beschikbaar. Een voltooide taak is geen gecontroleerd eindproduct of publicatietoestemming.</p></div>');
 }
-function liveOverview(){
-  const missions=Object.values(s.liveOps?.missions||{});
-  const workers=Object.values(s.liveOps?.workers||{});
-  const defects=Object.values(s.liveOps?.defects||{});
-  const tasks=missions.flatMap(m=>Object.values(m.tasks||{}));
-  const pending=defects.filter(d=>d.state==='human-required');
-  const awaiting=missions.flatMap(m=>(m.plan.constraints||[]).filter(g=>
-    ['approval','condition','deadline'].includes(g.kind)&&!m.resolvedGates?.[g.id]).map(g=>({mission:m,gate:g})));
-  const inProgress=tasks.filter(t=>t.status==='running');
-  const activeWorkerIds=new Set(inProgress.map(t=>t.run?.workerId).filter(Boolean));
-  const history=(s.liveOps?.history||[]).slice(-7).reverse();
-  const total=missions.length,completed=missions.filter(m=>Object.values(m.tasks||{}).length>0 &&
-    Object.values(m.tasks).every(t=>t.status==='done')).length;
-  return header('Werkoverzicht','Werkelijke registratie op deze EAIwork-server. De oorspronkelijke demonstratie blijft apart beschikbaar.',
-    btn('Echte uitvoering','nav-live','primary')+btn('Ververs registratie','ops-connect','small'))+
-    '<div class="grid cols-4 mb">'+[
-      ['Opdrachten',total,'Waarvan '+completed+' technisch afgerond'],
-      ['Taken bezig',inProgress.length,'Workers bij deze taken: '+activeWorkerIds.size],
-      ['Workers toegelaten',workers.filter(w=>w.stage==='ready').length,'Van '+workers.length+' geregistreerd'],
-      ['Besluiten nodig',pending.length+awaiting.length,'Herstel, toestemming of voorwaarde'],
-    ].map(([label,value,note])=>'<div class="card metric"><div class="caption">'+h(label)+'</div>'+
-      '<strong>'+h(value)+'</strong><small>'+h(note)+'</small></div>').join('')+'</div>'+
-    '<div class="grid cols-2"><div>'+
-      section('Opdrachten','<div class="contract-table">'+(missions.length?missions.map(m=>{
-        const p=liveMissionProgress(m);
-        return '<button class="contract-entry" data-action="real-mission-open" data-id="'+h(m.plan.id)+'">'+
-          '<b>'+h(m.plan.title)+'</b><small>'+h(m.plan.id)+' · '+p.done+'/'+p.total+
-          ' afgerond · '+h(p.status)+'</small>'+
-          (p.blockedByConstraints?'<small>'+p.blockedByConstraints+' taken wachten op voorwaarden</small>':'')+
-          '</button>';
-      }).join(''):'<div class="card pad">Nog geen opdrachten geregistreerd.</div>')+'</div>','')+'</div><div>'+
-      section('Menselijke beoordeling','<div class="status-list">'+
-        (pending.map(d=>'<div class="status-row"><span class="indicator red"></span><div><b>'+h(d.workerId)+'</b>'+
-          '<p>'+h(d.reason)+' · '+h(d.attempts.length)+'/3 herstelpogingen</p></div></div>').join('')+
-        awaiting.map(({mission,gate})=>'<div class="status-row"><span class="indicator amber"></span><div>'+
-          '<b>'+h(mission.plan.title)+'</b><p>'+h(gate.kind)+': '+h(gate.quote)+'</p></div></div>').join('')||
-          '<div class="empty">Geen openstaande besluiten geregistreerd.</div>')+'</div>',
-        btn('Open besluiten','nav-hitl','small'))+'</div></div>'+
-    '<div class="grid cols-2 mt"><div>'+
-      section('Workerstatus','<div class="card pad">'+
-        [['Beschikbaar',workers.filter(w=>w.stage==='ready').length],
-         ['Kandidaat',workers.filter(w=>w.stage==='candidate').length],
-         ['Geblokkeerd',workers.filter(w=>['quarantined','disabled'].includes(w.stage)).length],
-         ['Bezig in huidige taken',activeWorkerIds.size],
-        ].map(([label,n])=>'<div class="contract-line"><span>'+h(label)+'</span><b>'+h(n)+'</b></div>').join('')+
-        '<p class="muted smalltext">Actief betekent hier: een taak staat als bezig geregistreerd. Er is nog geen zelfstandig draaiende workerpool of heartbeatmeting.</p></div>')+
-      '</div><div>'+
-      section('Laatste gebeurtenissen','<div class="status-list">'+
-        (history.map(row=>'<div class="status-row"><span class="indicator amber"></span>'+
-          '<div><b>'+h(row.event?.type||'Onbekend')+'</b><p>'+h(row.actor?.kind||'')+': '+
-          h(row.actor?.id||'')+' · '+h(row.at||'')+'</p></div></div>').join('')||
-          '<div class="empty">Nog geen gebeurtenissen geregistreerd.</div>')+'</div>',
-        btn('Volledig logboek','nav-logbook','small'))+'</div></div>'+
-    liveProductionLine()+
-    '<div class="notice mt">De cijfers tonen de huidige geregistreerde toestand. Een afgeronde technische taak is geen bewijs dat een conclusie inhoudelijk klopt. Kosten en tokengebruik zijn hier nog niet gemeten.</div>';
+
+/* Visualisaties gebruiken uitsluitend de aanwezige demo- of servergegevens. */
+const dashColors={done:'#367c68',running:'#638f9c',queued:'#bbc9c2',review:'#d79c50',blocked:'#c9685e',failed:'#c9685e',other:'#b7c4bf'};
+function dashRing(parts,center,caption){
+ const total=parts.reduce((n,p)=>n+Math.max(0,Number(p.count)||0),0);
+ const perimeter=245.04;let offset=0;
+ const arcs=parts.filter(p=>p.count>0).map(p=>{
+   const value=Math.max(0,Number(p.count)||0),length=value/total*perimeter;
+   const arc='<circle cx="55" cy="55" r="39" fill="none" stroke="'+p.color+
+     '" stroke-width="11" stroke-linecap="butt" stroke-dasharray="'+length+' '+(perimeter-length)+
+     '" stroke-dashoffset="'+(-offset)+'" transform="rotate(-90 55 55)"><title>'+h(p.label+': '+value)+'</title></circle>';
+   offset+=length;return arc;
+ }).join('');
+ return '<svg class="dash-donut" viewBox="0 0 110 110" role="img" aria-label="'+h(caption)+': '+h(total)+' totaal">'+
+   '<circle cx="55" cy="55" r="39" fill="none" stroke="#edf1ed" stroke-width="11"></circle>'+arcs+
+   '<text x="55" y="52" text-anchor="middle" class="dash-donut-number">'+h(center)+'</text>'+
+   '<text x="55" y="68" text-anchor="middle" class="dash-donut-label">'+h(caption)+'</text></svg>';
 }
+function dashLegend(parts){
+ return '<div class="dash-legend">'+parts.map(p=>'<div class="dash-legend-row"><span class="dash-legend-dot" style="background:'+p.color+'"></span>'+
+   '<span>'+h(p.label)+'</span><b>'+h(p.count)+'</b></div>').join('')+'</div>';
+}
+function dashStatusParts(tasks,live){
+ const states=live?tasks.map(t=>t.status):tasks.map(t=>t.state);
+ return [['done','Afgerond'],['running','Bezig'],['review','Controle'],['blocked','Geblokkeerd'],['failed','Mislukt'],['queued','Wachtrij']]
+ .map(([key,label])=>({label,color:dashColors[key],count:states.filter(st=>st===key).length})).filter(p=>p.count>0)
+ .concat(states.some(st=>!['done','running','review','blocked','failed','queued'].includes(st))?
+   [{label:'Overig',color:dashColors.other,count:states.filter(st=>!['done','running','review','blocked','failed','queued'].includes(st)).length}]:[]);
+}
+function dashStatusStrip(parts){
+ const total=parts.reduce((n,p)=>n+p.count,0);
+ return '<div class="dash-status-strip" role="img" aria-label="'+h(parts.map(p=>p.label+': '+p.count).join(', '))+'">'+
+  (total?parts.filter(p=>p.count>0).map(p=>'<span style="width:'+(p.count/total*100)+'%;background:'+p.color+
+  '" title="'+h(p.label+': '+p.count)+'"></span>').join(''):'<span style="width:100%;background:#ebf0ec"></span>')+'</div>';
+}
+function dashStageCard(label,status,index,target){
+ const state=['done','ready','recorded','verified','checked'].includes(status)?'ready':
+ ['blocked','failed','not-verified'].includes(status)?'blocked':
+ ['needs-review','review','waiting'].includes(status)?'warn':'pending';
+ const text=state==='ready'?'Gereed':state==='blocked'?'Geblokkeerd':state==='warn'?'Aandacht nodig':
+ status==='running'?'Bezig':status==='unknown'?'Geen gegevens':'Wacht';
+ return '<button class="dash-stage '+state+'" data-action="nav" data-id="'+target+'" title="'+h(label+': '+text)+'">'+
+ '<span class="dash-stage-circle">'+(index+1)+'</span><span class="dash-stage-label">'+h(label)+'</span>'+
+ '<small>'+h(text)+'</small></button>';
+}
+function dashDemoStageStatus(index,id){
+ const items=s.tasks.filter(t=>t.mission===id&&t.phase===index);
+ if(!items.length)return 'waiting';
+ if(items.some(t=>t.state==='blocked'||t.state==='failed'))return 'blocked';
+ if(items.some(t=>t.state==='review'))return 'review';
+ if(items.every(t=>t.state==='done'))return 'done';
+ if(items.some(t=>t.state==='running'))return 'running';
+ return 'waiting';
+}
+function dashChart(phases,live){
+ const columns=phases.map((p,i)=>({
+  label:live?p.label:['Start','Zoeken','Analyse','Bouwen','Check'][i],
+  total:p.total||0,done:p.done||0
+ }));
+ const max=Math.max(1,...columns.map(p=>p.total));
+ return '<div class="dash-bargraph" role="img" aria-label="'+h(live?'Afgeronde taken per opdracht':'Taken per werkfase')+'">'+
+ columns.map(p=>'<div class="dash-barcol"><span class="dash-bar-pair">'+
+ '<i class="dash-bar-total" style="height:'+Math.max(2,p.total/max*100)+'%" title="'+h(p.total+' taken')+'"></i>'+
+ '<i class="dash-bar-done" style="height:'+Math.max(0,p.done/max*100)+'%" title="'+h(p.done+' afgerond')+'"></i></span>'+
+ '<span class="dash-bar-label">'+h(p.label)+'</span></div>').join('')+
+ '</div><div class="dash-bar-key"><i></i> Taken <i></i> Afgerond</div>';
+}
+function dashControlsCard(title,body,action,route){
+ return '<section class="dash-card"><div class="dash-card-head"><h2>'+h(title)+'</h2>'+
+ (action?'<button class="linkbtn" data-action="nav" data-id="'+route+'">'+h(action)+' ›</button>':'')+
+ '</div>'+body+'</section>';
+}
+function compactDashboard(live){
+ const missions=live?Object.values(s.liveOps?.missions||{}):s.missions;
+ const workers=live?Object.values(s.liveOps?.workers||{}):s.workers;
+ const tasks=live?missions.flatMap(m=>Object.values(m.tasks||{})):s.tasks;
+ const statusParts=dashStatusParts(tasks,live);
+ const done=tasks.filter(t=>(live?t.status:t.state)==='done').length;
+ const running=tasks.filter(t=>(live?t.status:t.state)==='running').length;
+ const workerReady=live?workers.filter(w=>w.stage==='ready').length:
+   workers.filter(w=>w.status==='beschikbaar').length;
+ const workerBusy=live?new Set(tasks.filter(t=>t.status==='running').map(t=>t.run?.workerId).filter(Boolean)).size:
+   new Set(tasks.filter(t=>t.state==='running').map(t=>t.worker)).size;
+ const workerBlocked=live?workers.filter(w=>['quarantined','disabled'].includes(w.stage)).length:
+   workers.filter(w=>['reparatie','geblokkeerd','beperkt'].includes(w.status)).length;
+ const ringBusy=live?Math.min(workerReady,workerBusy):workers.filter(w=>w.status==='bezig').length;
+ const workerParts=[{label:'Beschikbaar',count:live?workerReady-ringBusy:workerReady,color:'#367c68'},
+  {label:'Bezig',count:ringBusy,color:'#638f9c'},
+  {label:'Aandacht',count:workerBlocked,color:'#d79c50'}];
+ const restWorkers=Math.max(0,workers.length-workerParts.reduce((n,p)=>n+p.count,0));
+ if(restWorkers)workerParts.push({label:'Overig',count:restWorkers,color:'#bbc9c2'});
+ const liveDefects=live?Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required'):[];
+ const openGates=live?missions.flatMap(m=>(m.plan?.constraints||[])
+   .filter(g=>['approval','condition','deadline'].includes(g.kind)&&!m.resolvedGates?.[g.id])
+   .map(g=>({mission:m,gate:g}))):[];
+ const demoReview=live?[]:s.hitl.filter(d=>d.status==='open');
+ const attentionCount=live?liveDefects.length+openGates.length:demoReview.length;
+ const selectedDemo=mission(s.selectedMission)||missions[0];
+ const selectedLive=missions.find(m=>m.plan?.id===s.selectedRealMission)||missions[0];
+ const selected=live?selectedLive:selectedDemo;
+ const selectedName=live?(selected?.plan?.title||'Geen opdracht geregistreerd'):(selected?.title||'Geen opdracht');
+ const selectedStatus=live?(s.productionLine?.missions||[]).find(m=>m.id===selected?.plan?.id):null;
+ const stageLabels=['Werkplan','Workers','Uitvoering','Controle','Vrijgave'];
+ const stageTargets=['planner','workers','uitvoering','kwaliteit','bewijs'];
+ const statuses=stageLabels.map((_,i)=>live?(selectedStatus?.stages||[])[i]?.status||'unknown':dashDemoStageStatus(i,selected?.id));
+ const taskTotal=tasks.length;
+ const headline='<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / werkruimte</span>'+
+  '<h1>Werkoverzicht</h1><p>'+(live?'Gegevens uit je lokale EAIwork-server.':
+  'Interactieve demonstratie met fictieve opdrachten en metingen.')+'</p></div>'+
+  '<div class="dash-head-actions">'+(live?btn('Ververs','ops-connect','primary'):btn('Simuleer ronde','cycle','primary'))+
+  (live?btn('Open uitvoering','nav-live'):btn('Opdrachten','nav','','data-id="opdrachten"'))+'</div></div>';
+ const kpis=[
+  ['Opdrachten',missions.length,'In registratie',live?'uitvoering':'opdrachten'],
+  ['Taken afgerond',done+' / '+taskTotal,taskTotal?Math.round(done/taskTotal*100)+'% voltooid':'Nog geen taken','uitvoering'],
+  ['Workers',workerReady+' / '+workers.length,workerBusy+' met werk bezig','workers'],
+  ['Besluiten',attentionCount,attentionCount?'Actie gevraagd':'Geen open besluiten','hitl']
+ ];
+ const cards='<div class="dash-kpis">'+kpis.map(([label,value,detail,target],i)=>
+  '<button class="dash-kpi" data-action="nav" data-id="'+target+'"><span>'+h(label)+'</span>'+
+  '<strong>'+h(value)+'</strong><small>'+h(detail)+'</small>'+
+  '<span class="dash-kpi-mark '+(i===3&&attentionCount?'attention':'')+'"></span></button>').join('')+'</div>';
+ const pipeline='<section class="dash-card dash-pipeline"><div class="dash-card-head">'+
+  '<h2>Softwareproductielijn</h2><span class="dash-context">'+h(selectedName)+'</span></div>'+
+  '<div class="dash-stages">'+stageLabels.map((label,i)=>dashStageCard(label,statuses[i],i,stageTargets[i])).join('')+'</div>'+
+  '<div class="dash-next"><span>'+ico('arrow')+' Volgende stap</span><b>'+
+  h(live?(selectedStatus?.nextAction?.label||(!s.productionLine?'Verbind de server om de productielijn te zien':'Nog geen actie')) :
+  tasks.some(t=>t.state==='blocked')?'Geblokkeerde taken beoordelen':'Werkplan en voortgang bekijken')+'</b>'+
+  '<button class="linkbtn" data-action="'+(live&&selectedStatus?'production-line-open':'nav')+
+  '" data-id="'+(live&&selectedStatus?h(selectedStatus.id):live?'uitvoering':'opdrachten')+'"'+
+  (live&&selectedStatus?' data-target="'+h(['uitvoering','hitl','registratie','planner','bewijs'].includes(selectedStatus.nextAction?.target)?selectedStatus.nextAction.target:'uitvoering')+'"':'')+
+  '>Openen ›</button></div></section>';
+ const missionList=missions.slice(0,5).map(m=>{
+  const title=live?(m.plan?.title||'Onbekende opdracht'):m.title;
+  const id=live?m.plan?.id:m.id;
+  const mt=live?Object.values(m.tasks||{}):s.tasks.filter(t=>t.mission===id);
+  const completed=mt.filter(t=>(live?t.status:t.state)==='done').length;
+  const pc=mt.length?Math.round(completed/mt.length*100):0;
+  return '<button class="dash-mission" data-action="'+(live?'real-mission-open':'mission')+
+   '" data-id="'+h(id||'')+'"><div><b>'+h(title)+'</b><small>'+h(id||'')+
+   ' · '+completed+'/'+mt.length+' taken</small></div><span class="dash-mission-pct">'+pc+'%</span>'+
+   '<div class="dash-mission-bar"><i style="width:'+pc+'%"></i></div></button>';
+ }).join('')||'<p class="dash-empty">Nog geen opdrachten geregistreerd.</p>';
+ const firstPanel=dashControlsCard('Opdrachten',missionList,live?'Uitvoering':'Alle opdrachten',live?'uitvoering':'opdrachten');
+ const attentionRows=(live?
+  liveDefects.slice(0,3).map(d=>({title:'Worker '+(d.workerId||'onbekend'),note:d.reason||'Menselijke beoordeling vereist'}))
+   .concat(openGates.slice(0,3).map(g=>({title:g.mission.plan?.title||'Voorwaarde',note:g.gate.quote||g.gate.kind}))) :
+  demoReview.map(d=>({title:d.title,note:d.detail}))).slice(0,3);
+ const alerts=attentionRows.length?attentionRows.map(row=>
+  '<div class="dash-alert"><i></i><div><b>'+h(row.title)+'</b><p>'+h(row.note)+'</p></div></div>').join(''):
+  '<div class="dash-empty">Geen openstaande besluiten.</div>';
+ const secondPanel=dashControlsCard('Aandacht nodig',alerts,'Besluiten','hitl');
+ const taskViz='<div class="dash-chart-row"><div class="dash-donut-wrap">'+
+  dashRing(statusParts,taskTotal?Math.round(done/taskTotal*100)+'%':'0%','afgerond')+
+  '</div>'+dashLegend(statusParts)+'</div>'+dashStatusStrip(statusParts);
+ const chart=live?missions.slice(0,5).map((m,i)=>{
+  const items=Object.values(m.tasks||{});return {label:'O'+(i+1),total:items.length,done:items.filter(t=>t.status==='done').length};
+ }):[0,1,2,3,4].map(i=>{
+  const items=s.tasks.filter(t=>t.phase===i);return {label:'',total:items.length,done:items.filter(t=>t.state==='done').length};
+ });
+ const workViz=dashControlsCard('Taken en voortgang',taskViz+dashChart(chart,live),'Planner','planner');
+ const workerViz=dashControlsCard('Workers', '<div class="dash-chart-row">'+
+  dashRing(workerParts,workers.length,'workers')+dashLegend(workerParts)+'</div>'+
+  '<div class="dash-worker-footer"><span>'+workerBusy+' '+(workerBusy===1?'worker':'workers')+' met werk bezig</span>'+
+  '<button class="linkbtn" data-action="nav" data-id="registratie">Registratie ›</button></div>',
+  'Workerbeheer','workers');
+ const eventRows=live?(s.liveOps?.history||[]).slice(-4).reverse().map(e=>({
+  title:e.event?.type||'Gebeurtenis',note:(e.actor?.kind||'')+' · '+(e.at||'')
+ })):s.events.slice(0,4).map(e=>({title:e.title,note:e.at+' · '+e.note}));
+ const activity=dashControlsCard('Laatste gebeurtenissen',
+  eventRows.length?eventRows.map(e=>'<div class="dash-activity"><i></i><div><b>'+h(e.title)+
+   '</b><small>'+h(e.note)+'</small></div></div>').join(''):
+  '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>','Logboek','logboek');
+ return headline+cards+pipeline+
+  '<div class="dash-columns"><div class="dash-main-column">'+firstPanel+workViz+
+  '</div><div class="dash-side-column">'+secondPanel+workerViz+activity+'</div></div>'+
+  '<p class="dash-disclaimer">'+(live?
+  'De metingen komen uit de lokale registratie. Afgeronde taken zijn niet automatisch inhoudelijk goedgekeurd.':
+  'Voorbeeldgegevens. Geen echte workers actief en geen achtergrondopdrachten. Verbind de lokale server om echte registraties te zien.')+'</p>';
+}
+function liveOverview(){return compactDashboard(true)}
 function liveLogbook(){
   const events=(s.liveOps?.history||[]);
   const types=['Alle',...new Set(events.map(e=>e.event?.type).filter(Boolean))];
@@ -304,10 +583,7 @@ function liveLogbook(){
     '<div class="notice mt">Het operationslog en het oorspronkelijke bewijslog zijn afzonderlijke registraties. Bekijk bewijs, bronherkomst en tegenbewijs via Bewijs en herkomst.</div>';
 }
 
-function overview(){if(s.liveOps)return liveOverview();const active=s.missions.filter(m=>m.status==='actief').length;const wg=new Set(s.tasks.filter(t=>t.state==='running').map(t=>t.worker)).size;const off=s.workers.filter(w=>['beperkt','reparatie','geblokkeerd'].includes(w.status)).length;const open=s.hitl.filter(x=>x.status==='open').length;return header('Werkoverzicht','Wat loopt er, waar stokt het en welke beslissingen zijn nodig? Alle gegevens hieronder zijn fictief.',btn(ico('play')+' Simuleer één ronde','cycle','primary')+btn('Vijf rondes','cycle5'))+
-`<div class="grid cols-4 mb"><div class="card metric"><div class="caption">Actieve opdrachten</div><strong>${active}<span style="font-size:14px;color:var(--muted)"> / ${s.missions.length}</span></strong><small>Overzicht van alle werkstromen</small></div><div class="card metric"><div class="caption">Workers bezig</div><strong>${wg}<span style="font-size:14px;color:var(--muted)"> / ${s.workers.length}</span></strong><small>Niet iedereen hoeft actief te zijn</small></div><div class="card metric"><div class="caption">Kwaliteitssignalen</div><strong>${off}</strong><small>Beperkt, reparatie of geblokkeerd</small></div><div class="card metric"><div class="caption">Besluiten nodig</div><strong>${open}</strong><small>Openstaande menselijke keuzes</small></div></div>
-<div class="grid cols-2"><div>${section('Lopende opdrachten',`<div>${s.missions.map(m=>`<button class="mission-item" data-action="mission" data-id="${m.id}"><div class="row"><span class="mission-title">${h(m.title)}</span>${badge(m.status)}</div><p class="mission-desc">${h(m.description)}</p>${prog(completion(m.id))}<div class="mission-stats"><span>${tasksFor(m.id).filter(t=>t.state==='done').length} / ${tasksFor(m.id).length} taken afgerond</span><span>${completion(m.id)}%</span></div></button>`).join('')}</div>`,`<button class="linkbtn smalltext" data-action="nav" data-id="opdrachten">Alle opdrachten ${ico('chev')}</button>`)}</div><div>${section('Actie gevraagd',`<div class="status-list">${s.hitl.filter(x=>x.status!=='besloten').map(x=>`<div class="status-row"><span class="indicator ${x.status==='open'?'red':'amber'}"></span><div><h3>${h(x.title)}</h3><p>${h(x.status==='monitoren'?'Nog één herstelpoging mogelijk':x.detail)}</p></div></div>`).join('')||'<div class="empty">Geen openstaande besluiten</div>'}<div class="status-row"><span class="indicator amber"></span><div><h3>RepoSearch: licht prestatieverlies</h3><p>De worker presteert minder goed dan bij de referentietests.</p></div></div></div>`,`<button class="linkbtn smalltext" data-action="nav" data-id="hitl">Besluitoverzicht ${ico('chev')}</button>`)}<div class="mt">${section('Kwaliteit per werksoort',`<div style="padding:7px 17px 14px">${['Plannen','Zoeken','Analyseren','Uitvoeren','Controleren'].map(group=>{const a=s.workers.filter(w=>w.group===group);const v=Math.round(a.reduce((z,w)=>z+w.success,0)/Math.max(1,a.length));return `<div class="quality-line"><span class="lbl">${group}</span><div class="progress"><span style="width:${v}%;background:${v<86?'#bd8060':'#598878'}"></span></div><span class="num">${v}%</span></div>`}).join('')}<p class="two-line">Gemiddelden uit fictieve testmetingen, geen score voor het hele systeem.</p></div>`)}</div></div></div>
-<div class="grid cols-2 mt"><div>${section('Werkverdeling',`<div class="card pad" style="border:0;box-shadow:none"><div class="row" style="margin-bottom:11px"><span class="smalltext muted">Taken per status</span><b class="smalltext">${s.tasks.length} totaal</b></div>${taskBar(s.tasks)}<div class="capabilities" style="margin-top:16px">${[['done','Afgerond'],['running','Bezig'],['queued','Wachtrij'],['review','Controle'],['blocked','Geblokkeerd']].map(([k,l])=>`<span>${l}: ${nState(k)}</span>`).join('')}</div></div>`)}</div><div>${section('Recente gebeurtenissen',`<div class="status-list">${s.events.slice(0,5).map(e=>`<div class="status-row"><span class="indicator ${e.type==='kwaliteit'?'red':e.type==='reparatie'?'amber':'green'}"></span><div><h3>${h(e.title)}</h3><p>${h(e.note)}</p></div><span class="meta">${h(e.at)}</span></div>`).join('')}</div>`,`<button class="linkbtn smalltext" data-action="nav" data-id="logboek">Volledig logboek</button>`)}</div></div>`}
+function overview(){if(s.liveOps)return liveOverview();return compactDashboard(false)}
 function taskBar(arr){const colors={done:'#477d6d',running:'#8b9b9a',queued:'#e1e6e1',review:'#c18a52',blocked:'#bf6660'};return `<div class="pbar">${['done','running','review','blocked','queued'].map(st=>{const n=arr.filter(t=>t.state===st).length;return n?`<i title="${st}: ${n}" style="width:${(n/arr.length)*100}%;background:${colors[st]}"></i>`:''}).join('')}</div>`}
 function missionView(){const m=mission(s.selectedMission)||s.missions[0];const ts=tasksFor(m.id);return header('Opdrachten','Hier bewaakt de planner het doel, de fases, afhankelijkheden en de voortgang.',btn('Echte uitvoering','nav-live')+btn(ico('plus')+' Nieuwe demo-opdracht','newmission','primary')+btn(ico('play')+' Ronde uitvoeren','cycle'))+`<div class="grid cols-2 mb">${s.missions.map(x=>`<button class="worker-card ${x.id===m.id?'selected':''}" data-action="selectmission" data-id="${x.id}"><div class="row"><span class="worker-name">${h(x.title)}</span>${badge(x.status)}</div><div class="worker-sub">${h(x.description)}</div>${prog(completion(x.id))}<div class="worker-meta"><span>${tasksFor(x.id).length} deeltaken</span><span>${completion(x.id)}% voltooid</span></div></button>`).join('')}</div><div class="grid cols-3 mb"><div class="card metric"><div class="caption">Fases</div><strong>5</strong><small>Vaste demonstratiestructuur</small></div><div class="card metric"><div class="caption">Deeltaken</div><strong>${ts.length}</strong><small>Klein, middelgroot en groot</small></div><div class="card metric"><div class="caption">Voltooid</div><strong>${completion(m.id)}%</strong><small>Afgeronde demo-taken</small></div></div>${section('Werkplan · '+h(m.title),`<div style="padding:15px">${phaseBoard(m.id)}</div>`)}<div class="notice mt">De fasering is een voorbeeld. In de uiteindelijke toepassing moet een planner de deeltaken en afhankelijkheden voorstellen, laten beoordelen en onderweg kunnen aanpassen.</div>`}
 function phaseBoard(id){return `<div class="task-grid">${phases.map((p,i)=>{const items=tasksFor(id).filter(t=>t.phase===i);return `<div class="phase"><div class="phase-head"><span class="phase-title">${i+1}. ${p}</span><span class="pill dim" style="padding:2px 5px">${items.length}</span></div>${items.length?items.map(t=>`<button class="task-card" data-action="task" data-id="${t.id}"><div class="row"><span class="tid">${t.id}</span>${badge(t.state)}</div><div class="title">${h(t.title)}</div><div class="worker">${h(worker(t.worker)?.name||'Nog toe te wijzen')}</div><div class="tag">${t.size} · ${t.depends.length} afhankelijkheden</div></button>`).join(''):'<div class="empty" style="padding:10px">Nog geen taken</div>'}</div>`}).join('')}</div>`}
