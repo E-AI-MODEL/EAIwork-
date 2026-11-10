@@ -44,8 +44,16 @@ docker pull node:22-alpine
 **3. Haal EAIwork op**
 
 ```sh
-git clone -b feature/easy-local-ollama-start-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+git clone -b feature/local-connection-checks-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
+```
+
+**Heb je EAIwork al eerder opgehaald?** Voer de `git clone`-opdracht niet opnieuw uit. Stop eerst de draaiende EAIwork-server met **Ctrl+C**. Gebruik in plaats van stap 3:
+
+```sh
+cd ~/EAIwork-test
+git fetch origin
+git switch --track origin/feature/local-connection-checks-v01-20261110
 ```
 
 **4. Start EAIwork met een veilig voorbeeldproject**
