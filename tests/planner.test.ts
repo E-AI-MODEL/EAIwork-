@@ -43,3 +43,23 @@ test("planner provider refuses external Ollama endpoints and unbounded timeout",
   assert.throws(()=>localOllamaPlanningModel({model:"qwen2.5:7b",host:"https://example.com"}),/local loopback/);
   assert.throws(()=>localOllamaPlanningModel({model:"qwen2.5:7b",timeoutMs:500000}),/timeout/);
 });
+
+test("planner reports missing information as unverified questions, never as permission",async()=>{
+  const response={...payload(),missingInformation:[
+    "Wie mag het document inhoudelijk goedkeuren?",
+    "Welk publicatiemoment is afgesproken?",
+  ]};
+  const model:PlanningModel={id:"mock:questions",async propose(){return response}};
+  const proposed=await proposeMissionPlan(instruction,model,"mission-candidate-questions");
+  assert.deepEqual(proposed.missingInformation,response.missingInformation);
+  assert.equal(proposed.status,"requires-human-review");
+  assert.equal(proposed.constraintCoverage,"not-evaluated");
+  assert.equal(proposed.plan.constraints![0].approverId,"person:rector");
+  const invalid:PlanningModel={id:"mock:invalid",async propose(){
+    return {...response,missingInformation:["Vraag?","Vraag?"]};
+  }};
+  await assert.rejects(
+    proposeMissionPlan(instruction,invalid,"mission-candidate-invalid"),
+    /invalid missing-information questions/,
+  );
+});
