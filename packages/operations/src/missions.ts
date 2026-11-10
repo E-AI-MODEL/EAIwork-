@@ -69,6 +69,7 @@ export type MissionEvent =
   | {type:"mission.pause";missionId:string}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
+  | {type:"task.retry";missionId:string;taskId:string;reason:string}
   | {type:"task.started";missionId:string;taskId:string;run:Pick<TaskRun,"runId"|"workerId"|"workerVersion"|"adapterId"|"inputHash"|"startedAt"|"verification">}
   | {type:"task.completed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;output:Record<string,unknown>;outputHash:string}
   | {type:"task.failed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;errorCode:"adapter-error"|"output-invalid"|"worker-unavailable"};
@@ -175,6 +176,17 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(mission.resolvedGates?.[gate.id])fail("constraint already resolved");
     mission.resolvedGates??={};
     mission.resolvedGates[gate.id]={by:actor.id,at,evidenceRef:e.evidenceRef};
+    return;
+  }
+  if(e.type==="task.retry"){
+    if(actor.kind!=="person")fail("person required to review interrupted task");
+    const task=mission.tasks[e.taskId];if(!task)fail("unknown task");
+    if(!["running","failed"].includes(task.status)||!task.run)fail("task is not retryable");
+    if(task.spec.effect!==undefined&&task.spec.effect!=="local")
+      fail("external task must never be retried without a separate idempotency protocol");
+    bounded(e.reason,"retry justification",600);
+    task.status="queued";
+    task.run=undefined;
     return;
   }
   if(actor.kind!=="system"||actor.id!=="system:mission-runner")fail("task transitions belong to server runner");
