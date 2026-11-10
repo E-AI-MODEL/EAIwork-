@@ -156,7 +156,7 @@ test("local home shows actual code plans even without mission records",()=>{
   const empty=render();
   assert.match(empty,/Codeplannen/);
   assert.match(empty,/Proef met twee bestanden/);
-  assert.match(empty,/1\\/2 bestanden afgerond/);
+  assert.ok(empty.includes("1/2 bestanden afgerond"));
   assert.match(empty,/ollama:gemma2:latest/);
   assert.doesNotMatch(empty,/Fictieve worker|Scientific Reviewer wijkt/);
   context.s.liveOps.missions={one:{plan:{id:"one"},tasks:{}}};
