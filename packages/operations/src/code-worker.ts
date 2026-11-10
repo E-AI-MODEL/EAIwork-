@@ -271,8 +271,12 @@ export class LocalCodeWorkspace {
         reason:"Opgeslagen code is gewijzigd of de hashes zijn niet te onderscheiden"};
     let backupValid=false;
     const backupPath=join(this.storage,record.id+".original");
+    const backupExists=existsSync(backupPath);
     try{backupValid=sha(readBounded(backupPath))===record.sourceSha256}
     catch{backupValid=false}
+    if(backupExists&&!backupValid)
+      return {proposalId,path:record.path,action,outcome:"manual-required" as const,
+        reason:"De bestaande back-up is beschadigd of komt niet overeen met het voorstel"};
     if(action==="apply-started"){
       if(currentHash===record.replacementSha256&&backupValid&&
          ["requires-human-review","applied"].includes(record.status))
