@@ -41,6 +41,32 @@ test("registry does not grant availability without a test and human release",()=
   assert.throws(()=>applyOps(s,wrap({type:"worker.register",contract})),/already registered/);
   assert.throws(()=>applyOps(s,wrap({type:"quality.record",measurement:{...measure,id:"m-2",denominator:0}},system)),/invalid measurement/);
 });
+test("new worker version stays a candidate until separate test and release; old version can be restored",()=>{
+  const check={kind:"check" as const,id:"check:evidence-reviewer"};
+  let s=registered();
+  const initial={...measure,id:"initial-passed",metric:"fixture-pass",
+    suiteVersion:contract.testSuite,numerator:10,denominator:10,evidenceRef:"test:initial-passed"};
+  s=applyOps(s,wrap({type:"quality.record",measurement:initial},check));
+  s=applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:initial.evidenceRef}));
+  const replacement={...contract,version:"1.1.0",name:"Scientific Reviewer revised"};
+  s=applyOps(s,wrap({type:"worker.register",contract:replacement}));
+  assert.equal(s.workers[contract.id].contract.version,"1.0.0");
+  assert.equal(s.workers[contract.id].stage,"ready");
+  assert.equal(s.workerVersions[contract.id]["1.1.0"].stage,"candidate");
+  assert.throws(()=>applyOps(s,wrap({type:"worker.release",id:contract.id,version:"1.1.0",evidenceRef:"test:missing"})),/passed, trusted/);
+  const result={...initial,id:"revised-passed",version:"1.1.0",evidenceRef:"test:revised"};
+  s=applyOps(s,wrap({type:"quality.record",measurement:result},check));
+  s=applyOps(s,wrap({type:"worker.release",id:contract.id,version:"1.1.0",evidenceRef:result.evidenceRef}));
+  assert.equal(s.workers[contract.id].contract.version,"1.1.0");
+  assert.equal(s.workerVersions[contract.id]["1.0.0"].stage,"superseded");
+  assert.equal(s.measurements.filter(m=>m.workerId===contract.id).length,2);
+  assert.throws(()=>applyOps(s,wrap({type:"worker.register",contract:replacement})),/already registered/);
+  assert.throws(()=>applyOps(s,wrap({type:"worker.activate-version",id:contract.id,version:"1.0.0",rationale:"roll back"},check)),/human/);
+  s=applyOps(s,wrap({type:"worker.activate-version",id:contract.id,version:"1.0.0",rationale:"new version performed poorly"}));
+  assert.equal(s.workers[contract.id].contract.version,"1.0.0");
+  assert.equal(s.workerVersions[contract.id]["1.1.0"].stage,"superseded");
+});
+
 test("three separately tested failures block repair and require a person",()=>{
   let s=registered();
   s=applyOps(s,wrap({type:"defect.open",id:"d-1",workerId:contract.id,reason:"wrong citations",severity:"quality"},system));
