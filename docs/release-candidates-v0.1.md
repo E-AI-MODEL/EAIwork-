@@ -21,8 +21,11 @@ de hashes van alle op dat moment afgeronde taakresultaten.
 
 **Dit controleert niet dat de opgegeven CI-run werkelijk bij de commit hoort,
 geslaagd is of dat het opgegeven artefact bestaat.** De SHA-256 is in
-deze versie een door de gebruiker ingevulde waarde, geen berekende
-hash van door de server opgehaalde bytes.
+de eerste kandidaatregistratie een door de gebruiker ingevulde waarde.
+De aanvullende lokale route `/verify-artifact` kan nu daadwerkelijk
+aangeleverde bytes op de server hashen, met een maximale omvang van
+4 MiB. Dit bewijst de overeenkomst met de opgegeven digest, niet
+de broncode, bouwstappen of CI-uitkomst.
 
 Een andere aangemelde persoon kan de kandidaat beoordelen, met een
 toelichting. Twee besluiten zijn beschikbaar:
@@ -87,6 +90,35 @@ niet de taakinput of inhoud van de artefacten.
 - Een herhaald beoordelingsbesluit wordt geweigerd.
 - De algemene `/ops/events`-route mag releasebesluiten niet vervalsen.
 - Publicatie is niet geïmplementeerd en blijft uitgeschakeld.
+
+
+## De bestands-hash werkelijk controleren
+
+Bij een kandidaat met status `pending-review` of
+`accepted-for-verification` kan een bevoegde gebruiker in het dashboard
+op **Bestandshash controleren** klikken. De browser stuurt uitsluitend
+het gekozen bestand met `application/octet-stream` naar:
+
+```http
+POST /ops/missions/<mission-id>/releases/<candidate-id>/verify-artifact
+Authorization: Bearer <beheertoken>
+Content-Type: application/octet-stream
+
+<bestandsbytes, maximaal 4 MiB>
+```
+
+De server berekent SHA-256 terwijl hij de bytes leest. Hij slaat het
+bestand niet op en voert niets uit. De berekende digest, het aantal
+bytes en de uitkomst worden als vertrouwd serverevent in het
+operationslog geregistreerd. Een afwijking geeft HTTP 422; na een
+goede controle wordt een herhaalde controle geweigerd. Er zijn
+maximaal zes controles per kandidaat.
+
+De productielijn toont `artifactHashVerified` naast de status van de
+menselijke review. Er wordt geen software gepubliceerd, zelfs niet
+na een overeenkomende digest. De ingevoerde GitHub Actions-run wordt
+nog niet door de server opgevraagd en de inhoud is niet op malware,
+licentie of functionaliteit gecontroleerd.
 
 ## Wat nog gebouwd moet worden
 

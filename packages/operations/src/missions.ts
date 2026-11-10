@@ -95,6 +95,7 @@ export interface ReleaseCandidate {
   checkRunUrl:string;
   checkCommitSha:string;
   outputHashes:Record<string,string>;
+  artifactChecks?:Array<{sha256:string;bytes:number;at:string;matched:boolean}>;
   proposedBy:string;
   proposedAt:string;
   status:"pending-review"|"changes-requested"|"accepted-for-verification"|"superseded";
@@ -122,6 +123,8 @@ export type MissionEvent =
     }}
   | {type:"mission.release.review";missionId:string;candidateId:string;
       decision:"request-changes"|"accept-for-verification";reason:string}
+  | {type:"mission.release.artifact.verify";missionId:string;candidateId:string;
+      observedSha256:string;bytes:number}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -308,7 +311,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        !/^[a-f0-9]{64}$/.test(c.artifactSha256)||
        c.checkCommitSha!==c.commitSha ||
        typeof c.artifactName!=="string"||
-       !/^[a-zA-Z0-9_.-]{1,160}$/.test(c.artifactName)||
+       !/^[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,159}$/.test(c.artifactName)||
+       !c.artifactName.includes(".")||
        !(/^[0-9]+$/.test(runId)))
       fail("release references must be exact and consistently scoped");
     if(mission.paused||mission.automation?.enabled||
@@ -331,6 +335,26 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
       ])),
       proposedBy:actor.id,proposedAt:at,status:"pending-review",
     };
+    return;
+  }
+  if(e.type==="mission.release.artifact.verify"){
+    if(actor.kind!=="system"||actor.id!=="system:artifact-verifier")
+      fail("only server-side artifact verifier may record a digest check");
+    const candidate=mission.releaseCandidates?.[e.candidateId];
+    if(!candidate||candidate.revision!==mission.revision||
+       !["pending-review","accepted-for-verification"].includes(candidate.status))
+      fail("stale or unavailable candidate for artifact verification");
+    if(!/^[a-f0-9]{64}$/.test(e.observedSha256)||
+       !Number.isSafeInteger(e.bytes)||e.bytes<1||e.bytes>4*1024*1024)
+      fail("invalid artifact observation");
+    candidate.artifactChecks??=[];
+    if(candidate.artifactChecks.length>=6)fail("artifact verification attempt limit reached");
+    if(candidate.artifactChecks.some(check=>check.matched))
+      fail("artifact hash already verified");
+    candidate.artifactChecks.push({sha256:e.observedSha256,bytes:e.bytes,at,
+      matched:e.observedSha256===candidate.artifactSha256});
+    // Matching a user-supplied digest is not provenance, malware scanning,
+    // source-to-build reproducibility, or publishing authority.
     return;
   }
   if(e.type==="mission.release.review"){

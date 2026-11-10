@@ -38,6 +38,7 @@ export interface ProductionLineMission {
   releaseCandidate:null|{
     id:string;status:string;revision:number;artifactName:string;
     commitSha:string;proposedBy:string;reviewedBy:string|null;
+    artifactHashVerified:boolean;artifactInspections:number;
   };
   publication:{allowed:false;status:"not-verified";reason:string};
 }
@@ -139,7 +140,7 @@ export function productionLineView(
         detail:latestCandidate&&candidateStatus==="pending-review"?
           "Releasekandidaat "+latestCandidate.id+" wacht op beoordeling door een andere persoon. Aangeleverde CI-verwijzingen zijn nog niet geverifieerd.":
           latestCandidate&&candidateStatus==="accepted-for-verification"?
-          "Beoordeeld voor verdere verificatie. CI, artefact, licenties en publicatierechten zijn nog niet onafhankelijk gecontroleerd.":
+          "Beoordeeld voor verdere verificatie. CI, herkomst, licenties en publicatie zijn nog niet onafhankelijk gecontroleerd.":
           "Er is geen beoordeelde, geverifieerde release met publicatiebewijs geregistreerd.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
@@ -150,6 +151,8 @@ export function productionLineView(
           revision:latestCandidate.revision,artifactName:latestCandidate.artifactName,
           commitSha:latestCandidate.commitSha,proposedBy:latestCandidate.proposedBy,
           reviewedBy:latestCandidate.review?.by??null,
+          artifactHashVerified:(latestCandidate.artifactChecks??[]).some(check=>check.matched),
+          artifactInspections:latestCandidate.artifactChecks?.length??0,
         }:null,
         publication:{allowed:false,status:"not-verified",
           reason:"Releasegegevens en CI-links zijn niet onafhankelijk geverifieerd. Er is geen publicatierecht."},

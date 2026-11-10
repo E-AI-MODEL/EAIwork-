@@ -604,6 +604,50 @@ export function makeServer(cfg: Config) {
               candidateId:(body as {id:string}).id,status:"pending-review",seq:entry.seq});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
+        const verifyArtifact=new RegExp(
+          "^/ops/missions/([a-z][a-z0-9-]{2,63})/releases/([a-z][a-z0-9-]{2,63})/verify-artifact$"
+        ).exec(url.pathname);
+        if(req.method==="POST"&&verifyArtifact){
+          if(actor.kind!=="person")throw new HttpError(403,"artifact inspection requires a person");
+          requireWritableIntegrity();
+          const ctype=String(req.headers["content-type"]??"").split(";")[0].trim();
+          if(ctype!=="application/octet-stream")
+            throw new HttpError(415,"artifact inspection accepts binary data only");
+          const limit=4*1024*1024;
+          const header=req.headers["content-length"];
+          if(header!==undefined){
+            const declared=Number(header);
+            if(!Number.isSafeInteger(declared)||declared<0)
+              throw new HttpError(422,"invalid artifact length");
+            if(declared>limit)throw new HttpError(413,"artifact exceeds 4 MiB limit");
+          }
+          const mission=operations.snapshot().missions[verifyArtifact[1]];
+          const candidate=mission?.releaseCandidates?.[verifyArtifact[2]];
+          if(!mission||!candidate||candidate.revision!==mission.revision||
+             !["pending-review","accepted-for-verification"].includes(candidate.status))
+            throw new HttpError(409,"candidate is not available for file inspection");
+          const checksum=createHash("sha256");
+          let bytes=0;
+          for await(const part of req){
+            const chunk=Buffer.from(part);
+            bytes+=chunk.byteLength;
+            if(bytes>limit)throw new HttpError(413,"artifact exceeds 4 MiB limit");
+            checksum.update(chunk);
+          }
+          if(!bytes)throw new HttpError(422,"artifact must not be empty");
+          const observedSha256=checksum.digest("hex");
+          const matches=observedSha256===candidate.artifactSha256;
+          try{
+            const event={type:"mission.release.artifact.verify" as const,
+              missionId:verifyArtifact[1],candidateId:verifyArtifact[2],
+              observedSha256,bytes};
+            operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"system",id:"system:artifact-verifier"},event});
+            return json(res,matches?200:422,{matched:matches,bytes,
+              observedSha256,publicationAllowed:false,
+              note:"Artifact bytes were hashed locally; source-to-build provenance and CI are not verified."});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         const releaseReview=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/releases\/([a-z][a-z0-9-]{2,63})\/review$/.exec(url.pathname);
         if(req.method==="POST"&&releaseReview){
           if(actor.kind!=="person")throw new HttpError(403,"only a person may review a release candidate");
@@ -632,7 +676,7 @@ export function makeServer(cfg: Config) {
           return json(res,200,{missionId:releaseList[1],revision:mission.revision,
             candidates:Object.values(mission.releaseCandidates??{}),
             publicationAllowed:false,
-            note:"Submitted CI and artifact references have not been independently verified."});
+            note:"GitHub CI provenance is not independently verified. Uploaded artifact bytes may have a separately recorded server-side SHA-256 check."});
         }
         const missionExtend=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/extend$/.exec(url.pathname);
         if(req.method==="POST"&&missionExtend){
@@ -824,7 +868,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.release.propose","mission.release.review","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.propose","mission.release.review","mission.release.artifact.verify","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
