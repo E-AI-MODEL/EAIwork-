@@ -793,41 +793,60 @@ function livePlanner(){
 }
 function liveWorkers(){
   const all=Object.values(s.liveOps?.workers||{});
-  const found=all.filter(w=>(w.contract.name+' '+w.contract.id+' '+w.contract.specialization)
+  const found=all.filter(w=>(w.contract.name+' '+workerPurpose(w))
     .toLowerCase().includes(s.workerSearch.toLowerCase()));
-  const selected=all.find(w=>w.contract.id===s.selectedOpsWorker)||found[0]||all[0];
-  const metrics=(s.liveOps?.measurements||[]).filter(m=>selected&&m.workerId===selected.contract.id&&
-    m.version===selected.contract.version);
+  const selected=all.find(w=>w.contract.id===s.selectedOpsWorker)||found[0]||null;
+  const metrics=(s.liveOps?.measurements||[]).filter(m=>selected&&
+    m.workerId===selected.contract.id&&m.version===selected.contract.version);
   const versions=selected?s.liveOps?.workerVersions?.[selected.contract.id]||{}:{};
   const defects=Object.values(s.liveOps?.defects||{}).filter(d=>selected&&
     d.workerId===selected.contract.id&&d.version===selected.contract.version);
-  return header('Workerleger','Echte contracten en meetgegevens. Een geregistreerde worker is niet automatisch actief.',
-    btn('Workerbibliotheek','nav-library')+btn('Contracten beheren','nav-registration','primary'))+
-    '<div class="toolbar"><input id="workerSearch" class="field filter" placeholder="Zoek geregistreerde workers" value="'+h(s.workerSearch)+'" aria-label="Zoek workers">'+
-    '<span class="pill">'+all.length+' geregistreerd</span><span class="pill">'+all.filter(w=>w.stage==='ready').length+' beschikbaar</span></div>'+
-    '<div class="detail-split"><div class="worker-grid">'+
-    (found.map(w=>'<button class="worker-card '+(w===selected?'selected':'')+
+  const last=selected?workerLastTask(selected.contract.id):null;
+  const cards=found.length?found.map(w=>{
+    const task=workerLastTask(w.contract.id);
+    return '<button class="worker-card '+(w===selected?'selected':'')+
       '" data-action="ops-worker-open" data-id="'+h(w.contract.id)+'">'+
-      '<div class="row"><span class="worker-name">'+h(w.contract.name)+'</span>'+badge(w.stage)+'</div>'+
-      '<p class="worker-sub">'+h(w.contract.specialization)+'</p><small>v'+h(w.contract.version)+
-      ' · '+h(w.contract.taskKinds.join(', '))+'</small></button>').join('')||'<div class="empty">Geen workers gevonden.</div>')+
-    '</div><div class="detail-sidebar">'+(selected?section('Contract en metingen',
-      '<div class="card pad"><div class="row"><b>'+h(selected.contract.name)+'</b>'+badge(selected.stage)+'</div>'+
-      [['Worker-ID',selected.contract.id],['Versie',selected.contract.version],
-        ['Taaksoorten',selected.contract.taskKinds.join(', ')],['Model',selected.contract.modelPolicy.preferred],
-        ['Hulpmiddelen',selected.contract.tools.join(', ')||'Geen'],
-        ['Gevraagde rechten',selected.contract.requestedPermissions.join(', ')||'Geen'],
-        ['Testsuite',selected.contract.testSuite],['Versies',Object.keys(versions).join(', ')||'Geen'],
-        ['Vrijgave',selected.releaseEvidence||'Nog niet vrijgegeven'],
+      '<div class="row" style="justify-content:space-between;gap:10px"><b>'+h(workerDisplayName(w))+'</b>'+
+      '<span class="smalltext">'+h(workerStageText(w.stage))+'</span></div>'+
+      '<p class="worker-sub">'+h(workerPurpose(w))+'</p>'+
+      '<small>'+h(task?'Laatst gebruikt: '+task.task:'Nog niet ingezet')+'</small></button>';
+  }).join(''):'<div class="card pad">Geen workers gevonden.</div>';
+  const info=selected?'<div class="card pad">'+
+      '<b>'+h(workerDisplayName(selected))+'</b>'+
+      '<p class="muted smalltext">'+h(workerStageText(selected.stage))+'</p>'+
+      '<div class="mt"><b>Wat doet deze worker?</b><p>'+h(workerPurpose(selected))+'</p></div>'+
+      '<div class="mt"><b>Waar werkt hij aan?</b><p>'+h(last?
+        last.status==='running'?'Nu bezig met: '+last.task+' ('+last.title+')':
+        'Laatst gebruikt voor: '+last.task+' ('+last.title+')':
+        'Nog niet gebruikt voor een opdracht.')+'</p></div>'+
+      (defects.length?'<p class="contract-error">'+h(defects.length)+
+        ' probleem'+(defects.length===1?' vraagt':' vragen')+' aandacht.</p>':'')+
+      '<details class="mt"><summary>Technische gegevens en tests</summary>'+
+      '<div class="mt">'+[
+        ['ID',selected.contract.id],
+        ['Versie',selected.contract.version],
+        ['Kan werken aan',selected.contract.taskKinds.join(', ')||'Nog niet ingesteld'],
+        ['Techniek',selected.contract.modelPolicy?.preferred||'Onbekend'],
+        ['Toegestane hulpmiddelen',selected.contract.tools.join(', ')||'Geen'],
+        ['Rechten',selected.contract.requestedPermissions.join(', ')||'Geen'],
+        ['Testset',selected.contract.testSuite],
+        ['Andere versies',Object.keys(versions).join(', ')||'Geen']
       ].map(([k,v])=>'<div class="contract-line"><span>'+h(k)+'</span><span>'+h(v)+'</span></div>').join('')+
-      '<div class="mt"><b>Metingen van deze versie</b><p class="muted smalltext">'+
+      '<div class="mt"><b>Testresultaten</b><p class="smalltext">'+
       (metrics.length?metrics.slice(-5).map(m=>h(m.metric)+' '+m.numerator+'/'+m.denominator+
-        ' · '+h(m.dataset)+' · '+h(m.cohort)).join('<br>'):'Geen metingen geregistreerd.')+'</p></div>'+
-      '<div class="mt"><b>Problemen</b><p class="muted smalltext">'+
-      (defects.length?defects.map(d=>h(d.reason)+' · '+h(d.state)+' · '+d.attempts.length+'/3').join('<br>'):
-        'Geen problemen geregistreerd.')+'</p></div>'+
-      btn('Contracten en registratie','nav-registration','primary')+'</div>'):
-      '<div class="card pad">Geen worker geregistreerd.</div>')+'</div></div>';
+        ' · '+h(m.dataset)).join(' · '):'Er zijn nog geen testresultaten opgeslagen.')+
+      '</p></div></div></details>'+
+      '<div class="mt">'+btn('Instellingen en toestemming','nav-registration','small')+'</div></div>':
+      '<div class="card pad">Kies een worker om te zien wat hij doet.</div>';
+  return header('Workers','Bekijk wat iedere worker doet, wanneer hij is gebruikt en of hij mag starten.',
+    btn('Workers beheren','nav-registration','small'))+
+    '<div class="toolbar"><input id="workerSearch" class="field filter" placeholder="Zoek op naam of taak" value="'+h(s.workerSearch)+'" aria-label="Zoek workers">'+
+    '<span class="pill">'+all.length+' toegevoegd</span></div>'+
+    (all.length?'<div class="detail-split"><div class="worker-grid">'+cards+
+      '</div><div class="detail-sidebar">'+section('Deze worker',info)+'</div></div>':
+      '<div class="card pad"><b>Je hebt nog geen workers toegevoegd.</b>'+
+      '<p>Een worker krijgt een duidelijke taak. EAIwork laat zien wat hij doet en of hij mag starten.</p>'+
+      btn('Bekijk beschikbare functies','nav','primary','data-id="bibliotheek"')+'</div>');
 }
 function liveHumanQueue(){
   const missions=Object.values(s.liveOps?.missions||{});
