@@ -88,15 +88,15 @@ export class OrderedCodePlans {
              proposal.testPath!==step.testPath){status="blocked";detail="Voorstel hoort niet bij deze stap"}
           else if(proposal.status==="restored"){status="blocked";detail="Eerder toegepaste code is hersteld"}
           else if(proposal.status==="applied"){
-            if(!proposal.sourceChanged&&step.postTest?.status==="passed"&&step.postTest.testsExecuted&&
-               step.postTest.candidateSha256===proposal.replacementSha256&&
-               step.postTest.testSha256===step.testSha256){
-              if(!suiteRequired)status="done";
+            if(suiteRequired){
+              if(proposal.sourceChanged){status="blocked";detail="Toegepaste bron is gewijzigd"}
               else if(step.projectPostTest?.status==="passed"&&step.projectPostTest.testsExecuted)
                 status="done";
               else if(step.projectPostTest){status="blocked";detail="Gezamenlijke projecttest is niet geslaagd"}
               else status="needs-project-test";
-            }
+            }else if(!proposal.sourceChanged&&step.postTest?.status==="passed"&&step.postTest.testsExecuted&&
+                     step.postTest.candidateSha256===proposal.replacementSha256&&
+                     step.postTest.testSha256===step.testSha256)status="done";
             else if(!proposal.sourceChanged&&!step.postTest)status="needs-post-test";
             else {status="blocked";detail="Test mislukt of toegepaste bron is veranderd"}
           }else if(proposal.status==="requires-human-review"&&proposal.sourceUnchanged){
@@ -228,7 +228,7 @@ export class OrderedCodePlans {
       if(i<index){
         if(!step.proposalId)throw new Error("Een eerdere wijziging heeft geen voorstel");
         const prior=this.workspace.inspect(step.proposalId);
-        if(prior.status!=="applied"||!step.postTest||step.postTest.status!=="passed")
+        if(prior.status!=="applied"||step.projectPostTest?.status!=="passed"||!step.projectPostTest.testsExecuted)
           throw new Error("Een eerdere bestandsstap is niet volledig goedgekeurd");
         expected=prior.replacementSha256;
       }else if(i===index&&phase==="post"){
@@ -261,12 +261,11 @@ export class OrderedCodePlans {
        status!==(phase==="pre"?"review":"needs-project-test"))
       throw new Error("De test hoort niet bij de huidige bestandsstap");
     const inspected=this.workspace.inspect(proposalId);
-    if(phase==="pre"&&(!inspected.canApply||
-       inspected.testReport?.status!=="passed"||!inspected.testReport.testsExecuted))
-      throw new Error("Test eerst het losse codevoorstel met Docker");
-    if(phase==="post"&&(!step.postTest||step.postTest.status!=="passed"||
-       !step.postTest.testsExecuted))
-      throw new Error("Test eerst de toegepaste code");
+    if(phase==="pre"&&(!inspected.sourceUnchanged||!inspected.replacementHashMatches||
+       inspected.preflight.status==="failed"))
+      throw new Error("Controleer eerst de voorgestelde code");
+    if(phase==="post"&&(inspected.status!=="applied"||inspected.sourceChanged))
+      throw new Error("De toegepaste code is gewijzigd of ontbreekt");
     const input=this.projectInput(record,index,proposalId,phase);
     const manifest=projectManifestSha256(input);
     const result=await this.suiteRunner(input);
