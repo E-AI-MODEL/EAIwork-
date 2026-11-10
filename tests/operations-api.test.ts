@@ -34,6 +34,12 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     assert.match(await preview.text(),/Contracten en registratie/);
     assert.equal((await request("GET","/ops/state")).status,401);
     assert.equal((await request("GET","/ops/state","r".repeat(40))).status,403);
+    assert.equal((await request("GET","/ops/catalog","r".repeat(40))).status,403);
+    const library=await(await request("GET","/ops/catalog","a".repeat(40))).json() as any;
+    assert.ok(library.counts.blueprints>=50);
+    assert.equal(library.counts.active,null);
+    assert.equal(library.counts.ready,0);
+    assert.ok(library.workers.every((w:any)=>w.activeInstances===null));
     assert.equal((await request("POST","/ops/events","r".repeat(40),{type:"worker.register"})).status,403);
     const contract={
       id:"proof-worker",version:"1.0.0",name:"Proof worker",specialization:"Verify test fixtures",
