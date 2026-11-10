@@ -48,11 +48,12 @@ Voer daarna in een tweede terminal uit:
 ```sh
 EAI_EXECUTOR_URL=http://127.0.0.1:8788 \
 EAI_EXECUTOR_TOKEN="<tijdelijk-tekstworker-token>" \
-node scripts/local-text-executor.ts
+node scripts/local-text-executor.ts --max-tasks=2
 ```
 
-Herhaal dat laatste commando voor de tweede afhankelijke taak. De
-tweede taak komt pas beschikbaar na voltooiing van de eerste.
+De worker pakt maximaal twee goedgekeurde taken achter elkaar op.
+De tweede taak komt pas beschikbaar na voltooiing van de eerste.
+Zonder `--max-tasks` voert het proces hoogstens één taak uit.
 Je kunt ook twee aparte workerprocessen laten vragen om een taak.
 De server staat maximaal twee actieve geleasede teksttaken toe.
 
