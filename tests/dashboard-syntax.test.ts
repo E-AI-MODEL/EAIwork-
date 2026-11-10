@@ -31,6 +31,12 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/case 'real-mission-open'/);
   assert.match(html,/s.liveOps\)return liveOverview\(\)/);
   assert.match(html,/s.liveOps\)return liveLogbook\(\)/);
+  assert.match(html,/s.liveOps\)return livePlanner\(\)/);
+  assert.match(html,/s.liveOps\)return liveWorkers\(\)/);
+  assert.match(html,/s.liveOps\)return liveHumanQueue\(\)/);
+  assert.match(html,/function liveWorkers\(/);
+  assert.match(html,/realPlannerMission/);
+  assert.match(html,/ops-worker-open/);
   assert.match(html,/evidenceState,evidenceDetail/);
   assert.doesNotMatch(html,/localStorage\.setItem\(/);
   assert.doesNotMatch(html,/fetch\(['"]https?:\/\//);
