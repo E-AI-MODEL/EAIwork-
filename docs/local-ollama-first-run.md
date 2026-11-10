@@ -46,3 +46,22 @@ npm test
 ```
 
 Deze tests gebruiken een echte loopback-HTTP-server met nagebootste Ollama-antwoorden. Dat bewijst de integratie en bevoegdheidsgrenzen, niet dat het gekozen model zelf goed kan plannen. Een real-modeltest moet op de eigen computer uitgevoerd worden met een geïnstalleerd model; vergelijk dan het bronplan, de voorstelstatus en de handmatige goedkeuring.
+
+## Afgeschermde codeworker (ontwikkelproef)
+
+Kies uitdrukkelijk een lokale projectmap waar EAIwork codevoorstellen mag voorbereiden:
+
+```sh
+npm run local:ollama -- --model=qwen2.5:1.5b --worktree=/pad/naar/een-project
+```
+
+Open de lokale werkruimte en kies **Meer > Codeworker**. Geef één **bestaand relatief bestand** op, bijvoorbeeld `src/main.ts`, en beschrijf de gewenste verandering. Ollama krijgt uitsluitend de opgegeven opdracht, dat bestand en een strak uitvoercontract. Het model levert de volledige vervangende inhoud en een toelichting.
+
+- Zonder `--worktree` is de codeworker uitgeschakeld.
+- Alleen kleine bestaande tekstbestanden met de ondersteunde extensies `.ts`, `.tsx`, `.js`, `.jsx`, `.json`, `.css`, `.html`, `.md` of `.py` zijn toegestaan. Geen verborgen bestanden, symbolische links, directorytraversal of bestanden boven 32 KiB.
+- EAIwork bewaart elk voorstel in `~/.eaiwork/local/code-proposals`. De werkmap wordt bij het voorstellen **niet** aangepast.
+- Lees de voorgestelde code zelf na. Voor het toepassen is een aangevinkte bevestiging, een tweede expliciete bevestiging en een overeenkomende SHA-256 verplicht.
+- De server controleert vóór het vervangen opnieuw de oorspronkelijke bestandsinhoud. Een gewijzigd bestand wordt niet overschreven. De oorspronkelijke tekst blijft als lokale back-up in de voorstelmap.
+- De codeworker voert **geen code, tests of shellcommando's** uit. Hij kan niet uit zichzelf publiceren of een nieuwe map kiezen. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
+
+Deze eerste codeworker is nog geen algemene autonome softwareontwikkelaar. Er is geen OS-sandbox, geen automatische git-commit en geen testexecutor. Gebruik voor de proef uitsluitend een afzonderlijke werkmap met niet-vertrouwelijke broncode.
