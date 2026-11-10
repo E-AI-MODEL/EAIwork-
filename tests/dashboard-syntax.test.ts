@@ -72,3 +72,14 @@ test("local codeworker is available only in the controlled local dashboard",()=>
   assert.match(html,/ops\/code\/check/);
   assert.match(html,/codeInspection\?\.canApply/);
 });
+
+test("local proposal diff, history and restore preserve Docker controls",()=>{
+  assert.match(html,/function loadCodeHistory\(/);
+  assert.match(html,/function loadCodeProposal\(/);
+  assert.match(html,/function restoreCodeProposal\(/);
+  assert.match(html,/code-diff-line/);
+  assert.match(html,/case 'code-restore':restoreCodeProposal\(\)/);
+  assert.match(html,/ops\/code\/proposals/);
+  assert.match(html,/function runCodeTests\(/);
+  assert.match(html,/case 'code-test':runCodeTests\(\)/);
+});
