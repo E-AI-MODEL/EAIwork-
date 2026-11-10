@@ -586,7 +586,50 @@ function compactDashboard(live){
   'De metingen komen uit de lokale registratie. Afgeronde taken zijn niet automatisch inhoudelijk goedgekeurd.':
   'Voorbeeldgegevens. Geen echte workers actief en geen achtergrondopdrachten. Verbind de lokale server om echte registraties te zien.')+'</p>';
 }
-function liveOverview(){return compactDashboard(true)}
+function liveOverview(){
+  const missions=Object.values(s.liveOps?.missions||{});
+  if(missions.length)return compactDashboard(true);
+  const workers=Object.values(s.liveOps?.workers||{});
+  const history=s.liveOps?.history||[];
+  const measures=s.liveOps?.measurements||[];
+  const defects=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
+  const kpis=[['Opdrachten',0,'Nog geen werkplan','uitvoering'],
+    ['Workers',workers.length,'Geregistreerde contracten','workers'],
+    ['Metingen',measures.length,'Werkelijk opgeslagen','kwaliteit'],
+    ['Besluiten',defects.length,'Openstaande beoordelingen','hitl']];
+  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / lokaal</span>'+
+    '<h1>Werkoverzicht</h1><p>Gegevens uit jouw lokale EAIwork-server.</p></div>'+
+    '<div class="dash-head-actions">'+btn('Ververs','ops-connect','primary')+
+    btn('Naar Codeworker','nav','','data-id="code"')+'</div></div>'+
+    '<div class="dash-model-status"><span class="dash-model-dot '+(codeConnections?.ollama?.status==='ready'?'ready':'')+'"></span>'+
+    '<b>'+h(codeConnections?.ollama?.status==='ready'?'Ollama bereikbaar':'Ollama nog niet bevestigd')+'</b>'+
+    '<span>'+h(codeWorkspaceStatus?.modelId||localPlannerStatus?.modelId||'Geen model geselecteerd')+'</span>'+
+    '<small>Bekijk de verbinding met Ollama en Docker bij Codeworker.</small></div>'+
+    '<div class="dash-kpis">'+kpis.map(([label,value,note,route])=>
+      '<button class="dash-kpi" data-action="nav" data-id="'+route+'"><span>'+h(label)+'</span>'+
+      '<strong>'+h(value)+'</strong><small>'+h(note)+'</small></button>').join('')+'</div>'+
+    '<div class="dash-columns"><div class="dash-main-column">'+
+    dashControlsCard('Je eerste opdracht',
+      '<div class="dash-empty">Er staat nog geen goedgekeurd werkplan in deze lokale registratie.</div>'+
+      '<div class="mt">'+btn('Start met Codeworker','nav','','data-id="code"')+
+      btn('Nieuwe taak','nav','','data-id="uitvoering"')+'</div>','','')+
+    '</div><div class="dash-side-column">'+
+    dashControlsCard('Laatste gebeurtenissen',history.length?
+      history.slice(-5).reverse().map(row=>'<div class="dash-activity"><div><b>'+
+      h(row.event?.type||'Gebeurtenis')+'</b><small>'+h(row.at||'')+'</small></div></div>').join(''):
+      '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>',
+      'Logboek','logboek')+'</div></div>';
+}
+function localConnectView(){
+  return header('Lokale werkruimte','Dit is de echte EAIwork-omgeving. Er worden geen demo-opdrachten of fictieve metingen getoond.')+
+    section('Verbind met EAIwork','<div class="card pad">'+
+      '<p>Neem het toegangstoken over uit het Terminal-venster waarin EAIwork draait. Het token geeft je browser toegang tot deze lokale server.</p>'+
+      '<label for="ops-token" class="field-label">Toegangstoken</label>'+
+      '<div class="row"><input type="password" id="ops-token" autocomplete="off" placeholder="Plak het lokale toegangstoken" style="flex:1;min-width:180px">'+
+      btn('Verbind deze server','ops-connect','primary')+'</div>'+
+      (s.liveError?'<p role="alert" class="contract-error">'+h(s.liveError)+'</p>':'')+
+      '<p class="muted smalltext">Pas na een geldige verbinding verschijnen je werkelijke opdrachten, workers en metingen. Ollama en Docker worden afzonderlijk gecontroleerd.</p></div>');
+}
 function liveLogbook(){
   const events=(s.liveOps?.history||[]);
   const types=['Alle',...new Set(events.map(e=>e.event?.type).filter(Boolean))];
@@ -611,7 +654,7 @@ function liveLogbook(){
     '<div class="notice mt">Het operationslog en het oorspronkelijke bewijslog zijn afzonderlijke registraties. Bekijk bewijs, bronherkomst en tegenbewijs via Bewijs en herkomst.</div>';
 }
 
-function overview(){if(s.liveOps)return liveOverview();return compactDashboard(false)}
+function overview(){if(onExecutionServer())return s.liveOps?liveOverview():localConnectView();return compactDashboard(false)}
 function taskBar(arr){const colors={done:'#477d6d',running:'#8b9b9a',queued:'#e1e6e1',review:'#c18a52',blocked:'#bf6660'};return `<div class="pbar">${['done','running','review','blocked','queued'].map(st=>{const n=arr.filter(t=>t.state===st).length;return n?`<i title="${st}: ${n}" style="width:${(n/arr.length)*100}%;background:${colors[st]}"></i>`:''}).join('')}</div>`}
 function missionView(){const m=mission(s.selectedMission)||s.missions[0];const ts=tasksFor(m.id);return header('Opdrachten','Hier bewaakt de planner het doel, de fases, afhankelijkheden en de voortgang.',btn('Echte uitvoering','nav-live')+btn(ico('plus')+' Nieuwe demo-opdracht','newmission','primary')+btn(ico('play')+' Ronde uitvoeren','cycle'))+`<div class="grid cols-2 mb">${s.missions.map(x=>`<button class="worker-card ${x.id===m.id?'selected':''}" data-action="selectmission" data-id="${x.id}"><div class="row"><span class="worker-name">${h(x.title)}</span>${badge(x.status)}</div><div class="worker-sub">${h(x.description)}</div>${prog(completion(x.id))}<div class="worker-meta"><span>${tasksFor(x.id).length} deeltaken</span><span>${completion(x.id)}% voltooid</span></div></button>`).join('')}</div><div class="grid cols-3 mb"><div class="card metric"><div class="caption">Fases</div><strong>5</strong><small>Vaste demonstratiestructuur</small></div><div class="card metric"><div class="caption">Deeltaken</div><strong>${ts.length}</strong><small>Klein, middelgroot en groot</small></div><div class="card metric"><div class="caption">Voltooid</div><strong>${completion(m.id)}%</strong><small>Afgeronde demo-taken</small></div></div>${section('Werkplan · '+h(m.title),`<div style="padding:15px">${phaseBoard(m.id)}</div>`)}<div class="notice mt">De fasering is een voorbeeld. In de uiteindelijke toepassing moet een planner de deeltaken en afhankelijkheden voorstellen, laten beoordelen en onderweg kunnen aanpassen.</div>`}
 function phaseBoard(id){return `<div class="task-grid">${phases.map((p,i)=>{const items=tasksFor(id).filter(t=>t.phase===i);return `<div class="phase"><div class="phase-head"><span class="phase-title">${i+1}. ${p}</span><span class="pill dim" style="padding:2px 5px">${items.length}</span></div>${items.length?items.map(t=>`<button class="task-card" data-action="task" data-id="${t.id}"><div class="row"><span class="tid">${t.id}</span>${badge(t.state)}</div><div class="title">${h(t.title)}</div><div class="worker">${h(worker(t.worker)?.name||'Nog toe te wijzen')}</div><div class="tag">${t.size} · ${t.depends.length} afhankelijkheden</div></button>`).join(''):'<div class="empty" style="padding:10px">Nog geen taken</div>'}</div>`}).join('')}</div>`}
@@ -766,7 +809,7 @@ function liveHumanDecisions(){
   if(!s.liveOps)return '';
   const pending=Object.values(s.liveOps.defects||{}).filter(d=>d.state==='human-required');
   return section('Echte besluiten uit workerregistratie',
-    '<div class="card pad"><p class="muted smalltext">Een beslissing wordt als persoonsgebonden gebeurtenis op de EAIwork-server geregistreerd. De voorbeeldbesluiten hieronder blijven gesimuleerd.</p>'+
+    '<div class="card pad"><p class="muted smalltext">Een besluit wordt door de lokale server met de bevoegde persoon geregistreerd. Dit zijn uitsluitend werkelijk vastgelegde problemen.</p>'+
     (pending.length?pending.map(d=>'<div class="decision-card"><b>'+h(d.id)+' · '+h(d.workerId)+'</b><p>'+h(d.reason)+'</p><p class="muted smalltext">'+d.attempts.length+'/3 herstelpogingen · '+h(d.severity)+'</p><label class="field-label" for="reason-'+h(d.id)+'">Motivering</label><textarea id="reason-'+h(d.id)+'" class="field" placeholder="Leg het besluit vast" maxlength="2000" style="width:100%;min-height:70px"></textarea><div class="option-row">'+
       [['replace','Andere worker'],['rebuild','Opnieuw bouwen'],['manual','Handmatig beoordelen'],['pause','Pauzeren'],['disable','Uitschakelen']].map(([v,t])=>'<button class="btn small" data-action="ops-human-decide" data-id="'+h(d.id)+'" data-choice="'+v+'">'+t+'</button>').join('')+'</div></div>').join(''):'Geen menselijke herstelbesluiten open.')+
     (s.liveError?'<p class="contract-error" role="alert">'+h(s.liveError)+'</p>':'')+'</div>'
@@ -815,6 +858,7 @@ function logbook(){if(s.liveOps)return liveLogbook();const types=['Alle',...new 
 function settings(){return header('Instellingen','Grenzen voor gelijktijdig werk, herstelpogingen, bevoegdheden en kosten.')+`<div class="grid cols-2"><div>${section('Uitvoering',`<div class="card pad" style="border:0;box-shadow:none"><label class="field-label" for="parallel">Maximaal gelijktijdige taken (demo)</label><div class="row"><input id="parallel" type="range" min="1" max="32" value="${s.settings.parallel}" style="width:75%;accent-color:var(--green)"><b>${s.settings.parallel}</b></div><div class="sep"></div><label class="field-label" for="budget">Fictief werkbudget</label><div class="row"><input id="budget" type="range" min="10" max="200" step="10" value="${s.settings.budget}" style="width:75%;accent-color:var(--green)"><b>${s.settings.budget}</b></div><div class="sep"></div><div class="switcher"><div><b>Automatisch herstel voorstellen</b><small>Herstellen gebeurt alleen binnen het contract en de grens van drie pogingen.</small></div><button class="toggle ${s.settings.autoRepair?'on':''}" data-action="toggleRepair" aria-label="Automatisch herstel voorstellen" aria-pressed="${s.settings.autoRepair}"></button></div></div>`)}</div><div>${section('Vaste grenzen',`<div class="card pad" style="border:0;box-shadow:none"><div class="contract-line"><span>Reparatie</span>Maximaal 3 mislukte pogingen</div><div class="contract-line"><span>Na 3 pogingen</span>Menselijke beslissing verplicht</div><div class="contract-line"><span>Nieuwe worker</span>Eerst sandbox en tests</div><div class="contract-line"><span>Publicatie</span>Aparte toestemming vereist</div><div class="contract-line"><span>Modelcontrole</span>Geen eigen bewijsstatus verhogen</div><div class="contract-line"><span>Geheugen</span>Bronversies en beslissingen bewaren</div><div class="contract-line"><span>Omgeving</span>Demo · geen uitvoeringsrechten</div></div>`)}</div></div>`}
 
 function opsWorkers(){
+  if(onExecutionServer()&&!s.liveOps)return [];
   if(s.liveOps) return Object.values(s.liveOps.workers||{}).map(w=>({id:w.contract.id,name:w.contract.name,version:w.contract.version,stage:w.stage,contract:w.contract,registeredAt:w.registeredAt,releasedAt:w.releasedAt,releaseEvidence:w.releaseEvidence}));
   return s.workers.map(w=>({id:w.id,name:w.name,version:w.ver,stage:w.status,contract:{id:w.id,name:w.name,version:w.ver,specialization:w.role,taskKinds:[w.group],inputSchema:null,outputSchema:null,tools:w.tools.split(",").map(x=>x.trim()),requestedPermissions:[w.permissions],modelPolicy:{preferred:w.size},testSuite:"Niet als contracttest geregistreerd",stopConditions:[]}}));
 }
@@ -852,7 +896,7 @@ function registration(){
     }).join('')+'</div>'):'';
   return header('Contracten en registratie','Wat mag een worker doen, welke versie is actief en welke metingen onderbouwen zijn kwaliteit?')+
     '<div class="card pad mb"><div class="row"><b>Databron</b>'+badge(live?'verbonden':'demo')+'</div>'+
-    '<p class="muted smalltext">De openbare demo gebruikt voorbeeldworkers. Een beveiligde EAIwork-server kan via dezelfde website-origin echte contracten en metingen leveren. Er worden geen externe servers benaderd.</p>'+
+    '<p class="muted smalltext">'+(onExecutionServer()?'Hier staan de daadwerkelijk geregistreerde workercontracten en metingen van je lokale EAIwork-server.':'Deze demonstratie gebruikt uitsluitend voorbeeldworkers.')+'</p>'+
     (onExecutionServer()?'<div class="ops-connect"><input type="password" id="ops-token" autocomplete="off" placeholder="Toegangstoken voor deze EAIwork-server" aria-label="EAIwork toegangstoken"><button class="btn primary" data-action="ops-connect">Verbind deze server</button>':'<div class="notice">Openbare demonstratie. Verbind uitsluitend op het beveiligde EAIwork-serverdashboard. Vul hier geen tokens in.</div>')+
     (live?'<button class="btn" data-action="ops-disconnect">Verbreek verbinding</button>':'')+'</div>'+
     (s.liveError?'<p role="alert" class="contract-error">'+h(s.liveError)+'</p>':'')+'</div>'+
@@ -1100,23 +1144,23 @@ function browserPage(){
 
 
 function library(){
-  const source=s.liveCatalog?.workers??catalogSeed;
+  const source=onExecutionServer()?(s.liveCatalog?.workers??[]):catalogSeed;
   const groups=["Alle","plannen","zoeken","analyseren","uitvoeren","controleren","samenvoegen","maatwerk"];
   const q=s.catalogSearch.toLowerCase();
   const matches=source.filter(x=>(s.catalogGroup==="Alle"||x.group===s.catalogGroup)&&
     (x.name+" "+x.id+" "+x.specialization+" "+x.taskKinds.join(" ")).toLowerCase().includes(q));
   const selected=matches.find(x=>x.id===s.selectedCatalog)||matches[0];
   const count=(group)=>source.filter(x=>x.group===group).length;
-  const live=Boolean(s.liveCatalog);
+  const live=onExecutionServer();
   const detail=selected?'<div class="contract-definition"><div class="row"><b>'+h(selected.name)+'</b>'+badge(selected.registryStage==='unregistered'?'ontwerp':selected.registryStage)+'</div><p class="muted smalltext">'+h(selected.specialization)+'</p><dl>'+
     [['Worker-ID',selected.id],['Fase',selected.group],['Taken',selected.taskKinds.join(", ")],['Voorgestelde modelcapaciteit',selected.suggestedModel],['Benodigde voorzieningen',(selected.requiredCapabilities||[]).join(", ")||'Geen'],['Registratie',selected.registryStage==='unregistered'?'Niet geregistreerd':selected.registryStage],['Versie',selected.version||'Geen'],['Meetseries',live?String(selected.testMeasurements):'Niet beschikbaar'],['Actieve instanties','Niet meetbaar; niet hetzelfde als beschikbaar']].map(([l,v])=>'<dt>'+h(l)+'</dt><dd>'+h(v)+'</dd>').join('')+'</dl>'+
     '<div class="mt">'+btn('Maak kandidaatcontract','blueprint-contract','primary', 'data-id="'+h(selected.id)+'"')+'</div></div>':'<div class="card pad">Geen specialisatie gevonden.</div>';
   return header('Workerbibliotheek','Een verzameling mogelijke specialisaties. Er worden geen workers gestart door deze lijst.',btn('Workerregister','nav-registration'))+
     '<div class="grid cols-4 mb"><div class="card metric"><div class="caption">Ontworpen specialisaties</div><strong>'+source.length+'</strong><small>Geen actieve processen</small></div>'+
-    '<div class="card metric"><div class="caption">Fases</div><strong>6</strong><small>Plannen tot samenvoegen</small></div>'+
+    '<div class="card metric"><div class="caption">Categorieën</div><strong>'+(live?new Set(source.map(w=>w.group)).size:6)+'</strong><small>Ontwerpindeling</small></div>'+
     '<div class="card metric"><div class="caption">Geregistreerd</div><strong>'+(live?(s.liveCatalog.counts?.registered??'—'):'—')+'</strong><small>'+(live?'Volgens de server':'Niet verbonden')+'</small></div>'+
     '<div class="card metric"><div class="caption">Actief</div><strong>—</strong><small>Uitvoeringsregistratie ontbreekt</small></div></div>'+
-    '<div class="notice mb">'+(live?'Live registratie gekoppeld. De specialisaties zelf zijn nog steeds ontwerpen.':'Voorbeeldbibliotheek uit de EAIwork-broncode. Contracttoelating en echte tools zijn niet gesimuleerd.')+'</div>'+
+    '<div class="notice mb">'+(live?(s.liveCatalog?'Ontwerpen uit de lokale serverbibliotheek. Een ontwerp is nog geen actieve worker.':'De serverbibliotheek is nog niet geladen. Er worden geen voorbeeldspecialisaties getoond.'):'Voorbeeldbibliotheek uit de EAIwork-broncode. Contracttoelating en echte tools zijn niet gesimuleerd.')+'</div>'+
     '<div class="toolbar"><input class="field filter" id="catalogSearch" value="'+h(s.catalogSearch)+'" placeholder="Zoek specialisatie" aria-label="Zoek specialisatie"><select id="catalogGroup" aria-label="Fasefilter">'+groups.map(g=>'<option value="'+h(g)+'" '+(s.catalogGroup===g?'selected':'')+'>'+h(g==='Alle'?'Alle fases':g+' ('+count(g)+')')+'</option>').join('')+'</select><span class="pill">'+matches.length+' van '+source.length+'</span></div>'+
     '<div class="detail-split"><div class="worker-grid">'+matches.map(x=>'<button class="worker-card '+(x.id===selected?.id?'selected':'')+'" data-action="catalog-select" data-id="'+h(x.id)+'"><div class="row"><span class="worker-name">'+h(x.name)+'</span>'+badge(x.registryStage==='unregistered'?'ontwerp':x.registryStage)+'</div><div class="worker-sub">'+h(x.specialization)+'</div><div class="worker-meta"><span>'+h(x.group)+' · '+h(x.suggestedModel)+'</span><span>'+h(x.taskKinds[0])+'</span></div></button>').join('')+'</div><div class="detail-sidebar">'+section('Specialisatie en contract',detail)+'</div></div>';
 }
@@ -1388,8 +1432,8 @@ function realMissions(){
     '<div class="card metric"><div class="caption">Toegelaten workers</div><strong>'+Object.values(s.liveOps.workers||{}).filter(w=>w.stage==='ready').length+'</strong><small>Alleen met een contract</small></div>'+
     '<div class="card metric"><div class="caption">Actieve workers</div><strong>0</strong><small>Geen blijvende agents; uitvoering per stap</small></div></div>'+
     '<div class="grid cols-2"><div>'+section('Nieuw goedgekeurd taakplan','<div class="card pad"><p class="muted smalltext">Deze proef maakt een plan met twee afhankelijke stappen: tekst opschonen en vervolgens woorden tellen. De persoon keurt het plan goed. Gebruik alleen niet-vertrouwelijke voorbeeldtekst.</p>'+
-      '<form id="realMissionForm" class="form-stack"><div><label for="realMissionTitle" class="field-label">Opdrachtnaam</label><input class="field" id="realMissionTitle" maxlength="100" required value="Tekstcontrole" style="width:100%"></div>'+
-      '<div><label for="realMissionText" class="field-label">Tekst voor lokale verwerking</label><textarea id="realMissionText" required maxlength="2000" style="width:100%">  Hallo  wereld\nNu  </textarea></div>'+
+      '<form id="realMissionForm" class="form-stack"><div><label for="realMissionTitle" class="field-label">Opdrachtnaam</label><input class="field" id="realMissionTitle" maxlength="100" required placeholder="Naam van je taak" style="width:100%"></div>'+
+      '<div><label for="realMissionText" class="field-label">Tekst voor lokale verwerking</label><textarea id="realMissionText" required maxlength="2000" placeholder="Vul de tekst in die je lokaal wilt laten verwerken" style="width:100%"></textarea></div>'+
       '<div><label for="realEvidenceAtom" class="field-label">Bewijsverwijzing (optioneel)</label>'+
       '<input class="field" id="realEvidenceAtom" maxlength="128" placeholder="Bijvoorbeeld een atoom-ID uit Bewijs en herkomst" style="width:100%">'+
       '<p class="muted smalltext">Deze verwijzing telt niet als bewijs van juistheid. De server controleert of de verwijzing bestaat en voor alle auditgebruikers leesbaar is.</p></div>'+
