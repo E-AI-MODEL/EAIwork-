@@ -29,7 +29,7 @@ export async function proposeMissionPlan(
   const raw=await model.propose(sourceInstruction);
   if(!raw || typeof raw!=="object"||Array.isArray(raw))throw new Error("model returned invalid plan");
   const item=raw as Record<string,unknown>;
-  if(Object.keys(item).some(k=>!["title","goal","tasks","constraints","missingInformation"].includes(k)))
+  if(Object.keys(item).some(k=>!["title","goal","tasks","phases","constraints","missingInformation"].includes(k)))
     throw new Error("model returned unsupported plan fields");
   const missing=item.missingInformation??[];
   if(!Array.isArray(missing)||missing.length>16||
@@ -37,7 +37,7 @@ export async function proposeMissionPlan(
      new Set(missing).size!==missing.length)
     throw new Error("invalid missing-information questions");
   const plan={id:approvedId,title:item.title,goal:item.goal,sourceInstruction,
-    tasks:item.tasks,constraints:item.constraints??[]} as MissionPlan;
+    tasks:item.tasks,phases:item.phases,constraints:item.constraints??[]} as MissionPlan;
   validateMissionPlan(plan);
   return {plan,modelId:model.id,
     sourceSha256:createHash("sha256").update(sourceInstruction).digest("hex"),
@@ -57,6 +57,12 @@ const schema={
         input:{type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false},
         textFrom:{type:"string"},
       },required:["id","title","taskKind","dependsOn"],additionalProperties:false,
+    }},
+    phases:{type:"array",minItems:1,maxItems:16,items:{
+      type:"object",properties:{
+        id:{type:"string"},title:{type:"string",maxLength:160},
+        taskIds:{type:"array",minItems:1,items:{type:"string"}},
+      },required:["id","title","taskIds"],additionalProperties:false,
     }},
     missingInformation:{type:"array",maxItems:16,items:{type:"string",maxLength:240}},
     constraints:{type:"array",maxItems:32,items:{
@@ -80,7 +86,7 @@ export function localOllamaPlanningModel(config:{model:string;host?:string;timeo
         method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeout),
         body:JSON.stringify({model:config.model,stream:false,format:schema,options:{temperature:0,num_predict:1400},
           messages:[{role:"user",content:JSON.stringify({
-            instruction:"Suggest a minimal task plan. Do not execute tasks. Extract explicit prohibitions, approvals, deadlines and conditions as exact uninterrupted quotes with UTF-16 start/end offsets in sourceInstruction. Never silently discard a restriction. For any external, publication or destructive action include an approval constraint for that exact task. If information is missing, propose only local, non-destructive tasks and list the unanswered questions in missingInformation. Do not guess answers. Every task uses exactly one of input:{text:string} or textFrom:(dependency task ID). Do not add fields or claim tests have run. Return JSON only.",
+            instruction:"Suggest a minimal task plan grouped into named phases. Every task must appear in exactly one phase, with all dependencies in the same or an earlier phase. Do not execute tasks. Extract explicit prohibitions, approvals, deadlines and conditions as exact uninterrupted quotes with UTF-16 start/end offsets in sourceInstruction. Never silently discard a restriction. For any external, publication or destructive action include an approval constraint for that exact task. If information is missing, propose only local, non-destructive tasks and list the unanswered questions in missingInformation. Do not guess answers. Every task uses exactly one of input:{text:string} or textFrom:(dependency task ID). Do not add fields or claim tests have run. Return JSON only.",
             sourceInstruction,
           })}],
         }),
