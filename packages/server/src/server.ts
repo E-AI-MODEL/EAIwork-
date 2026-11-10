@@ -8,6 +8,7 @@ import {
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
+import { catalogOverview } from "../../operations/src/selector.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -307,6 +308,10 @@ export function makeServer(cfg: Config) {
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
         if (req.method === "GET" && url.pathname === "/ops/state") {
           try { return json(res, 200, operations.snapshot()); }
+          catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/catalog") {
+          try { return json(res, 200, catalogOverview(operations.snapshot())); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
         }
         if (req.method === "GET" && url.pathname === "/ops/verify") {
