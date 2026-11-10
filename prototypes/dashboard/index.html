@@ -1775,39 +1775,46 @@ function codeWorkbench(){
       '<input id="codeTestPath" maxlength="240" placeholder="tests/counter.test.js" style="width:100%">'+
       '<p class="muted smalltext">Docker moet lokaal draaien en de afbeelding node:22-alpine moet vooraf zijn gedownload. Het project blijft ongewijzigd.</p>'+
       '<div class="mt"><button class="btn primary" type="submit">Maak codevoorstel</button></div></form></details>'):'')+
-    section('Onderbroken acties',recovery)+
-    section('Voorstelgeschiedenis',history)+
-    section('Operationslog van de codeworker',trace)+
-    (draft?section('Controleer het voorstel','<div class="card pad">'+
-      '<p><b>'+h(draft.path)+'</b> · '+h(draft.modelId)+'</p>'+
-      '<p>'+h(draft.explanation)+'</p>'+
-      '<p class="muted smalltext">Originele SHA-256: '+h(draft.sourceSha256)+
-      '<br>Voorgestelde SHA-256: '+h(draft.replacementSha256)+'</p>'+
+    (draft?section('Beoordeel voorstel','<div class="card pad">'+
+      '<b>Wat stelt EAIwork voor?</b><p>'+h(draft.explanation||'Er is geen toelichting beschikbaar.')+'</p>'+
+      '<p class="smalltext">Bestand: '+h(draft.path)+(comparison?' · '+h(comparison.added)+' regels erbij, '+h(comparison.removed)+' weg':'')+'</p>'+
       (draft.sourceChanged?'<p class="contract-error">Bronbestand gewijzigd. Controleer het project voordat je verdergaat.</p>':'')+
+      '<details class="mt"><summary>Bekijk de exacte wijziging</summary>'+
       difference+
       '<details><summary>Volledige voorgestelde code</summary><pre class="contract-code" style="max-height:360px;overflow:auto;white-space:pre-wrap">'+h(draft.replacement)+'</pre></details>'+
+      '<p class="muted smalltext">Controlewaarden: '+h(draft.sourceSha256)+' · '+h(draft.replacementSha256)+'</p></details>'+
       '<div class="smalltext" role="status"><b>Syntaxis:</b> '+h(draft.preflight?.status==='passed'?'Geen syntaxisfout gevonden':draft.preflight?.status==='failed'?'Syntaxisfout, toepassen geblokkeerd':'Niet automatisch gecontroleerd')+
       ' · '+h(draft.preflight?.checker||'Onbekend')+'<p>'+h(draft.preflight?.detail||'Geen inspectie beschikbaar')+'</p></div>'+
       '<div class="mt">'+btn('Controleer voorstel opnieuw','code-check','small')+
       (draft.testPath?' '+btn('Test in Docker','code-test','small'):'')+'</div>'+
-      (draft.testPath?'<p class="smalltext"><b>Docker-test:</b> '+h(draft.testReport?.status||'Nog niet uitgevoerd')+
+      (draft.testPath?'<p class="smalltext"><b>Test:</b> '+h(draft.testReport?.status==='passed'?'Geslaagd':draft.testReport?.status==='failed'?'Mislukt':'Nog niet uitgevoerd')+
          ' · '+h(draft.testPath)+'</p>'+
-         (draft.testReport?.output?'<pre class="contract-code" style="max-height:180px;overflow:auto;white-space:pre-wrap">'+h(draft.testReport.output)+'</pre>':''):'')+
+         (draft.testReport?.output?'<details><summary>Bekijk de testuitvoer</summary><pre class="contract-code" style="max-height:180px;overflow:auto;white-space:pre-wrap">'+h(draft.testReport.output)+'</pre></details>':''):'')+
       (codeInspection?'<p class="smalltext" role="status">'+h(codePlans.some(p=>p.state==='active'&&p.suitePolicy==='project-node-v1')?
         'Controleer de verschillen en de gezamenlijke test hierboven vóór goedkeuring.':
         codeInspection.canApply?'Bron ongewijzigd; je kunt het voorstel beoordelen en toepassen.':
         'Toepassen geblokkeerd: bron of voorstel is veranderd, of syntaxiscontrole mislukt.')+
         (draft.testReport?.testsExecuted?' De opgegeven Docker-test is afzonderlijk uitgevoerd.':' Er zijn geen tests uitgevoerd.')+'</p>':'')+
-      '<b>Door het model voorgestelde tests, niet uitgevoerd</b><p class="smalltext">'+h(draft.checks.join(' · ')||'Geen')+'</p>'+
+      '<details><summary>Extra testideeën van het model</summary><p class="smalltext">Deze tests zijn niet automatisch uitgevoerd: '+h(draft.checks.join(' · ')||'Geen')+'</p></details>'+
       (draft.status==='requires-human-review'&&codePlans.some(p=>p.state==='active'||p.state==='blocked')?
         '<p class="smalltext">Dit voorstel hoort bij het lopende plan. Gebruik bovenaan de knoppen van de geplande stap.</p>':
         draft.status==='requires-human-review'?
-        '<label class="smalltext"><input type="checkbox" id="codeAccept"> Ik heb het volledige voorstel gecontroleerd en wil alleen dit bestand aanpassen.</label>'+
-        '<div class="mt"><button class="btn primary" data-action="code-apply" '+
-        (codeInspection?.canApply?'':'disabled')+'>Pas dit ene bestand toe</button></div>':
+        '<div class="card pad mt" role="group" aria-label="Beslis over dit voorstel">'+
+        '<b>Wil je dit bestand aanpassen?</b>'+
+        '<p class="smalltext">Je kiest alleen voor dit bestand. Er wordt niets gepubliceerd.</p>'+
+        '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
+        '<button class="btn primary" data-action="code-apply" '+
+          (codeInspection?.canApply?'':'disabled')+'>Ja, pas wijziging toe</button>'+
+        btn('Nee, niet uitvoeren','code-dismiss','small')+'</div>'+
+        (!codeInspection?.canApply?'<p class="muted smalltext">Ja is beschikbaar nadat de controle en de test zijn geslaagd.</p>':'')+
+        '</div>':
         draft.canRestore?'<div class="mt">'+btn('Herstel vorige versie','code-restore','')+'</div>':
         '<p class="muted smalltext">Voor dit voorstel is geen wijzigingsactie beschikbaar.</p>')+
-      '<p class="muted smalltext">De oude inhoud krijgt een lokale back-up. Bij een gewijzigd bronbestand wordt de aanvraag geweigerd. Alleen een opgegeven JavaScript-test wordt in Docker gedraaid. Een geslaagde test is geen algemene kwaliteitsgarantie.</p></div>'):'');
+      '<p class="muted smalltext">De vorige versie wordt lokaal bewaard. Een geslaagde test garandeert niet dat alle code goed werkt.</p></div>'):'')+
+    '<details class="card pad mt"><summary>Geschiedenis en technische informatie</summary>'+
+      section('Onderbroken acties',recovery)+
+      section('Voorstelgeschiedenis',history)+
+      section('Technische gebeurtenissen',trace)+'</details>';
 }
 async function loadCodeActivity(){
   if(!onExecutionServer()||!opsToken||!codeWorkspaceStatus?.enabled){codeAuditEvents=[];return}
