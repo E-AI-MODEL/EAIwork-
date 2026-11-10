@@ -404,7 +404,7 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
-        const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})\/evaluate$/.exec(url.pathname);
+        const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})(?:\/versions\/(\d+\.\d+\.\d+))?\/evaluate$/.exec(url.pathname);
         if(req.method==="POST"&&builtinTest){
           if(actor.kind!=="person")throw new HttpError(403,"person required to request worker evaluation");
           requireWritableIntegrity();
@@ -413,7 +413,10 @@ export function makeServer(cfg: Config) {
           try{
             const id=builtinTest[1];
             if(id==="repo-search"&&!cfg.repoSearchRoot)throw new Error("repository search not configured");
-            const record=operations.snapshot().workers[id];
+            const current=operations.snapshot();
+            const record=builtinTest[2]?
+              current.workerVersions[id]?.[builtinTest[2]]:
+              current.workers[id];
             if(!record||record.stage!=="candidate")throw new Error("worker is not an eligible candidate");
             const check=evaluateBuiltin(id,record.contract);
             const evidenceRef="builtin-fixtures:"+randomUUID();
