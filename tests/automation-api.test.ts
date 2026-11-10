@@ -27,6 +27,8 @@ test("authorization, manual-run exclusion and bounded automation via HTTP",async
     assert.equal((await call("POST",prefix+"start",{maxStarts:2,resumeAfterRestart:"yes"})).status,422);
     assert.equal((await call("POST",prefix+"start",{maxStarts:1,unsafe:true})).status,422);
     assert.equal((await call("POST","/ops/events",{type:"mission.automation.start",missionId:mission.id,maxStarts:32})).status,403);
+    assert.equal((await call("POST","/ops/events",{type:"task.recover",
+      missionId:mission.id,taskId:"task-clean",runId:"run-fake"})).status,403);
     assert.equal((await call("POST",prefix+"start",{maxStarts:1})).status,201);
     assert.equal((await call("POST",prefix+"start",{maxStarts:1})).status,422);
     assert.equal((await call("POST","/ops/missions/"+mission.id+"/run",{})).status,422);
