@@ -44,9 +44,9 @@ export function evaluateBuiltin(id:string,contract:{
     {input:{text:"Al goed"},expected:{text:"Al goed",changed:false}},
     {input:{text:"\tA  B\t"},expected:{text:"A B",changed:true}},
   ]:[
-    {input:{text:"Hallo wereld\nNu"},expected:{text:"Hallo wereld\nNu",words:3,characters:15,lines:2}},
-    {input:{text:""},expected:{text:"",words:0,characters:0,lines:0}},
-    {input:{text:"Een"},expected:{text:"Een",words:1,characters:3,lines:1}},
+    {input:{text:"Hallo wereld\nNu"},expected:{text:"Hallo wereld\nNu",characters:15,words:3,lines:2}},
+    {input:{text:""},expected:{text:"",characters:0,words:0,lines:0}},
+    {input:{text:"Een"},expected:{text:"Een",characters:3,words:1,lines:1}},
   ];
   const results=fixtures.map(f=>({
     passed:JSON.stringify(adapter.run(structuredClone(f.input)))===JSON.stringify(f.expected),
