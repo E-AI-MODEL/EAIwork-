@@ -387,6 +387,7 @@ export function makeServer(cfg: Config) {
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"evaluation takes no arbitrary input");
           try{
             const id=builtinTest[1];
+            if(id==="repo-search"&&!cfg.repoSearchRoot)throw new Error("repository search not configured");
             const record=operations.snapshot().workers[id];
             if(!record||record.stage!=="candidate")throw new Error("worker is not an eligible candidate");
             const check=evaluateBuiltin(id,record.contract);
@@ -411,7 +412,7 @@ export function makeServer(cfg: Config) {
           requireWritableIntegrity();
           const raw=await readBody(req,maxBodyBytes);
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"step does not accept an execution payload");
-          try{return json(res,200,runMissionStep(operations,missionStep[1]))}
+          try{return json(res,200,runMissionStep(operations,missionStep[1],4,cfg.repoSearchRoot))}
           catch(e){throw new HttpError(422,(e as Error).message)}
         }
         const gateAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/gates\/([a-z][a-z0-9-]{2,63})\/resolve$/.exec(url.pathname);
@@ -438,7 +439,7 @@ export function makeServer(cfg: Config) {
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"this route takes no arbitrary payload");
           const missionId=missionAction[1],action=missionAction[2];
           try{
-            if(action==="run")return json(res,200,runMissionUntilBlocked(operations,missionId));
+            if(action==="run")return json(res,200,runMissionUntilBlocked(operations,missionId,32,cfg.repoSearchRoot));
             const event={type:action==="pause"?"mission.pause" as const:"mission.resume" as const,missionId};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,200,{missionId,action,seq:entry.seq});
