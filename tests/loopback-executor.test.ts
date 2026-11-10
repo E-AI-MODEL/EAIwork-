@@ -156,3 +156,54 @@ test("invalid executor identities and privilege-sharing tokens are rejected at s
   assert.throws(()=>validateExecutorIdentities({["a".repeat(32)]:valid,["b".repeat(32)]:valid},new Set()),
     /duplicate executor identity/);
 });
+
+
+test("restart reconciliation revokes nonpersistent executor consent without retrying its claim",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-restart";
+    assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:2,executionMode:"remote-text",resumeAfterRestart:false})).status,201);
+    const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
+    assert.equal(response.status,200);
+    const job=await response.json() as any;
+    assert.equal(h.demo.scheduler.recoverInterrupted(),1);
+    const m=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(m.automation.enabled,false);
+    assert.equal(m.automation.stoppedReason,"interrupted");
+    assert.equal(m.tasks[job.taskId].status,"running");
+    assert.equal(m.tasks[job.taskId].run.lease.id,job.leaseId);
+    assert.equal((await h.request("/executor/v1/complete",{
+      missionId:id,taskId:job.taskId,runId:job.runId,leaseId:job.leaseId,
+      output:{text:"EAIwork werkt",changed:true},
+    },h.demo.workerToken)).status,409);
+    assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
+    const again=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(again.automation.starts,1);
+  }finally{await h.demo.close()}
+});
+test("restart reconciliation preserves explicitly resumable active lease without replay",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-allowed-restart";
+    assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:2,executionMode:"remote-text",resumeAfterRestart:true})).status,201);
+    const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
+    assert.equal(response.status,200);
+    const job=await response.json() as any;
+    assert.equal(h.demo.scheduler.recoverInterrupted(),0);
+    const before=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(before.automation.starts,1);
+    assert.equal(before.tasks[job.taskId].status,"running");
+    assert.equal((await h.request("/executor/v1/complete",{
+      missionId:id,taskId:job.taskId,runId:job.runId,leaseId:job.leaseId,
+      output:{text:"EAIwork werkt",changed:true},
+    },h.demo.workerToken)).status,200);
+    const after=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(after.automation.starts,1);
+    assert.equal(after.tasks[job.taskId].status,"done");
+    assert.equal(after.tasks[job.taskId].attempts?.length??0,0);
+  }finally{await h.demo.close()}
+});
