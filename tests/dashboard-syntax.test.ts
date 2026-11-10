@@ -37,6 +37,12 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/function liveWorkers\(/);
   assert.match(html,/realPlannerMission/);
   assert.match(html,/ops-worker-open/);
+  assert.match(html,/function automationPanel\(/);
+  assert.match(html,/function controlAutomation\(/);
+  assert.match(html,/updateAutomationPolling\(/);
+  assert.match(html,/case 'automation-start'/);
+  assert.match(html,/case 'automation-stop'/);
+  assert.match(html,/automaticConsent/);
   assert.match(html,/evidenceState,evidenceDetail/);
   assert.doesNotMatch(html,/localStorage\.setItem\(/);
   assert.doesNotMatch(html,/fetch\(['"]https?:\/\//);
