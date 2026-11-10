@@ -47,7 +47,7 @@ def write_member(archive, name, content):
 def build():
     files = collected()
     license_bytes = files["LICENSE"]
-    if not (license_bytes.startswith(b"# PolyForm Noncommercial License 1.0.0\\n") and
+    if not (license_bytes.startswith(b"# PolyForm Noncommercial License 1.0.0") and
             b"Required Notice: Copyright 2026 H. Visser / E-AI-MODEL." in license_bytes):
         raise ValueError("noncommercial repository license missing or unexpected")
     manifest = {
