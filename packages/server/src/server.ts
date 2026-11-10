@@ -13,6 +13,7 @@ import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInvento
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
+import {productionLineView} from "../../operations/src/production-line.ts";
 import {claimTextJob,heartbeatTextJob,completeTextJob,validateJobReference,
   validateExecutorIdentities,type ExecutorIdentity,type JobReference} from "../../operations/src/executor-channel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
@@ -391,6 +392,17 @@ export function makeServer(cfg: Config) {
         if (req.method === "GET" && url.pathname === "/ops/state") {
           try { return json(res, 200, operations.snapshot()); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/production-line") {
+          try {
+            const integrity=operations.verify();
+            if(!integrity.ok)return json(res,503,{error:"operations verification failed"});
+            const current=operations.snapshot();
+            return json(res,200,productionLineView(current,
+              builtinInventoryForState(current,cfg.repoSearchRoot),true));
+          }catch{
+            return json(res,503,{error:"production line unavailable"});
+          }
         }
         if (req.method === "GET" && url.pathname === "/ops/queue") {
           try{return json(res,200,projectLocalQueue(operations.snapshot()))}
