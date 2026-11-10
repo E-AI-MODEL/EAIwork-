@@ -7,6 +7,7 @@ import {mkdtempSync,rmSync,readFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
+import {openLocalProfile} from "./local-profile.ts";
 import {makeServer} from "../packages/server/src/server.ts";
 import {SignedFileAnchorWitness} from "../packages/server/src/witness.ts";
 import {evaluateBuiltin,runMissionUntilBlocked} from "../packages/operations/src/execution.ts";
@@ -26,21 +27,21 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number}={}){
-  const root=mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
-  const witnessDir=mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
-  const pair=generateKeyPairSync("ed25519");
-  const witness=new SignedFileAnchorWitness(
-    witnessDir,
-    pair.privateKey.export({format:"pem",type:"pkcs8"}).toString(),
-    pair.publicKey.export({format:"pem",type:"spki"}).toString(),
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string}={}){
+  const profile=options.persistentDir?openLocalProfile(options.persistentDir):null;
+  const root=profile?.root??mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
+  const witnessDir=profile?.witnessDir??mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
+  const pair=profile?null:generateKeyPairSync("ed25519");
+  const witness=new SignedFileAnchorWitness(witnessDir,
+    profile?.privateKeyPem??pair!.privateKey.export({format:"pem",type:"pkcs8"}).toString(),
+    profile?.publicKeyPem??pair!.publicKey.export({format:"pem",type:"spki"}).toString()
   );
   const token=randomBytes(32).toString("hex");
   const workerToken=randomBytes(32).toString("hex");
   const reviewerToken=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
-  const {server,operations,scheduler}=makeServer({
-    dir:join(root,"evidence"),operationsDir:join(root,"operations"),
+  const {server,store,operations,scheduler}=makeServer({
+    dir:profile?.evidenceDir??join(root,"evidence"),operationsDir:profile?.operationsDir??join(root,"operations"),
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
     githubActionReader:options.githubActionReader,
@@ -56,6 +57,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   const emit=(event:OpsEvent,actor:OpsActor=person)=>operations.append({
     id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event,
   });
+  if(operations.snapshot().history.length===0){
   for(const contract of [
     simple("text-normalize","text-normalize"),
     simple("text-metrics","text-metrics"),
@@ -109,12 +111,16 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
         dependsOn:["task-clean-auto"],textFrom:"task-clean-auto"},
     ],
   }});
+  }
   async function close(){
     if(server.listening)await new Promise<void>(done=>server.close(()=>done()));
-    rmSync(root,{recursive:true,force:true});
-    rmSync(witnessDir,{recursive:true,force:true});
+    else {scheduler?.close();operations.close();store.close();}
+    if(!profile){
+      rmSync(root,{recursive:true,force:true});
+      rmSync(witnessDir,{recursive:true,force:true});
+    }
   }
-  return {server,token,workerToken,reviewerToken,scheduler,close};
+  return {server,token,workerToken,reviewerToken,scheduler,storageDir:profile?.root??null,close};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const demo=createDemoServer();

@@ -7,6 +7,7 @@ import {pathToFileURL} from "node:url";
 import {resolve} from "node:path";
 import type {AddressInfo} from "node:net";
 import {createDemoServer} from "./local-demo.ts";
+import {defaultLocalProfileDir} from "./local-profile.ts";
 import {localOllamaHost,discoverLocalOllamaModels} from "../packages/gateway/src/ollama-provider.ts";
 import {localOllamaPlanningModel} from "../packages/operations/src/planner.ts";
 
@@ -15,6 +16,7 @@ export interface LocalOllamaOptions {
   host?:string;
   port?:number;
   timeoutMs?:number;
+  dataDir?:string;
 }
 export function chooseInstalledModel(installed:string[],requested?:string):string{
   const names=[...new Set(installed.filter(v=>typeof v==="string" && v.length>0))].sort();
@@ -32,16 +34,18 @@ export function parseLocalOllamaArgs(args:string[],env:NodeJS.ProcessEnv=process
     model:env.EAI_OLLAMA_MODEL||undefined,
     port:Number(env.EAI_DEMO_PORT||8788),
     timeoutMs:90000,
+    dataDir:env.EAI_LOCAL_DATA_DIR||defaultLocalProfileDir(),
   };
   const seen=new Set<string>();
   for(const arg of args){
-    const match=/^--(model|host|port|timeout-ms)=(.+)$/.exec(arg);
-    if(!match||seen.has(match[1]))throw new Error("Gebruik --model=NAAM, --host=LOOPBACK, --port=NUMMER of --timeout-ms=NUMMER");
+    const match=/^--(model|host|port|timeout-ms|data-dir)=(.+)$/.exec(arg);
+    if(!match||seen.has(match[1]))throw new Error("Gebruik --model=NAAM, --host=LOOPBACK, --port=NUMMER of --timeout-ms=NUMMER of --data-dir=MAP");
     seen.add(match[1]);
     if(match[1]==="model")result.model=match[2];
     if(match[1]==="host")result.host=match[2];
     if(match[1]==="port")result.port=Number(match[2]);
     if(match[1]==="timeout-ms")result.timeoutMs=Number(match[2]);
+    if(match[1]==="data-dir")result.dataDir=match[2];
   }
   localOllamaHost(result.host);
   if(result.model && (result.model.length>120||!/^[-\w.:/]+$/.test(result.model)))
@@ -66,6 +70,7 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
   const model=chooseInstalledModel(installed,options.model);
   const demo=createDemoServer({
     planningModel:localOllamaPlanningModel({model,host,timeoutMs}),
+    persistentDir:options.dataDir??defaultLocalProfileDir(),
   });
   try{
     await new Promise<void>((done,reject)=>{
@@ -86,11 +91,12 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       "\nEAIwork lokaal met Ollama\n"+
       "Dashboard: "+local.address+"\n"+
       "Model voor planvoorstellen: "+local.model+" (Ollama op "+local.ollamaHost+")\n"+
-      "Toegangstoken: "+local.token+"\n\n"+
+      "Toegangstoken: "+local.token+"\n"+
+      "Blijvende opslag: "+local.storageDir+"\n\n"+
       "Open het dashboard, ga naar Meer > Contracten en registratie en verbind met het token.\n"+
       "Ga vervolgens naar Echte uitvoering en vraag een planvoorstel aan.\n"+
       "Het model mag alleen voorstellen doen. Jij keurt plannen en uitvoering goed.\n"+
-      "Dit is nog een tijdelijke proef: na stoppen worden de demogegevens verwijderd.\n"+
+      "Opdrachten en logboeken blijven na afsluiten bewaard. Maak zelf een back-up van deze lokale map.\n"+
       "Stop met Ctrl+C.\n\n"
     );
     let stopping=false;
