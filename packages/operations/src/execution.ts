@@ -29,6 +29,18 @@ const metrics=(input:{text:string})=>({
   words:input.text.trim()?input.text.trim().split(/\s+/u).length:0,
   lines:input.text?input.text.split("\n").length:0,
 });
+const composed=(input:{text:string})=>{
+  const cleaned=normalize(input);
+  return {...metrics({text:cleaned.text}),changed:cleaned.changed};
+};
+const safeComposition=(contract:{recipe?:{kind:string;steps:string[]};taskKinds:string[];
+  modelPolicy:{preferred:string};testSuite:string;tools:string[];requestedPermissions:string[]})=>
+  contract.recipe?.kind==="builtin-compose" &&
+  JSON.stringify(contract.recipe.steps)===JSON.stringify(["text-normalize","text-metrics"]) &&
+  JSON.stringify(contract.taskKinds)===JSON.stringify(["text-inspect"]) &&
+  contract.modelPolicy.preferred==="deterministic" &&
+  contract.testSuite==="builtin-compose-fixture-v1" &&
+  contract.tools.length===0 && contract.requestedPermissions.length===0;
 const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
   "text-normalize":{id:"text-normalize",taskKind:"text-normalize",run:normalize},
   "text-metrics":{id:"text-metrics",taskKind:"text-metrics",run:metrics},
@@ -36,7 +48,20 @@ const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
 export function evaluateBuiltin(id:string,contract:{
   id:string;version:string;taskKinds:string[];testSuite:string;
   modelPolicy:{preferred:string};tools:string[];requestedPermissions:string[];
+  recipe?:{kind:string;steps:string[]};
 }) {
+  if(contract.recipe){
+    if(id!==contract.id||!safeComposition(contract))throw new Error("untrusted fixed worker recipe");
+    const cases=[
+      {input:{text:"  Hallo  wereld\r\n"},expected:{text:"Hallo wereld",characters:12,words:2,lines:1,changed:true}},
+      {input:{text:"Een\nTwee"},expected:{text:"Een\nTwee",characters:8,words:2,lines:2,changed:false}},
+      {input:{text:""},expected:{text:"",characters:0,words:0,lines:0,changed:false}},
+    ];
+    const passed=cases.filter(x=>JSON.stringify(composed(x.input))===JSON.stringify(x.expected)).length;
+    return {numerator:passed,denominator:cases.length,metric:"fixture-pass",taskKind:"text-inspect",
+      dataset:"builtin-compose-fixture-v1",suiteVersion:"builtin-compose-fixture-v1",
+      cohort:"fixed-fixtures",note:"Only this fixed two-step recipe has been tested."};
+  }
   if(id==="repo-search"){
     if(contract.id!=="repo-search"||!contract.taskKinds.includes("repo-search") ||
        contract.testSuite!=="repo-search-fixture-v1"||
@@ -86,9 +111,9 @@ export function evaluateBuiltin(id:string,contract:{
     dataset:"builtin-fixture-v1",suiteVersion:"builtin-fixture-v1",cohort:"fixed-fixtures",
     note:"Closed deterministic test cases only; not a general-purpose accuracy measurement."};
 }
-export function builtinInventory(repoSearchRoot?:string):RuntimeInventory {
+export function builtinInventory(repoSearchRoot?:string,composedIds:string[]=[]):RuntimeInventory {
   return {
-    adapterIds:repoSearchRoot?[...Object.keys(BUILTINS),"repo-search"]:Object.keys(BUILTINS),
+      adapterIds:[...Object.keys(BUILTINS),...(repoSearchRoot?["repo-search"]:[]),...composedIds],
     capabilities:repoSearchRoot?["repo.search"]:[],
     grantedPermissions:repoSearchRoot?["read:repo"]:[],
     supportedModelSizes:["deterministic"],
@@ -140,7 +165,8 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4,repoSea
     try{payload=inputFor(now,spec.id)}catch{
       result.blocked.push({taskId:spec.id,reason:"dependency-output-unavailable"});continue;
     }
-    const choice=selectWorker({taskKind:spec.taskKind},current,builtinInventory(repoSearchRoot));
+    const composedIds=Object.values(current.workers).filter(w=>safeComposition(w.contract)).map(w=>w.contract.id);
+    const choice=selectWorker({taskKind:spec.taskKind},current,builtinInventory(repoSearchRoot,composedIds));
     const id=choice.selectedWorkerId;
     if(!id){result.blocked.push({taskId:spec.id,reason:choice.nextStep});continue}
     const worker=current.workers[id];
@@ -150,7 +176,8 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4,repoSea
         return {text:"RepoSearch: "+search.results.length+" bronfragmenten gevonden; inhoud nog niet beoordeeld.",
           revision:search.revision,rootLabel:search.rootLabel,
           visitedFiles:search.visitedFiles,truncated:search.truncated,results:search.results};
-      }}:BUILTINS[id];
+      }}:worker?.contract.recipe&&safeComposition(worker.contract)?
+        {id,taskKind:"text-inspect",run:composed}:BUILTINS[id];
     if(!worker || !adapter || adapter.taskKind!==spec.taskKind || worker.stage!=="ready"){
       result.blocked.push({taskId:spec.id,reason:"worker-unavailable"});continue;
     }
