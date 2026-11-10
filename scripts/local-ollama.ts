@@ -45,9 +45,9 @@ export function parseLocalOllamaArgs(args:string[],env:NodeJS.ProcessEnv=process
   localOllamaHost(result.host);
   if(result.model && (result.model.length>120||!/^[-\w.:/]+$/.test(result.model)))
     throw new Error("Ongeldige lokale modelnaam");
-  if(!Number.isInteger(result.port)||result.port!<1024||result.port!>65535)
+  if(!Number.isInteger(result.port)||result.port<1024||result.port>65535)
     throw new Error("Dashboardpoort moet tussen 1024 en 65535 liggen");
-  if(!Number.isInteger(result.timeoutMs)||result.timeoutMs!<1000||result.timeoutMs!>120000)
+  if(!Number.isInteger(result.timeoutMs)||result.timeoutMs<1000||result.timeoutMs>120000)
     throw new Error("Ollama-timeout moet tussen 1000 en 120000 ms liggen");
   return result;
 }
