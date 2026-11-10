@@ -589,47 +589,138 @@ function compactDashboard(live){
   'De metingen komen uit de lokale registratie. Afgeronde taken zijn niet automatisch inhoudelijk goedgekeurd.':
   'Voorbeeldgegevens. Geen echte workers actief en geen achtergrondopdrachten. Verbind de lokale server om echte registraties te zien.')+'</p>';
 }
+function workerPurpose(w){
+  const kinds=w?.contract?.taskKinds||[];
+  const ordinary={
+    'text-normalize':'Maakt tekst netjes en leesbaar',
+    'text-metrics':'Telt woorden en tekens',
+    'repo-search':'Zoekt informatie in je eigen project',
+    'text-inspect':'Controleert tekst en geeft meetwaarden'
+  };
+  const known=kinds.map(kind=>ordinary[kind]).filter(Boolean);
+  if(known.length)return known.join(' en ');
+  const specialization=w?.contract?.specialization||'';
+  return specialization&&!/demonstration|demo|fixture/i.test(specialization)?
+    specialization:'Taak is nog niet beschreven';
+}
+function workerDisplayName(w){
+  const plain={
+    'text-normalize':'Tekst opschonen',
+    'text-metrics':'Tekst meten',
+    'repo-search':'Project doorzoeken',
+    'text-inspector':'Tekst controleren'
+  };
+  return plain[w?.contract?.id]||w?.contract?.name||'Naam ontbreekt';
+}
+function workerStageText(stage){
+  return ({ready:'Klaar voor gebruik',candidate:'Wacht op toelating',
+    quarantined:'Tijdelijk gestopt',disabled:'Uitgeschakeld',
+    superseded:'Oudere versie'})[stage]||'Status onbekend';
+}
+function workerLastTask(workerId){
+  for(const mission of Object.values(s.liveOps?.missions||{}).reverse()){
+    for(const rec of Object.values(mission.tasks||{}).reverse()){
+      if(rec.run?.workerId===workerId)return {
+        title:mission.plan?.title||'Opdracht',
+        task:rec.spec?.title||'Taak',
+        status:rec.status
+      };
+    }
+  }
+  return null;
+}
+function readableCodeStep(step){
+  return step?.status==='waiting'?'Laat een voorstel maken':
+    step?.status==='review'?'Bekijk het voorstel en test het':
+    step?.status==='needs-post-test'||step?.status==='needs-project-test'?
+      'Test de aangebrachte wijziging':
+    step?.status==='blocked'?'Controleer de mislukte stap':
+    'De opdracht is afgerond';
+}
 function liveOverview(){
   const missions=Object.values(s.liveOps?.missions||{});
-  const currentCodePlan=codePlans.find(p=>p.state==='active'||p.state==='blocked')||codePlans[0]||null;
-  const codePanel=section('Codeworker',currentCodePlan?
-    '<div class="card pad"><b>'+h(currentCodePlan.title)+'</b><p class="smalltext">'+
-    h(currentCodePlan.state==='done'?'Afgerond':currentCodePlan.state==='blocked'?'Geblokkeerd':currentCodePlan.state==='stopped'?'Gestopt':'In behandeling')+
-    ' · '+currentCodePlan.steps.filter(x=>x.status==='done').length+'/'+currentCodePlan.steps.length+' bestanden afgerond</p>'+btn('Open Codeworker','nav','primary','data-id="code"')+'</div>':
-    '<div class="card pad">Nog geen lokale codeplannen. '+btn('Open Codeworker','nav','small','data-id="code"')+'</div>');
-  if(missions.length)return compactDashboard(true)+'<div class="mt">'+codePanel+'</div>';
   const workers=Object.values(s.liveOps?.workers||{});
-  const history=s.liveOps?.history||[];
-  const measures=s.liveOps?.measurements||[];
-  const defects=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
-  const kpis=[['Taakplannen',missions.length,'In de lokale registratie','uitvoering'],
-    ['Codeplannen',codePlans.length,'In de lokale codewerkmap','code'],
-    ['Workers',workers.length,'Geregistreerde contracten','workers'],
-    ['Besluiten',defects.length,'Openstaande beoordelingen','hitl']];
-  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / lokaal</span>'+
-    '<h1>Werkoverzicht</h1><p>Gegevens uit jouw lokale EAIwork-server.</p></div>'+
-    '<div class="dash-head-actions">'+btn('Ververs','ops-connect','primary')+
-    btn('Naar Codeworker','nav','','data-id="code"')+'</div></div>'+
-    '<div class="dash-model-status"><span class="dash-model-dot '+(codeConnections?.ollama?.status==='ready'?'ready':'')+'"></span>'+
-    '<b>'+h(codeConnections?.ollama?.status==='ready'?'Ollama bereikbaar':'Ollama nog niet bevestigd')+'</b>'+
-    '<span>'+h(codeWorkspaceStatus?.modelId||localPlannerStatus?.modelId||'Geen model geselecteerd')+'</span>'+
-    '<small>Bekijk de verbinding met Ollama en Docker bij Codeworker.</small></div>'+
-    '<div class="dash-kpis">'+kpis.map(([label,value,note,route])=>
+  const plans=codePlans||[];
+  const pending=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
+  const unfinished=plans.filter(p=>p.state==='active'||p.state==='blocked');
+  const current=unfinished[0]||null;
+  const next=current?.steps?.find(step=>step.active)||null;
+  const missionsRunning=missions.filter(m=>{
+    const p=liveMissionProgress(m);
+    return p.done<p.total;
+  });
+  const needsReview=pending.length+plans.filter(p=>p.state==='blocked').length+
+    missions.filter(m=>liveMissionProgress(m).blockedByConstraints>0).length+
+    plans.filter(p=>p.steps.some(step=>step.active&&step.status==='review')).length;
+  const done=plans.filter(p=>p.state==='done').length+
+    missions.filter(m=>{const p=liveMissionProgress(m);return p.total>0&&p.done===p.total}).length;
+  const planCards=plans.map(p=>{
+    const active=p.steps?.find(step=>step.active);
+    const status=p.state==='done'?'Afgerond':p.state==='blocked'?'Hulp nodig':
+      p.state==='stopped'?'Gestopt':'Bezig';
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(p.title)+'</b>'+badge(p.state==='done'?'done':p.state==='blocked'?'blocked':'active')+'</div>'+
+      '<p class="smalltext">'+h(p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length)+
+      ' stappen afgerond'+(active?' · '+h(readableCodeStep(active)):'')+'</p>'+
+      btn('Open opdracht','nav','small','data-id="code"')+'</div>';
+  });
+  const missionCards=missions.map(m=>{
+    const p=liveMissionProgress(m);
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(m.plan.title)+'</b>'+badge(p.done===p.total&&p.total>0?'done':p.failed?'blocked':'active')+'</div>'+
+      '<p class="smalltext">'+p.done+'/'+p.total+' stappen afgerond · '+h(p.status)+'</p>'+
+      btn('Open opdracht','nav','small','data-id="uitvoering"')+'</div>';
+  });
+  const statuses=[
+    ['EAIwork',!!s.liveOps],
+    ['Ollama',codeConnections?.ollama?.status==='ready'],
+    ['Docker',codeConnections?.docker?.status==='ready']
+  ];
+  const connection=statuses.map(([name,ready])=>'<span class="smalltext" style="white-space:nowrap">'+
+    '<span class="indicator '+(ready?'green':'amber')+'" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>'+
+    h(name)+(ready?' verbonden':' nog niet bevestigd')+'</span>').join(' <span style="padding:0 7px">·</span> ');
+  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / mijn werk</span>'+
+    '<h1>Waar wil je mee verder?</h1><p>Je opdrachten, wie eraan werkt en wat nog jouw aandacht vraagt.</p></div>'+
+    '<div class="dash-head-actions">'+btn('Nieuwe codeopdracht','nav','primary','data-id="code"')+
+    btn('Nieuwe teksttaak','nav','','data-id="uitvoering"')+'</div></div>'+
+    '<div class="card pad" style="margin-bottom:14px"><div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
+      '<div>'+connection+'</div>'+btn('Controleer verbindingen','nav','small','data-id="code"')+'</div></div>'+
+    '<div class="dash-kpis">'+[
+      ['Lopende opdrachten',unfinished.length+missionsRunning.length,'Ga verder waar je was','code'],
+      ['Jouw aandacht',needsReview,'Wacht op een controle of besluit','code'],
+      ['Afgerond',done,'Opgeslagen werk','uitvoering']
+    ].map(([label,count,desc,route])=>
       '<button class="dash-kpi" data-action="nav" data-id="'+route+'"><span>'+h(label)+'</span>'+
-      '<strong>'+h(value)+'</strong><small>'+h(note)+'</small></button>').join('')+'</div>'+
+      '<strong>'+h(count)+'</strong><small>'+h(desc)+'</small></button>').join('')+'</div>'+
+    (current?'<div class="card pad" style="margin:14px 0"><b>Volgende stap</b>'+
+      '<p style="margin:8px 0 3px"><strong>'+h(current.title)+'</strong></p>'+
+      '<p>'+h(current.state==='blocked'?'Deze opdracht is gestopt. Bekijk wat er misging.':
+        next?readableCodeStep(next):'Bekijk de voortgang van je opdracht.')+'</p>'+
+      btn('Verder met deze opdracht','nav','primary','data-id="code"')+'</div>':
+      '<div class="card pad" style="margin:14px 0"><b>Je kunt beginnen</b>'+
+      '<p>Er staat geen codeopdracht te wachten. Geef op wat je wilt veranderen.</p>'+
+      btn('Open opdrachten','nav','primary','data-id="code"')+'</div>')+
     '<div class="dash-columns"><div class="dash-main-column">'+
-    dashControlsCard('Taakuitvoering',
-      '<div class="dash-empty">Er staat nog geen taakplan in deze lokale registratie. De codeplannen staan bij Codeworker.</div>'+
-      '<div class="mt">'+btn('Start met Codeworker','nav','','data-id="code"')+
-      btn('Nieuwe taak','nav','','data-id="uitvoering"')+'</div>','','')+
-    '</div><div class="dash-side-column">'+
-    dashControlsCard('Laatste gebeurtenissen',history.length?
-      history.slice(-5).reverse().map(row=>'<div class="dash-activity"><div><b>'+
-      h(row.event?.type||'Gebeurtenis')+'</b><small>'+h(row.at||'')+'</small></div></div>').join(''):
-      '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>',
-      'Logboek','logboek')+'</div></div>'+
-    '<div class="mt">'+codePanel+'</div>';
-
+      section('Mijn opdrachten','<div class="card pad">'+
+        (planCards.length+missionCards.length?
+          planCards.concat(missionCards).join(''):
+          '<p class="muted smalltext">Nog geen opdrachten. Maak hierboven je eerste opdracht.</p>')+
+        '</div>')+
+      '</div><div class="dash-side-column">'+
+      section('Wie doet het werk?','<div class="card pad">'+
+        (workers.length?workers.slice(0,5).map(w=>{
+          const last=workerLastTask(w.contract.id);
+          return '<div class="code-history-row"><b>'+h(workerDisplayName(w))+'</b>'+
+            '<p class="smalltext">'+h(workerPurpose(w))+'</p>'+
+            '<small>'+h(last?'Laatst gebruikt voor: '+last.task:'Nog niet ingezet')+
+            ' · '+h(workerStageText(w.stage))+'</small></div>';
+        }).join(''):'<p class="muted smalltext">Er zijn nog geen workers toegevoegd. Je kunt wel met een lokale codeopdracht beginnen.</p>')+
+        '<div class="mt">'+btn('Bekijk workers','nav','small','data-id="workers"')+'</div></div>')+
+      (pending.length?section('Jouw akkoord nodig','<div class="card pad"><p>'+
+        h(pending.length)+' probleem'+(pending.length===1?'':'en')+
+        ' wacht'+(pending.length===1?'':'en')+' op jouw beoordeling.</p>'+
+        btn('Bekijk beslissingen','nav','primary','data-id="hitl"')+'</div>'):'')+
+      '</div></div>';
 }
 function localConnectView(){
   return header('Lokale werkruimte','Dit is de echte EAIwork-omgeving. Er worden geen demo-opdrachten of fictieve metingen getoond.')+
