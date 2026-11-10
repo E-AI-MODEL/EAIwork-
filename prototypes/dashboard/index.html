@@ -1621,39 +1621,39 @@ function orderedPlanPanel(){
     'src/invoice.js | tests/invoice.test.js | Voeg een export function totalWithShipping(shipping = 0) toe. Behoud de export total.'
   ].join(String.fromCharCode(10));
   return '<div class="card pad" id="ordered-plan-card">'+
-    '<p class="muted smalltext">Wijzig twee tot acht bestaande JavaScript-bestanden in een vaste volgorde. Elk bestand krijgt een voorstel. Bij nieuwe plannen testen we alle gekozen bestanden samen, vóór en na het toepassen. Een mislukte test blokkeert de volgende wijziging.</p>'+
+    '<p class="muted smalltext">Geef aan wat je wilt veranderen. EAIwork werkt de stappen één voor één af. Jij bekijkt ieder voorstel voordat er iets wordt aangepast.</p>'+
     (codePlans.length?'<div class="code-history-head"><b>Bestaande plannen</b>'+btn('Ververs','code-plan-refresh','small')+'</div>'+
       codePlans.map(p=>'<button class="code-history-row" data-action="code-plan-open" data-id="'+h(p.id)+'"><b>'+
         h(p.title)+'</b><span>'+h(p.state==='active'?'Actief':p.state==='done'?'Afgerond':p.state==='blocked'?'Geblokkeerd':'Gestopt')+'</span>'+
-        '<small>'+p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length+' bestanden gecontroleerd</small></button>').join(''):'')+
+        '<small>'+p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length+' stappen afgerond</small></button>').join(''):'')+
     (active?'<div class="contract-entry"><div class="row"><b>'+h(active.title)+'</b>'+badge(active.state)+'</div>'+
       '<div class="status-list">'+steps.map((step,i)=>
         '<div class="code-history-row" style="display:flex;justify-content:space-between;gap:12px"><span><b>'+
-        (i+1)+'. '+h(step.path)+'</b><small> Test: '+h(step.testPath)+'</small></span>'+
+        (i+1)+'. '+h(step.instruction.slice(0,130))+'</b><details><summary>Welke bestanden?</summary><small>'+h(step.path)+' · test: '+h(step.testPath)+'</small></details></span>'+
         '<span>'+h(step.status==='done'?'Getest en afgerond':step.status==='review'?'Voorstel beoordelen':
-          step.status==='needs-post-test'?'Test toegepaste code':step.status==='needs-project-test'?'Test alle bestanden samen':step.status==='blocked'?'Geblokkeerd':'In de wachtrij')+
+          step.status==='needs-post-test'?'Wijziging testen':step.status==='needs-project-test'?'Wijziging testen':step.status==='blocked'?'Hulp nodig':'Nog niet gestart')+
         '</span></div>').join('')+'</div>'+
       (active.state==='blocked'?'<p class="contract-error">Een stap is mislukt of een bestand is gewijzigd. Volgende bestanden blijven ongewijzigd. Controleer de gegevens voordat je stopt of herstelt.</p>':'')+
       (active.state==='done'?'<p class="smalltext">Alle bestandsstappen zijn getest. '+(active.suitePolicy==='project-node-v1'?'Ook de gezamenlijke test is na iedere wijziging geslaagd.':'Alleen de opgegeven losse tests zijn uitgevoerd.')+'</p>':'')+
       (active.state==='active'&&current?
-        '<div class="mt"><p><b>Volgende stap: '+h(current.path)+'</b></p>'+
+        '<div class="mt"><p><b>Wat moet er nu gebeuren?</b></p>'+
         '<p class="smalltext">'+h(current.instruction)+'</p>'+
-        (current.status==='waiting'?btn('Maak voorstel voor dit bestand','code-plan-propose','primary'):
+        (current.status==='waiting'?btn('Laat voorstel maken','code-plan-propose','primary'):
           current.status==='review'?
             (active.suitePolicy==='project-node-v1'?
-              btn('Test alle bestanden vóór toepassing','code-plan-project-pre','small')+
-              '<p class="smalltext">Gezamenlijke test vóór toepassing: '+h(current.projectPreStatus||'nog niet uitgevoerd')+'</p>':
-              btn('Test voorstel in Docker','code-plan-test-pre','small'))+
-            '<label class="smalltext"><input type="checkbox" id="codePlanAccept"> Ik heb het voorstel, de verschillen en de testresultaten gecontroleerd.</label>'+
-            btn('Pas deze stap toe','code-plan-apply','primary',
+              btn('Test voorstel','code-plan-project-pre','small')+
+              '<p class="smalltext">Testuitslag: '+h(current.projectPreStatus==='passed'?'Geslaagd':current.projectPreStatus==='failed'?'Mislukt':'Nog niet getest')+'</p>':
+              btn('Test voorstel','code-plan-test-pre','small'))+
+            '<label class="smalltext"><input type="checkbox" id="codePlanAccept"> Ik heb de wijzigingen en de testuitslag bekeken en geef akkoord.</label>'+
+            btn('Pas wijziging toe','code-plan-apply','primary',
               (active.suitePolicy==='project-node-v1'?
                 !(current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
                   codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed'):
                 !codeInspection?.canApply)?'disabled':''):
-          current.status==='needs-post-test'?btn('Test toegepaste code','code-plan-test-post','primary'):
-          current.status==='needs-project-test'?btn('Test alle bestanden na toepassing','code-plan-project-post','primary'):'')+
+          current.status==='needs-post-test'?btn('Test wijziging','code-plan-test-post','primary'):
+          current.status==='needs-project-test'?btn('Test wijziging','code-plan-project-post','primary'):'')+
         '</div>':'')+
-      (active.state!=='done'&&active.state!=='stopped'?'<div class="mt">'+btn('Stop dit plan','code-plan-stop','small')+'</div>':'')+
+      (active.state!=='done'&&active.state!=='stopped'?'<div class="mt">'+btn('Stop opdracht','code-plan-stop','small')+'</div>':'')+
       '</div>':'')+
     (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?
       '<form id="orderedCodeForm" class="form-stack mt">'+
@@ -1661,11 +1661,11 @@ function orderedPlanPanel(){
         '<p class="smalltext">Vul hieronder je eigen bron- en testbestanden in. De grijze tekst is alleen een voorbeeld.</p>')+
       '<label class="field-label" for="orderedTitle">Naam van de opdracht</label>'+
       '<input id="orderedTitle" maxlength="120" required style="width:100%" value="'+(exampleMode?'Proef met twee bestanden':'')+'" placeholder="Geef de opdracht een naam">'+
-      '<label class="field-label" for="orderedSteps">Eén stap per regel: bron | test | opdracht</label>'+
+      '<label class="field-label" for="orderedSteps">Wat moet per bestand gebeuren?</label>'+ 
       '<textarea id="orderedSteps" required style="width:100%;min-height:110px" placeholder="src/voorbeeld.js | tests/voorbeeld.test.js | Beschrijf de wijziging">'+
       (exampleMode?h(exampleRows):'')+'</textarea>'+
-      '<p class="muted smalltext">Docker wordt pas gebruikt bij Test alle bestanden vóór toepassing. Het vastleggen van de volgorde verandert geen code.</p>'+
-      '<button class="btn primary" type="submit">Leg volgorde vast</button></form>':'')+
+      '<p class="muted smalltext">EAIwork verandert niets totdat jij een voorstel goedkeurt. Het testen gebeurt lokaal.</p>'+ 
+      '<button class="btn primary" type="submit">Bewaar stappen</button></form>':'')+
     '</div>';
 }
 function connectionsPanel(){
