@@ -64,7 +64,7 @@ Open de lokale werkruimte en kies **Meer > Codeworker**. Geef één **bestaand r
 - De server controleert vóór het vervangen opnieuw de oorspronkelijke bestandsinhoud. Een gewijzigd bestand wordt niet overschreven. De oorspronkelijke tekst blijft als lokale back-up in de voorstelmap.
 - De codeworker voert **geen voorgestelde code en geen unittests** uit. Hij kan wel vóór goedkeuring de syntaxis van `.js`, `.ts` en `.json` controleren. Deze controle draait met een vaste parser, niet met de door Ollama gegenereerde code. Andere bestandstypen krijgen `not-evaluated`.
 - In het lokale dashboard staat een knop **Controleer voorstel opnieuw**. EAIwork vergelijkt de actuele bron met het oorspronkelijke bestand en berekent de syntaxisstatus opnieuw. Een voorstel met een syntaxisfout wordt geweigerd. Het toepassen controleert dezelfde gegevens nogmaals.
-- De syntaxisuitslag bewijst niet dat de code correct werkt. Tests, terminalcommando's en publicatie worden niet gestart. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
+- De syntaxisuitslag bewijst niet dat de code correct werkt. Alleen een door de gebruiker gekozen JavaScript-test kan optioneel in Docker worden uitgevoerd. Terminalcommando's uit het model en publicatie worden niet gestart. De codeworker wordt nu ook zichtbaar in het lokale operationslog; hij krijgt geen zelfstandige uitvoerings- of publicatierechten.
 
 Deze eerste codeworker is nog geen algemene autonome softwareontwikkelaar. Er is geen OS-sandbox, geen automatische git-commit en geen testexecutor. Gebruik voor de proef uitsluitend een afzonderlijke werkmap met niet-vertrouwelijke broncode.
 
@@ -98,3 +98,13 @@ Het lokale Codeworker-scherm toont de toegevoegde en verwijderde regels naast de
 Na een goedgekeurde wijziging kan **Herstel vorige versie** de opgeslagen originele inhoud terugzetten. Daarvoor is opnieuw een afzonderlijke bevestiging nodig. Het gewijzigde bestand moet nog precies gelijk zijn aan het eerder toegepaste voorstel. EAIwork weigert herstel bij een latere handmatige wijziging. De back-up wordt op SHA-256 gecontroleerd en maar één keer toegepast.
 
 De bestaande Node-/TypeScript-syntaxiscontroles en optionele Docker-test blijven verplicht waar ze waren ingesteld. Een diff is een vergelijking, geen bewijs dat het programma correct werkt. De lokale Docker-proef blijft beperkt tot één voorgesteld JavaScript-bestand met één gekozen testbestand. Er is geen projectbrede autonome bouwloop.
+
+## Codeacties terugvinden in het EAIwork-operationslog
+
+Onder **Meer > Codeworker** staat nu ook **Operationslog van de codeworker**. De server registreert het voorstel, de uitslag van een aangevraagde Docker-test, het handmatig toepassen en het herstellen in de bestaande lokale operationsketen. Je ziet de datum, de handelende persoon of controle, het bestandsnaam, de uitkomst en een verkorte bestands-hash.
+
+De volledige code, Ollama-opdracht, toegangstoken en testuitvoer worden **niet** in deze operationsgebeurtenissen gekopieerd. Voorstellen en volledige testinformatie blijven apart in `code-proposals` in de lokale profielmap. Via `GET /ops/code/activity` kunnen gebruikers met auditrechten de geregistreerde gebeurtenissen opvragen. `proposalId` is een optionele filter. Niemand kan zelf een `code.activity`-event aanbieden via `POST /ops/events`.
+
+Voorstellen uit oudere previews komen niet met een verzonnen oorspronkelijke auteur in het log. Bij de eerstvolgende gecontroleerde handeling worden ze herkenbaar als `legacy-unverified` opgenomen.
+
+**Beperking:** het vervangen van een bestand en het wegschrijven naar het operationslog zijn nog twee afzonderlijke schrijfacties. Een fout tijdens het registreren kan optreden nadat het bestand al is gewijzigd. De API meldt dit expliciet en vraagt om inspectie. De nieuwe logregistratie bewijst dat een gebeurtenis door deze server is vastgelegd, niet dat de code inhoudelijk goed is of dat er nooit een onderbreking is geweest. Er is nog geen automatische herstelprocedure voor zo'n onvolledige registratie.
