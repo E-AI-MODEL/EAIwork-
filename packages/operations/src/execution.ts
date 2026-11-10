@@ -29,6 +29,33 @@ const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
   "text-normalize":{id:"text-normalize",taskKind:"text-normalize",run:normalize},
   "text-metrics":{id:"text-metrics",taskKind:"text-metrics",run:metrics},
 });
+export function evaluateBuiltin(id:string,contract:{
+  id:string;version:string;taskKinds:string[];testSuite:string;
+  modelPolicy:{preferred:string};tools:string[];requestedPermissions:string[];
+}) {
+  const adapter=BUILTINS[id];
+  if(!adapter||contract.id!==id||!contract.taskKinds.includes(adapter.taskKind)||
+     contract.modelPolicy.preferred!=="deterministic" ||
+     contract.testSuite!=="builtin-fixture-v1" ||
+     contract.tools.length||contract.requestedPermissions.length)
+     throw new Error("no trusted fixture suite for this exact contract");
+  const fixtures=id==="text-normalize"?[
+    {input:{text:"  Hallo  wereld\r\n"},expected:{text:"Hallo wereld",changed:true}},
+    {input:{text:"Al goed"},expected:{text:"Al goed",changed:false}},
+    {input:{text:"\tA  B\t"},expected:{text:"A B",changed:true}},
+  ]:[
+    {input:{text:"Hallo wereld\nNu"},expected:{text:"Hallo wereld\nNu",words:3,characters:15,lines:2}},
+    {input:{text:""},expected:{text:"",words:0,characters:0,lines:0}},
+    {input:{text:"Een"},expected:{text:"Een",words:1,characters:3,lines:1}},
+  ];
+  const results=fixtures.map(f=>({
+    passed:JSON.stringify(adapter.run(structuredClone(f.input)))===JSON.stringify(f.expected),
+  }));
+  return {numerator:results.filter(r=>r.passed).length,denominator:results.length,
+    metric:"fixture-pass",taskKind:adapter.taskKind,
+    dataset:"builtin-fixture-v1",suiteVersion:"builtin-fixture-v1",cohort:"fixed-fixtures",
+    note:"Closed deterministic test cases only; not a general-purpose accuracy measurement."};
+}
 export function builtinInventory():RuntimeInventory {
   return {
     adapterIds:Object.keys(BUILTINS),
