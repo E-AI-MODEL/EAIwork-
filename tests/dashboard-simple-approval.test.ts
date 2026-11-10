@@ -43,8 +43,8 @@ test("a code plan asks for one yes/no decision only after a matching successful 
 test("yes sends exact proposal and sha, no stops without applying code",async()=>{
   const src=section("async function runOrderedCodeAction(action){","async function loadCodeHistory(){");
   const sent:{path:string;payload:any}[]=[];
-  const step={...step("review","passed"),replacementSha256:"a".repeat(64)};
-  const plan={id:"plan-1",suitePolicy:"project-node-v1",steps:[step],state:"active"};
+  const currentStep={...step("review","passed"),replacementSha256:"a".repeat(64)};
+  const plan={id:"plan-1",suitePolicy:"project-node-v1",steps:[currentStep],state:"active"};
   const context={
     codePlans:[plan],selectedCodePlan:"plan-1",codeError:"",codeNotice:"",
     codeDraft:{id:"proposal-1",replacementSha256:"a".repeat(64)},
