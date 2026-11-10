@@ -24,7 +24,12 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
   mkdirSync(join(repoRoot,"src"),{recursive:true});
   writeFileSync(join(repoRoot,"src","example.ts"),"export const workerFixture = 'approved-local-only';\n");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
-  const {server}=makeServer({dir:join(root,"evidence"),operationsDir:join(root,"ops"),repoSearchRoot:repoRoot,pack,tokens,witness});
+  const {server}=makeServer({dir:join(root,"evidence"),operationsDir:join(root,"ops"),repoSearchRoot:repoRoot,pack,tokens,witness,
+    planningModel:{id:"mock:planner",propose:async instruction=>({
+      title:"Review plan",goal:"Check small local task",
+      tasks:[{id:"task-local",title:"Analyze input locally",taskKind:"text-normalize",dependsOn:[],input:{text:instruction}}],
+      constraints:[],
+    })}});
   try{
     await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
     const base="http://127.0.0.1:"+((server.address() as AddressInfo).port);
@@ -43,6 +48,14 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     assert.equal(library.counts.active,null);
     assert.equal(library.counts.ready,0);
     assert.ok(library.workers.every((w:any)=>w.activeInstances===null));
+    assert.equal((await request("POST","/ops/plans/propose","s".repeat(40),{instruction:"Analyseer lokaal"})).status,403);
+    const proposed=await request("POST","/ops/plans/propose","a".repeat(40),{instruction:"Analyseer lokaal"});
+    assert.equal(proposed.status,200);
+    const proposal=await proposed.json() as any;
+    assert.equal(proposal.status,"requires-human-review");
+    assert.equal(proposal.plan.sourceInstruction,"Analyseer lokaal");
+    assert.equal(proposal.constraintCoverage,"not-evaluated");
+    assert.equal(Object.keys((await(await request("GET","/ops/missions","a".repeat(40))).json() as any).missions).length,0);
     assert.equal((await request("POST","/ops/reposearch","r".repeat(40),{query:"workerFixture"})).status,403);
     assert.equal((await request("POST","/ops/reposearch","a".repeat(40),{query:"workerFixture",root:"/etc"})).status,422);
     const searched=await request("POST","/ops/reposearch","a".repeat(40),{query:"workerFixture"});
