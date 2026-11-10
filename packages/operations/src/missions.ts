@@ -99,6 +99,8 @@ export interface ReleaseDossier {
   candidate:ReleaseCandidate;
   submittedAt:string;
   submittedBy:string;
+  ciObservation?:{source:"github-actions-api";runId:number;attempt:number;
+    commitSha:string;observedAt:string;result:"success"};
   review?:{decision:"changes-requested"|"external-verification-needed";by:string;at:string;reason:string};
 }
 export interface MissionRecord {
@@ -120,6 +122,8 @@ export type MissionEvent =
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
   | {type:"mission.release.submit";missionId:string;expectedRevision:number;candidate:ReleaseCandidate}
   | {type:"mission.release.review";missionId:string;expectedRevision:number;decision:"changes-requested"|"external-verification-needed";reason:string}
+  | {type:"mission.release.ci.observe";missionId:string;expectedRevision:number;
+      observation:{source:"github-actions-api";runId:number;attempt:number;commitSha:string;observedAt:string;result:"success"}}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -334,6 +338,25 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     validateReleaseCandidate(e.candidate);
     mission.releaseDossier={revision:mission.revision,
       candidate:structuredClone(e.candidate),submittedAt:at,submittedBy:actor.id};
+    return;
+  }
+  if(e.type==="mission.release.ci.observe"){
+    if(actor.kind!=="check"||actor.id!=="check:github-actions")
+      fail("CI observation requires the server-side GitHub checker");
+    const dossier=mission.releaseDossier,obs=e.observation;
+    if(!dossier||dossier.revision!==mission.revision||
+       e.expectedRevision!==mission.revision||dossier.ciObservation)
+      fail("no current unchecked release dossier");
+    const candidate=dossier.candidate;
+    if(!plain(obs)||obs.source!=="github-actions-api"||
+       obs.result!=="success"||
+       !Number.isSafeInteger(obs.runId)||obs.runId<1||
+       !Number.isSafeInteger(obs.attempt)||obs.attempt<1||
+       obs.commitSha?.toLowerCase()!==candidate.commitSha.toLowerCase()||
+       typeof obs.observedAt!=="string"||!Number.isFinite(Date.parse(obs.observedAt))||
+       !candidate.ciRunUrl.endsWith("/"+obs.runId))
+      fail("CI observation does not match release candidate");
+    dossier.ciObservation=structuredClone(obs);
     return;
   }
   if(e.type==="mission.release.review"){
