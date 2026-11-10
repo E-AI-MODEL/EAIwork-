@@ -26,6 +26,7 @@ import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import type {LocalCodeWorkspace} from "../../operations/src/code-worker.ts";
 import {OrderedCodePlans} from "../../operations/src/ordered-code-plans.ts";
+import type {ProjectTestInput,ProjectTestResult} from "../../operations/src/docker-project-suite.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
@@ -73,6 +74,8 @@ export interface Config {
   planningModel?: PlanningModel;
   /** Optional, operator-approved local code worktree. No shell or arbitrary file writes. */
   codeWorkspace?: LocalCodeWorkspace;
+  /** Test-only injection for deterministic multi-file checks; production uses Docker. */
+  projectSuiteRunner?: (input:ProjectTestInput)=>Promise<ProjectTestResult>;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -222,7 +225,7 @@ export function makeServer(cfg: Config) {
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
-  const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace):null;
+  const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace,{suiteRunner:cfg.projectSuiteRunner}):null;
   const today = cfg.today ?? (() => new Date().toISOString().slice(0, 10));
   const validFor = Object.fromEntries(cfg.pack.atoms.filter((a) => a.valid_for_days).map((a) => [a.id, a.valid_for_days!]));
   const maxBodyBytes = cfg.maxBodyBytes ?? 64 * 1024;
