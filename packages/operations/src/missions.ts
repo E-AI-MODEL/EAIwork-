@@ -188,6 +188,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   }
   if(e.type==="mission.automation.start"){
     if(actor.kind!=="person")fail("a person must approve automatic execution");
+    if(actor.id!==mission.createdBy)fail("only the mission creator may approve automatic execution");
     if(!Number.isInteger(e.maxStarts)||e.maxStarts<1||e.maxStarts>32)
       fail("automatic task budget must be 1-32");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
@@ -206,6 +207,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   if(e.type==="mission.automation.stop"){
     if(!mission.automation?.enabled)fail("automatic execution is not active");
     if(actor.kind==="person"){
+      if(actor.id!==mission.createdBy)fail("only the mission creator may stop their automatic execution");
       if(e.reason!=="user-stopped")fail("person may only stop their own approval");
     } else if(actor.kind!=="system"||actor.id!=="system:mission-scheduler"||
        !["complete","budget-exhausted","blocked","needs-review","interrupted","paused"].includes(e.reason)){
