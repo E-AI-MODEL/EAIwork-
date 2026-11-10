@@ -252,7 +252,7 @@ export class OrderedCodePlans {
     const manifest=projectManifestSha256(this.projectInput(record,index,proposalId,"pre"));
     return step.projectPreTest.manifestSha256===manifest;
   }
-  async runProjectSuite(id:string,proposalId:string,phase:"pre"|"post"){
+  async runProjectSuite(id:string,proposalId:string,phase:"pre"|"post",onResult?:(result:ProjectTestResult)=>void){
     const current=this.active(id);
     const {record,index,step,status}=current;
     if(record.suitePolicy!=="project-node-v1")
@@ -282,6 +282,8 @@ export class OrderedCodePlans {
        !["passed","failed","unavailable"].includes(result.status)||
        (result.status==="passed"&&!result.testsExecuted))
       throw new Error("De gezamenlijke testuitslag hoort niet bij deze bronversies");
+    // Write the measured outcome to the operations journal before advancing the plan.
+    onResult?.(result);
     latest.record.steps[index]={...latest.step,
       ...(phase==="pre"?{projectPreTest:result}:{projectPostTest:result})};
     this.save(latest.record);
