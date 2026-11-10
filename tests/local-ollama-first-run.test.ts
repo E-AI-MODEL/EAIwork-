@@ -36,8 +36,8 @@ test("numbered model menu selects a listed installation, not a typed model ID",a
     message=>output.push(message));
   assert.equal(result,"qwen:7b");
   assert.equal(questions.length,3);
-  assert.match(output.join(""),/1\\. llama:3b/);
-  assert.match(output.join(""),/2\\. qwen:7b/);
+  assert.match(output.join(""),/1\. llama:3b/);
+  assert.match(output.join(""),/2\. qwen:7b/);
   assert.equal(await chooseModelFromMenu(["single"],async()=>{throw new Error("No menu expected")},()=>{}),"single");
   await assert.rejects(()=>chooseModelFromMenu(["a","b"],async()=>"100",()=>{}),/geen geldig model/);
 });
@@ -72,13 +72,13 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
   try{
     demo=await startLocalOllama({host:"http://127.0.0.1:"+ollamaPort,
       example:true,selectModel:async names=>{
-        assert.deepEqual(names,["qwen2.5:1.5b","llama3.2:1b"]);
+        assert.deepEqual(names,["llama3.2:1b","qwen2.5:1.5b"]);
         return "qwen2.5:1.5b";
       },port:0,dataDir:storage});
     assert.equal(demo.model,"qwen2.5:1.5b");
     assert.match(demo.codeWorktree??"",/eaiwork-proef-/);
     assert.equal(readFileSync(join(demo.codeWorktree!,"src/amount.js"),"utf8"),
-      "export const amount = 10;\\n");
+      "export const amount = 10;\n");
     assert.match(demo.address,/^http:\/\/127\.0\.0\.1:\d+\/dashboard$/);
     const base=demo.address.slice(0,-"/dashboard".length);
     const req=(path:string,method="GET",data?:unknown,token=demo!.token)=>fetch(base+path,{
