@@ -32,5 +32,5 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
           GITHUB_RUN_ID: ${{ github.run_id }}
-          EAI_REQUIRE_PREVIOUS: "0"
+          EAI_REQUIRE_PREVIOUS: "1"
         run: node scripts/real-github-artifact-smoke.ts verify
