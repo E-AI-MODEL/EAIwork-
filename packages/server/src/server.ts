@@ -13,6 +13,8 @@ import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInvento
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
+import {claimTextJob,heartbeatTextJob,completeTextJob,validateJobReference,
+  validateExecutorIdentities,type ExecutorIdentity,type JobReference} from "../../operations/src/executor-channel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
@@ -44,6 +46,8 @@ export interface Config {
   pack: Pack;
   /** token -> principal. Access is default-deny and explicit per atom/check. */
   tokens: Record<string, Principal>;
+  /** Dedicated local executor credentials, never general API tokens. */
+  executorTokens?: Record<string,ExecutorIdentity>;
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   workers?: Record<string, WorkerRuntime>;
@@ -169,6 +173,7 @@ export function makeServer(cfg: Config) {
   if (problems.length) throw new Error("pack is invalid:\n" + problems.join("\n"));
   const atoms = new Map(cfg.pack.atoms.map((a) => [a.id, a]));
   validatePrincipals(cfg.tokens, cfg.pack, Object.keys(cfg.checks ?? {}), ACTOR_KINDS);
+  validateExecutorIdentities(cfg.executorTokens,new Set(Object.keys(cfg.tokens)));
 
   for (const [id, check] of Object.entries(cfg.checks ?? {})) {
     if (
@@ -318,14 +323,66 @@ export function makeServer(cfg: Config) {
       }
       const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
       const principal = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
-      if (!principal) return json(res, 401, { error: "missing or unknown token" });
-      const actor = principal.actor;
+      const executor=cfg.executorTokens&&Object.prototype.hasOwnProperty.call(cfg.executorTokens,token)?
+        cfg.executorTokens[token]:undefined;
+      if (!principal&&!executor) return json(res, 401, { error: "missing or unknown token" });
 
       const nowMs = Date.now();
       const bucket = rate.get(token);
       if (!bucket || nowMs - bucket.started >= 60_000) rate.set(token, { started: nowMs, count: 1 });
       else if (++bucket.count > maxRequestsPerMinute) return json(res, 429, { error: "rate limit exceeded" });
 
+      // A separate, loopback-only worker channel. Worker tokens never authorize
+      // ordinary operations or evidence routes, and accept no task selection.
+      if(url.pathname.startsWith("/executor/v1/")){
+        if(!executor)return json(res,403,{error:"executor permission required"});
+        const remote=req.socket.remoteAddress??"";
+        if(!["127.0.0.1","::1","::ffff:127.0.0.1"].includes(remote))
+          return json(res,403,{error:"executor transport restricted to loopback"});
+        if(req.method!=="POST")return json(res,405,{error:"POST required"});
+        if(!operations)return json(res,503,{error:"operations unavailable"});
+        requireWritableIntegrity();
+        const raw=await readBody(req,Math.min(maxBodyBytes,20000));
+        let body:unknown;
+        try{body=JSON.parse(raw||"{}")}
+        catch{throw new HttpError(400,"invalid executor JSON")}
+        if(!body||typeof body!=="object"||Array.isArray(body))
+          throw new HttpError(422,"expected executor request object");
+        const obj=body as Record<string,unknown>;
+        if(url.pathname==="/executor/v1/claim"){
+          if(Object.keys(obj).length)throw new HttpError(422,"claim takes no task parameters");
+          try{
+            const job=claimTextJob(operations,executor);
+            if(!job){res.writeHead(204,{"cache-control":"no-store"});return res.end()}
+            return json(res,200,job);
+          }catch{throw new HttpError(409,"no safe local claim available")}
+        }
+        if(url.pathname==="/executor/v1/heartbeat"||
+           url.pathname==="/executor/v1/complete"){
+          const completion=url.pathname.endsWith("/complete");
+          if(Object.keys(obj).some(k=>!["missionId","taskId","runId","leaseId",
+            ...(completion?["output"]:[])].includes(k))||
+             (completion?!Object.prototype.hasOwnProperty.call(obj,"output"):
+               Object.keys(obj).length!==4))
+            throw new HttpError(422,"invalid executor fields");
+          try{
+            validateJobReference(obj);
+            if(completion){
+              if(!obj.output||typeof obj.output!=="object"||Array.isArray(obj.output))
+                throw new HttpError(422,"invalid executor output");
+              return json(res,200,completeTextJob(operations,executor,
+                obj as unknown as JobReference & {output:Record<string,unknown>}));
+            }
+            return json(res,200,heartbeatTextJob(operations,executor,obj));
+          }catch(e){
+            if(e instanceof HttpError)throw e;
+            throw new HttpError(409,"executor lease or result rejected");
+          }
+        }
+        return json(res,404,{error:"executor route not found"});
+      }
+      if(!principal)return json(res,403,{error:"executor token cannot access regular API"});
+      const actor=principal.actor;
       // A separate, authorized operations record. No model can raise atom evidence
       // through this endpoint; no worker receives authority to modify other logs.
       if (url.pathname.startsWith("/ops/")) {
@@ -582,7 +639,10 @@ export function makeServer(cfg: Config) {
           const missionId=missionAutomation[1],action=missionAutomation[2];
           if(action==="start" &&
              (!Object.prototype.hasOwnProperty.call(body,"maxStarts") ||
-               Object.keys(body).some(k=>k!=="maxStarts"&&k!=="resumeAfterRestart") ||
+               Object.keys(body).some(k=>k!=="maxStarts"&&k!=="resumeAfterRestart"&&k!=="executionMode") ||
+               ("executionMode" in body &&
+                !["local-scheduler","remote-text"].includes(
+                  (body as {executionMode:string}).executionMode)) ||
                ("resumeAfterRestart" in body &&
                 typeof (body as {resumeAfterRestart?:unknown}).resumeAfterRestart!=="boolean")))
             throw new HttpError(422,"expected automatic task budget");
@@ -592,6 +652,8 @@ export function makeServer(cfg: Config) {
             const event=action==="start"?
               {type:"mission.automation.start" as const,missionId,
                 maxStarts:(body as {maxStarts:number}).maxStarts,
+                ...("executionMode" in body?
+                  {executionMode:(body as {executionMode:"local-scheduler"|"remote-text"}).executionMode}:{}),
                 ...("resumeAfterRestart" in body?
                   {resumeAfterRestart:(body as {resumeAfterRestart:boolean}).resumeAfterRestart}:{})}:
               {type:"mission.automation.stop" as const,missionId,reason:"user-stopped" as const};
