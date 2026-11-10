@@ -68,3 +68,52 @@ test("HTTP proposal remains read-only until owner applies the exact reviewed pla
     assert.equal((await call("GET","/ops/verify")).status,200);
   }finally{await demo.close()}
 });
+
+
+test("a model proposal is discarded when the approved plan changes during its call",async()=>{
+  let advancePlan:()=>Promise<void>=async()=>{};
+  const planner:PlanningModel={
+    id:"mock:stale",
+    async propose(){throw new Error("not used")},
+    async proposeRevision(){
+      await advancePlan();
+      return {addedTasks:[{id:"task-model",title:"Modeladvies",taskKind:"text-metrics",
+        dependsOn:["task-source"],textFrom:"task-source"}],
+        addedPhases:[{id:"phase-model",title:"Modelwerk",taskIds:["task-model"]}],
+        addedConstraints:[],missingInformation:[]};
+    },
+  };
+  const demo=createDemoServer({schedulerIntervalMs:0,planningModel:planner});
+  try{
+    await new Promise<void>(resolve=>demo.server.listen(0,"127.0.0.1",resolve));
+    const base="http://127.0.0.1:"+((demo.server.address() as AddressInfo).port);
+    const call=(method:string,path:string,payload?:unknown)=>fetch(base+path,{
+      method,headers:{Authorization:"Bearer "+demo.token,...(payload?{"content-type":"application/json"}:{})},
+      ...(payload?{body:JSON.stringify(payload)}:{}),
+    });
+    const plan={
+      id:"mission-stale-replan",title:"Revisietest",goal:"Voorkom oude voorstellen",
+      sourceInstruction:"Maak een tekst.",
+      tasks:[{id:"task-source",title:"Tekst maken",taskKind:"text-normalize",
+        dependsOn:[],input:{text:"  tekst  "}}],
+      phases:[{id:"phase-source",title:"Voorbereiden",taskIds:["task-source"]}],
+    };
+    assert.equal((await call("POST","/ops/missions",{plan})).status,201);
+    advancePlan=async()=>{
+      const newer={...plan,tasks:[...plan.tasks,{
+        id:"task-human",title:"Controle door mens",taskKind:"text-metrics",
+        dependsOn:["task-source"],textFrom:"task-source",
+      }],phases:[...plan.phases,{id:"phase-human",title:"Extra fase",
+        taskIds:["task-human"]}]};
+      assert.equal((await call("POST","/ops/missions/"+plan.id+"/extend",
+        {plan:newer,expectedRevision:1})).status,201);
+    };
+    const result=await call("POST","/ops/missions/"+plan.id+"/replan/propose",
+      {expectedRevision:1,reason:"Overweeg extra taken"});
+    assert.equal(result.status,409);
+    const state=await(await call("GET","/ops/missions")).json() as any;
+    assert.equal(state.missions[plan.id].revision,2);
+    assert.ok(state.missions[plan.id].tasks["task-human"]);
+    assert.equal(state.missions[plan.id].tasks["task-model"],undefined);
+  }finally{await demo.close()}
+});
