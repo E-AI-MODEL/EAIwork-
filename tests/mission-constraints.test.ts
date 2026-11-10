@@ -67,3 +67,39 @@ test("an unconditional prohibition cannot be bypassed by an approval",()=>{
     constraintId:"gate-override",evidenceRef:"approval:other"},rector);
   assert.deepEqual(blockingConstraints(approved.missions[blocked.id],"task-send").map(x=>x.id),["gate-prohibition"]);
 });
+
+test("human can requeue interrupted local work but cannot retry external effects",()=>{
+  const localPlan:MissionPlan={id:"mission-retry",title:"Restart local work",goal:"Do not repeat external effects",
+    tasks:[{id:"task-local",title:"Normalize",taskKind:"text-normalize",
+      dependsOn:[],input:{text:"Original"}}]};
+  let state=commit(emptyOps(),{type:"mission.create",plan:localPlan});
+  state=commit(state,{type:"task.started",missionId:localPlan.id,taskId:"task-local",
+    run:{runId:"run-old1",workerId:"text-normalize",workerVersion:"1.0.0",
+      adapterId:"text-normalize",startedAt:"2026-11-10T00:00:00Z",
+      inputHash:"a".repeat(64),verification:"not-evaluated"}},runner);
+  assert.equal(state.missions[localPlan.id].tasks["task-local"].status,"running");
+  assert.throws(()=>commit(state,{type:"task.retry",missionId:localPlan.id,taskId:"task-local",reason:"reset"},model),/person required/);
+  state=commit(state,{type:"task.retry",missionId:localPlan.id,taskId:"task-local",reason:"Operator confirmed no external side effects"});
+  assert.equal(state.missions[localPlan.id].tasks["task-local"].status,"queued");
+  assert.equal(missionProgress(state.missions[localPlan.id]).ready,1);
+  assert.throws(()=>commit(state,{type:"task.retry",missionId:localPlan.id,taskId:"task-local",reason:"retry twice"}),/not retryable/);
+
+  const approval="goedkeuring";
+  const externalPlan:MissionPlan={id:"mission-external-retry",title:"Never blindly resend",goal:"No repeated external action",
+    sourceInstruction:"Publiceer uitsluitend na goedkeuring",
+    constraints:[{id:"gate-owner",kind:"approval",quote:approval,start:27,end:27+approval.length,
+      taskIds:["task-send"],approverId:"person:operator"}],
+    tasks:[{id:"task-send",title:"Send",taskKind:"external-send",dependsOn:[],
+      effect:"external-write",input:{text:"Send once"}}],
+  };
+  externalPlan.constraints![0].start=externalPlan.sourceInstruction!.indexOf(approval);
+  externalPlan.constraints![0].end=externalPlan.constraints![0].start+approval.length;
+  let external=commit(emptyOps(),{type:"mission.create",plan:externalPlan});
+  external=commit(external,{type:"mission.gate.resolve",missionId:externalPlan.id,
+    constraintId:"gate-owner",evidenceRef:"approval:operator"});
+  external=commit(external,{type:"task.started",missionId:externalPlan.id,taskId:"task-send",
+    run:{runId:"run-sent",workerId:"external",workerVersion:"1.0.0",adapterId:"outbox",
+      startedAt:"2026-11-10T00:00:00Z",inputHash:"b".repeat(64),verification:"not-evaluated"}},runner);
+  assert.throws(()=>commit(external,{type:"task.retry",missionId:externalPlan.id,
+    taskId:"task-send",reason:"send again"}),/never be retried/);
+});
