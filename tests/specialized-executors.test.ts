@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import type {AddressInfo} from "node:net";
+import {spawn} from "node:child_process";
 import {createDemoServer} from "../scripts/local-demo.ts";
 import {runExecutorBatch,runExecutorOnce} from "../scripts/local-text-executor.ts";
 import {runPureTextAdapter,evaluateBuiltin} from "../packages/operations/src/execution.ts";
@@ -137,4 +138,45 @@ test("fixed specialist fixtures and executor identity limits remain restrictive"
       taskKinds:[...allKinds,"repo-search" as any]},
   },new Set()),/four known/);
   assert.throws(()=>runPureTextAdapter("repo-search",{text:"github"}),/unsupported pure text/);
+});
+
+test("a separate operating-system executor runs the two new specialties",async()=>{
+  const h=await setup();
+  try{
+    const id="mission-specialist-process";
+    const plan={
+      id,title:"Afzonderlijk proces voor specialisten",
+      goal:"Voer alleen vooraf toegelaten vaste specialisaties uit",
+      tasks:[
+        {id:"task-inspection",title:"Inspecteren",taskKind:"text-inspect",
+          dependsOn:[],input:{text:"  Twee   woorden  "}},
+        {id:"task-references",title:"Bronlinks",taskKind:"reference-extract",
+          dependsOn:[],input:{text:"Lees [bron](https://example.org/onderzoek)"}},
+      ],
+    };
+    assert.equal((await h.post("/ops/missions",{plan})).status,201);
+    assert.equal((await h.post("/ops/missions/"+id+"/automation/start",{
+      maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"],
+    })).status,201);
+    const result=await new Promise<{exit:number;stdout:string}>((resolve,reject)=>{
+      const proc=spawn(process.execPath,[
+        "scripts/local-text-executor.ts","--max-tasks=2",
+      ],{cwd:process.cwd(),env:{EAI_EXECUTOR_URL:h.base,
+        EAI_EXECUTOR_TOKEN:h.demo.workerToken},stdio:["ignore","pipe","pipe"]});
+      let stdout="";
+      proc.stdout.on("data",(chunk:Buffer)=>{stdout+=chunk.toString("utf8")});
+      proc.stderr.on("data",()=>{});
+      proc.once("error",reject);
+      proc.once("close",(code)=>resolve({exit:code??1,stdout}));
+    });
+    assert.equal(result.exit,0);
+    assert.match(result.stdout,/2 teksttaak/);
+    assert.equal(result.stdout.includes(h.demo.workerToken),false);
+    const after=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(after.tasks["task-inspection"].run.workerId,"text-inspector");
+    assert.equal(after.tasks["task-inspection"].run.output.words,2);
+    assert.equal(after.tasks["task-references"].run.output.detected,1);
+    assert.equal(after.tasks["task-references"].run.output.review,"links-not-verified");
+    assert.equal((await h.get("/ops/verify")).status,200);
+  }finally{await h.demo.close()}
 });
