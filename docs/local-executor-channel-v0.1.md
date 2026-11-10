@@ -43,7 +43,7 @@ keuren:
 curl -X POST http://127.0.0.1:8788/ops/missions/mission-demo-automatic/automation/start \
   -H "Authorization: Bearer <beheertoken>" \
   -H "Content-Type: application/json" \
-  -d '{"maxStarts":2,"executionMode":"remote-text"}'
+  -d '{"maxStarts":2,"executionMode":"remote-text","executorIds":["executor-local-demo"]}'
 ```
 
 Voer daarna in een tweede terminal uit:
@@ -79,7 +79,11 @@ Onjuiste leasegegevens en mislukte onafhankelijke resultaatscontrole
 leiden tot afwijzing.
 
 Het ophalen van werk gebeurt alleen voor missies met een expliciet
-`executionMode:"remote-text"` en een nog niet verbruikt startbudget.
+`executionMode:"remote-text"`, een nog niet verbruikt startbudget en
+een door de missie-eigenaar benoemde lijst met uitvoerders
+(`executorIds`). Een worker die niet op die lijst staat, krijgt
+geen invoertekst, claim, heartbeat of resultaatbevestiging voor
+die missie. Identiteiten moeten vooraf in de serverconfiguratie staan.
 De toestemming, taakclaim, lease en voltooide resultaten zijn
 replaybare operations-events. Een automatische herstart van een
 geleasede taak is niet toegestaan.
@@ -114,3 +118,17 @@ werkelijke lokale HTTP-server. Ze controleren taaktoestemming,
 verschillende credentials, gelijktijdige claims, het hergebruik van
 leases, de gevolgen van een ongeldig resultaat en de blijvende
 scheiding met de gewone API. De CI-uitkomst hoort bij de exacte commit.
+
+## Bestaande missies en toestemming
+
+Toestemming voor remote-tekstuitvoering die vóór deze uitbreiding is vastgelegd,
+blijft leesbaar en wordt correct uit het operationslog hersteld. Ontbreekt
+`executorIds`, dan is de toegestane lijst leeg en krijgt geen enkele
+uitvoerder meer taakinhoud. De missie-eigenaar stopt zulke toestemming en
+geeft opnieuw toestemming met de gewenste uitvoerders. Een al begonnen
+geleasede taak wordt niet stilzwijgend opnieuw uitgevoerd. Die blijft
+onder de bestaande lease-/herstelregels vallen.
+
+Een nieuwe API-aanvraag voor remote-tekstuitvoering zonder een geldige,
+expliciete lijst wordt afgewezen met HTTP 422. Het gebruik van een
+`executorIds`-lijst bij de gewone lokale scheduler is niet toegestaan.
