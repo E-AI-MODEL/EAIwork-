@@ -96,12 +96,15 @@ const requireTrustedTest = (actor: OpsActor) => {
 export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
   return transitionOps(current,envelope,undefined,true);
 }
-export function stageOps(current: OpsState, envelope: OpsEnvelope, seenIds:ReadonlySet<string>):OpsState {
-  return transitionOps(current,envelope,seenIds,false);
+export function stageOps(
+  current:OpsState,envelope:OpsEnvelope,seenIds:ReadonlySet<string>,
+  verifiedJournalReplay=false,
+):OpsState {
+  return transitionOps(current,envelope,seenIds,false,verifiedJournalReplay);
 }
 function transitionOps(
   current:OpsState,envelope:OpsEnvelope,seenIds:ReadonlySet<string>|undefined,
-  cloneHistory:boolean,
+  cloneHistory:boolean,verifiedJournalReplay=false,
 ):OpsState {
   if (!plain(envelope) || !plain(envelope.actor) || !plain(envelope.event)) fail("invalid operations envelope");
   meaningful(envelope.id, "event id", 128); meaningful(envelope.at, "event time", 64);
@@ -138,7 +141,7 @@ function transitionOps(
   };
   if (e.type === "mission.create" || e.type === "mission.extend" || e.type === "mission.release.propose" || e.type === "mission.release.review" || e.type === "mission.pause" || e.type === "mission.resume" ||
       e.type === "task.started" || e.type === "task.lease.claim" || e.type === "task.lease.renew" || e.type === "task.lease.expire" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
-    applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
+    applyMissionEvent(state.missions,e,envelope.actor,envelope.at,verifiedJournalReplay);
   } else if (e.type === "worker.register") {
     requireHuman(envelope.actor);
     const c = e.contract;
