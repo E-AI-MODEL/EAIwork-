@@ -1,12 +1,12 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
-import {mkdtempSync,rmSync} from "node:fs";
+import {mkdtempSync,rmSync,readFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {defaultLocalProfileDir} from "../scripts/local-profile.ts";
 import type {AddressInfo} from "node:net";
-import {chooseInstalledModel,parseLocalOllamaArgs,startLocalOllama} from "../scripts/local-ollama.ts";
+import {chooseInstalledModel,chooseModelFromMenu,parseLocalOllamaArgs,startLocalOllama} from "../scripts/local-ollama.ts";
 
 test("Ollama launcher rejects remote hosts, ambiguous models and unsafe flags",()=>{
   assert.equal(chooseInstalledModel(["qwen2.5:1.5b"],undefined),"qwen2.5:1.5b");
@@ -19,10 +19,27 @@ test("Ollama launcher rejects remote hosts, ambiguous models and unsafe flags",(
   assert.throws(()=>parseLocalOllamaArgs(["--port=0"],{}),/Dashboardpoort/);
   assert.throws(()=>parseLocalOllamaArgs(["--timeout-ms=999999"],{}),/timeout/);
   assert.throws(()=>parseLocalOllamaArgs(["--token=abc"],{}),/Gebruik/);
+  assert.equal(parseLocalOllamaArgs(["--example"],{}).example,true);
+  assert.throws(()=>parseLocalOllamaArgs(["--example","--worktree=/tmp/test"],{}),/niet samen/);
+  assert.throws(()=>parseLocalOllamaArgs(["--example","--example"],{}),/slechts één keer/);
   assert.deepEqual(parseLocalOllamaArgs(["--model=qwen2.5:1.5b"],{}),{
     host:"http://127.0.0.1:11434",model:"qwen2.5:1.5b",port:8788,timeoutMs:90000,
     dataDir:defaultLocalProfileDir(),
   });
+});
+test("numbered model menu selects a listed installation, not a typed model ID",async()=>{
+  const questions:string[]=[];
+  const output:string[]=[];
+  const responses=["abc","0","2"];
+  const result=await chooseModelFromMenu(["qwen:7b","llama:3b","qwen:7b"],
+    async message=>{questions.push(message);return responses.shift()!},
+    message=>output.push(message));
+  assert.equal(result,"qwen:7b");
+  assert.equal(questions.length,3);
+  assert.match(output.join(""),/1\\. llama:3b/);
+  assert.match(output.join(""),/2\\. qwen:7b/);
+  assert.equal(await chooseModelFromMenu(["single"],async()=>{throw new Error("No menu expected")},()=>{}),"single");
+  await assert.rejects(()=>chooseModelFromMenu(["a","b"],async()=>"100",()=>{}),/geen geldig model/);
 });
 test("real loopback EAIwork server uses stub Ollama only for human-reviewed planning",async()=>{
   const modelPrompts:unknown[]=[];
@@ -54,8 +71,14 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
   let demo:Awaited<ReturnType<typeof startLocalOllama>>|undefined;
   try{
     demo=await startLocalOllama({host:"http://127.0.0.1:"+ollamaPort,
-      model:"qwen2.5:1.5b",port:0,dataDir:storage});
+      example:true,selectModel:async names=>{
+        assert.deepEqual(names,["qwen2.5:1.5b","llama3.2:1b"]);
+        return "qwen2.5:1.5b";
+      },port:0,dataDir:storage});
     assert.equal(demo.model,"qwen2.5:1.5b");
+    assert.match(demo.codeWorktree??"",/eaiwork-proef-/);
+    assert.equal(readFileSync(join(demo.codeWorktree!,"src/amount.js"),"utf8"),
+      "export const amount = 10;\\n");
     assert.match(demo.address,/^http:\/\/127\.0\.0\.1:\d+\/dashboard$/);
     const base=demo.address.slice(0,-"/dashboard".length);
     const req=(path:string,method="GET",data?:unknown,token=demo!.token)=>fetch(base+path,{
@@ -95,7 +118,10 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
     assert.equal(after.missions[proposal.plan.id].tasks["task-clean"].run.verification,"not-evaluated");
     assert.equal((await req("/ops/verify")).status,200);
   }finally{
-    if(demo)await demo.close();
+    if(demo){
+      await demo.close();
+      if(demo.codeWorktree)rmSync(demo.codeWorktree,{recursive:true,force:true});
+    }
     await new Promise<void>(done=>fakeOllama.close(()=>done()));
     rmSync(storage,{recursive:true,force:true});
   }
