@@ -16,6 +16,7 @@
     "replay:demo": "EAI_NOW=2026-10-05 node packages/cli/src/eai.ts replay packs/sow-demo/pack.json examples/demo/events.jsonl",
     "serve": "node packages/server/src/server.ts",
     "demo:dashboard": "node scripts/local-demo.ts",
-    "local:ollama": "node scripts/local-ollama.ts"
+    "local:ollama": "node scripts/local-ollama.ts",
+    "proof:first-product": "EAI_FIRST_PRODUCT_SMOKE=1 node --test tests/first-product-smoke.test.ts"
   }
 }
