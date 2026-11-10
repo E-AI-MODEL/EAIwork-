@@ -98,7 +98,7 @@ export function selectWorker(
     }));
   const matches=[...registered,...proposed].sort((a,b)=>
     Number(b.canConsider)-Number(a.canConsider) ||
-    b.testMeasurements-a.testMeasurements ||
+    // Test counts from different cohorts do not establish relative quality.
     a.workerId.localeCompare(b.workerId));
   return {
     taskKind:task.taskKind,
