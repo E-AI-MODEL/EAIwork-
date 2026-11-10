@@ -37,12 +37,13 @@ test("two real deterministic workers execute dependent tasks through authorized 
   const witness=new SignedFileAnchorWitness(witnessDir,
     pair.privateKey.export({format:"pem",type:"pkcs8"}).toString(),
     pair.publicKey.export({format:"pem",type:"spki"}).toString());
-  const person="p".repeat(40),system="s".repeat(40),readOnly="r".repeat(40),rector="t".repeat(40);
+  const person="p".repeat(40),system="s".repeat(40),readOnly="r".repeat(40),rector="t".repeat(40),limited="q".repeat(40);
   const tokens={
     [person]:{actor:{kind:"person" as const,id:"person:operator"},access:{read:"*" as const,write:[] as string[],audit:true}},
     [system]:{actor:{kind:"system" as const,id:"system:caller"},access:{read:"*" as const,write:[] as string[],audit:true}},
     [readOnly]:{actor:{kind:"person" as const,id:"person:viewer"},access:{read:"*" as const,write:[] as string[]}},
     [rector]:{actor:{kind:"person" as const,id:"person:rector"},access:{read:"*" as const,write:[] as string[],audit:true}},
+    [limited]:{actor:{kind:"person" as const,id:"person:limited"},access:{read:["a.fin.016"],write:[] as string[],audit:true}},
   };
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
   const config={dir:join(root,"evidence"),operationsDir:join(root,"ops"),pack,tokens,witness};
@@ -62,6 +63,20 @@ test("two real deterministic workers execute dependent tasks through authorized 
     const created=await request("POST","/ops/missions",person,{plan:mission});
     assert.equal(created.status,201);
     assert.equal((await request("POST","/ops/missions",person,{plan:mission})).status,422);
+    const linked={...mission,id:"mission-linked",tasks:[
+      {...mission.tasks[0],evidenceAtomIds:["a.fin.016"]},mission.tasks[1],
+    ]};
+    assert.equal((await request("POST","/ops/missions",person,{plan:linked})).status,201);
+    const unauthorized={...linked,id:"mission-private",tasks:[
+      {...mission.tasks[0],evidenceAtomIds:["a.fin.017"]},mission.tasks[1],
+    ]};
+    assert.equal((await request("POST","/ops/missions",person,{plan:unauthorized})).status,403);
+    assert.equal((await request("POST","/ops/missions",limited,{plan:unauthorized})).status,403);
+    const unknown={...linked,id:"mission-unknown",tasks:[
+      {...mission.tasks[0],evidenceAtomIds:["a.unknown.999"]},mission.tasks[1],
+    ]};
+    assert.equal((await request("POST","/ops/missions",person,{plan:unknown})).status,422);
+
     const blocked=await(await request("POST","/ops/missions/mission-brief/step",person,{})).json() as any;
     assert.equal(blocked.started.length,0);
     assert.equal(blocked.blocked[0].reason,"search-and-build");
