@@ -151,3 +151,28 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepRe
   result.progress=missionProgress(store.snapshot().missions[missionId]);
   return result;
 }
+
+/**
+ * A bounded synchronous loop for explicit local execution. This is not a
+ * persistent background scheduler. Each batch is committed before the next.
+ */
+export function runMissionUntilBlocked(store:OpsStore,missionId:string,maxBatches=32){
+  if(!Number.isInteger(maxBatches)||maxBatches<1||maxBatches>32)throw new Error("invalid batch limit");
+  const batches:StepResult[]=[];
+  let stopReason:"complete"|"blocked"|"review-required"|"batch-limit"="batch-limit";
+  for(let n=0;n<maxBatches;n++){
+    const m=store.snapshot().missions[missionId];
+    if(!m)throw new Error("unknown mission");
+    const before=missionProgress(m);
+    if(before.status==="complete"){stopReason="complete";break}
+    if(before.status==="needs-review"||before.status==="paused"){stopReason="review-required";break}
+    if(!before.ready){stopReason="blocked";break}
+    const batch=runMissionStep(store,missionId,4);
+    batches.push(batch);
+    if(batch.failed.length){stopReason="review-required";break}
+    if(!batch.started.length){stopReason="blocked";break}
+    if(batch.progress.status==="complete"){stopReason="complete";break}
+  }
+  return {missionId,batches,stopReason,progress:missionProgress(store.snapshot().missions[missionId]),
+    note:"Synchronous, bounded, local-only execution. No external tools, AI model calls, or background job."};
+}
