@@ -1,6 +1,10 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createServer} from "node:http";
+import {mkdtempSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {defaultLocalProfileDir} from "../scripts/local-profile.ts";
 import type {AddressInfo} from "node:net";
 import {chooseInstalledModel,parseLocalOllamaArgs,startLocalOllama} from "../scripts/local-ollama.ts";
 
@@ -17,6 +21,7 @@ test("Ollama launcher rejects remote hosts, ambiguous models and unsafe flags",(
   assert.throws(()=>parseLocalOllamaArgs(["--token=abc"],{}),/Gebruik/);
   assert.deepEqual(parseLocalOllamaArgs(["--model=qwen2.5:1.5b"],{}),{
     host:"http://127.0.0.1:11434",model:"qwen2.5:1.5b",port:8788,timeoutMs:90000,
+    dataDir:defaultLocalProfileDir(),
   });
 });
 test("real loopback EAIwork server uses stub Ollama only for human-reviewed planning",async()=>{
@@ -45,10 +50,11 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
   });
   await new Promise<void>(ok=>fakeOllama.listen(0,"127.0.0.1",ok));
   const ollamaPort=(fakeOllama.address() as AddressInfo).port;
+  const storage=mkdtempSync(join(tmpdir(),"eai-ollama-test-"));
   let demo:Awaited<ReturnType<typeof startLocalOllama>>|undefined;
   try{
     demo=await startLocalOllama({host:"http://127.0.0.1:"+ollamaPort,
-      model:"qwen2.5:1.5b",port:0});
+      model:"qwen2.5:1.5b",port:0,dataDir:storage});
     assert.equal(demo.model,"qwen2.5:1.5b");
     assert.match(demo.address,/^http:\/\/127\.0\.0\.1:\d+\/dashboard$/);
     const base=demo.address.slice(0,-"/dashboard".length);
@@ -91,5 +97,6 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
   }finally{
     if(demo)await demo.close();
     await new Promise<void>(done=>fakeOllama.close(()=>done()));
+    rmSync(storage,{recursive:true,force:true});
   }
 });
