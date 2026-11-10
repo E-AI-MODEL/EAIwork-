@@ -76,6 +76,8 @@ Deze proef draait uitsluitend op `127.0.0.1`, bewaart gegevens in een tijdelijke
 
 De ontwikkelbranches voegen ook revisies van missieplannen en een alleen-lezen plancontrole toe. De beveiligde route `POST /ops/plans/preflight` toont fases, afhankelijkheden en eventuele blokkades voordat een persoon een plan goedkeurt. Zie [de controle van het missieplan](docs/plan-preflight-v0.1.md), [duurzaam herstel](docs/durable-execution-v0.2.md) en [planversies](docs/plan-extensions-v0.1.md). Deze functies staan nog in concept-PR's en zijn geen online productieomgeving.
 
+Een aanvullende, beperkte proef kan twee onafhankelijke lokale teksttaken in afzonderlijke childprocessen uitvoeren via `POST /ops/missions/:id/parallel/run`. Dit is een door een persoon gestarte route, geen automatische parallelle workerpool. De bestaande bewijsregels en herstelbeperkingen blijven gelden. Zie [parallelle uitvoering van vaste tekstworkers](docs/parallel-pure-local-v0.1.md).
+
 Zie [de actuele stand van de uitvoeringsproef](docs/mission-execution-v0.1.md) en [het volledige bouwplan](docs/buildplan-eaiwork-2026-11-10.md). Het oorspronkelijke bewijsgericht werken hieronder blijft van toepassing.
 
 ## Quickstart
