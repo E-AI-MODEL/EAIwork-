@@ -9,7 +9,7 @@ import {
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
-import { runMissionStep, evaluateBuiltin } from "../../operations/src/execution.ts";
+import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
@@ -374,6 +374,20 @@ export function makeServer(cfg: Config) {
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"step does not accept an execution payload");
           try{return json(res,200,runMissionStep(operations,missionStep[1]))}
           catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const missionAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/(run|pause|resume)$/.exec(url.pathname);
+        if(req.method==="POST"&&missionAction){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person may control mission execution");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"this route takes no arbitrary payload");
+          const missionId=missionAction[1],action=missionAction[2];
+          try{
+            if(action==="run")return json(res,200,runMissionUntilBlocked(operations,missionId));
+            const event={type:action==="pause"?"mission.pause" as const:"mission.resume" as const,missionId};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,200,{missionId,action,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
         }
         if (req.method === "POST" && url.pathname === "/ops/events") {
           requireWritableIntegrity();
