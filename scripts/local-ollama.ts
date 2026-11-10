@@ -60,7 +60,8 @@ function makeExampleWorktree():string{
   const destination=mkdtempSync(join(homedir(),"eaiwork-proef-"));
   const source=fileURLToPath(new URL("../examples/multifile-smoke/",import.meta.url));
   for(const path of ["src/amount.js","src/invoice.js",
-    "tests/amount.test.js","tests/invoice.test.js"]){
+    "tests/amount.test.js","tests/invoice.test.js",
+    "acceptance/final-product.test.js"]){
     const output=join(destination,path);
     mkdirSync(dirname(output),{recursive:true});
     copyFileSync(join(source,path),output);
