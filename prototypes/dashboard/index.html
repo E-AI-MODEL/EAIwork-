@@ -146,7 +146,7 @@ function opsWorkers(){
   return s.workers.map(w=>({id:w.id,name:w.name,version:w.ver,stage:w.status,contract:{id:w.id,name:w.name,version:w.ver,specialization:w.role,taskKinds:[w.group],inputSchema:null,outputSchema:null,tools:w.tools.split(",").map(x=>x.trim()),requestedPermissions:[w.permissions],modelPolicy:{preferred:w.size},testSuite:"Niet als contracttest geregistreerd",stopConditions:[]}}));
 }
 function registration(){
-  const live=!!s.liveOps,ws=opsWorkers(),selected=ws.find(w=>w.id===s.selectedOpsWorker)||ws[0],c=selected?.contract,qs=live?(s.liveOps.measurements||[]).filter(m=>m.workerId===selected?.id):[];
+  const bp=s.preselectedBlueprint,live=!!s.liveOps,ws=opsWorkers(),selected=ws.find(w=>w.id===s.selectedOpsWorker)||ws[0],c=selected?.contract,qs=live?(s.liveOps.measurements||[]).filter(m=>m.workerId===selected?.id):[];
   const safeJson=v=>v===null?'Niet geregistreerd':JSON.stringify(v);
   const def=c?[
     ['Worker-ID',c.id],['Versie',c.version],['Specialisatie',c.specialization],
@@ -171,18 +171,18 @@ function registration(){
     '<div>'+section('Volledig workercontract',c?'<div class="contract-definition"><div class="row mb"><b>'+h(selected.name)+'</b>'+badge(selected.stage)+'</div><dl>'+def.map(([k,v])=>'<dt>'+h(k)+'</dt><dd>'+h(v)+'</dd>').join('')+'</dl></div>':'<div class="card pad">Selecteer een worker of registreer een nieuwe.</div>')+'</div></div>'+
     '<div class="grid cols-2 mt"><div>'+section('Versiegebonden metingen','<div class="card pad">'+(live?(qs.length?qs.map(m=>'<div class="contract-line"><span>'+h(m.metric)+' · '+h(m.taskKind)+'<br><small>'+h(m.dataset)+' / '+h(m.cohort)+'</small></span><span>'+m.numerator+'/'+m.denominator+' · '+h(m.evidenceRef)+'</span></div>').join(''):'Geen controlemetingen voor deze worker.'): 'Voorbeeld: de huidige percentages zijn fictief. Een echte meting heeft een datasetversie, teller, noemer en bronverwijzing.')+'</div>')+'</div><div>'+
     section('Herstel en menselijke besluiten','<div class="card pad">'+(live?((Object.values(s.liveOps.defects||{}).filter(d=>d.workerId===selected?.id).map(d=>'<div class="contract-line"><span>'+h(d.id)+' · '+h(d.reason)+'</span><span>'+d.attempts.length+'/3 · '+h(d.state)+'</span></div>').join(''))||'Geen geregistreerde kwaliteitsproblemen.'): 'De demonstratie toont de herstelprocedure bij Kwaliteit en drift en Menselijke besluiten. Servergegevens verschijnen hier alleen bij verbinding.')+'</div>')+'</div></div>'+
-    '<div class="mt">'+section('Workercontract registreren','<div class="card pad"><p class="muted smalltext">Registratie maakt een kandidaat. De server geeft geen uitvoeringsrechten vrij en vereist meetbewijs en een menselijke vrijgave.</p><form id="ops-register" class="contract-form">'+
-    '<div><label for="ops-id">Uniek worker-ID</label><input id="ops-id" required pattern="[a-z][a-z0-9-]{2,63}" placeholder="scientific-reviewer"></div>'+
-    '<div><label for="ops-name">Naam</label><input id="ops-name" required placeholder="Scientific Reviewer"></div>'+ 
+    '<div class="mt">'+section('Workercontract registreren','<div class="card pad">'+(bp?'<p class="notice"><b>Gekozen uit bibliotheek:</b> '+h(bp.name)+'. Dit is een concept. Controleer ieder veld en geef pas na testen vrij.</p>':'')+'<p class="muted smalltext">Registratie maakt een kandidaat. De server geeft geen uitvoeringsrechten vrij en vereist meetbewijs en een menselijke vrijgave.</p><form id="ops-register" class="contract-form">'+
+    '<div><label for="ops-id">Uniek worker-ID</label><input id="ops-id" required pattern="[a-z][a-z0-9-]{2,63}" placeholder="scientific-reviewer" value="'+h(bp?.id||"") +'"></div>'+
+    '<div><label for="ops-name">Naam</label><input id="ops-name" required placeholder="Scientific Reviewer" value="'+h(bp?.name||"") +'"></div>'+ 
     '<div><label for="ops-version">Contractversie</label><input id="ops-version" required pattern="[0-9]+[.][0-9]+[.][0-9]+" value="0.1.0"></div>'+
-    '<div class="wide"><label for="ops-specialization">Specialisatie</label><input id="ops-specialization" required placeholder="Onderzoekclaims beoordelen"></div>'+
-    '<div><label for="ops-taskkind">Taaksoort</label><input id="ops-taskkind" required placeholder="claim-review"></div>'+
-    '<div><label for="ops-model">Modelbeleid</label><select id="ops-model"><option value="auto">Automatisch</option><option value="small">Klein</option><option value="medium">Middel</option><option value="large">Groot</option><option value="deterministic">Zonder LLM</option></select></div>'+
-    '<div><label for="ops-suite">Testsuite</label><input id="ops-suite" required placeholder="source-review-v1"></div>'+
+    '<div class="wide"><label for="ops-specialization">Specialisatie</label><input id="ops-specialization" required placeholder="Onderzoekclaims beoordelen" value="'+h(bp?.specialization||"") +'"></div>'+
+    '<div><label for="ops-taskkind">Taaksoort</label><input id="ops-taskkind" required placeholder="claim-review" value="'+h(bp?.taskKinds?.[0]||"") +'"></div>'+
+    '<div><label for="ops-model">Modelbeleid</label><select id="ops-model"><option value="auto" '+(bp?.suggestedModel==='auto'?'selected':'')+'>Automatisch</option><option value="small" '+(bp?.suggestedModel==='small'?'selected':'')+'>Klein</option><option value="medium" '+(bp?.suggestedModel==='medium'?'selected':'')+'>Middel</option><option value="large" '+(bp?.suggestedModel==='large'?'selected':'')+'>Groot</option><option value="deterministic" '+(bp?.suggestedModel==='deterministic'?'selected':'')+'>Zonder LLM</option></select></div>'+
+    '<div><label for="ops-suite">Testsuite</label><input id="ops-suite" required placeholder="source-review-v1" value="'+h(bp?"unconfigured:"+bp.id:"") +'"></div>'+
     '<div class="wide"><label for="ops-input-schema">Invoercontract (JSON-schema)</label><textarea id="ops-input-schema" required>{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}</textarea></div>'+
     '<div class="wide"><label for="ops-output-schema">Uitvoercontract (JSON-schema)</label><textarea id="ops-output-schema" required>{"type":"object","properties":{"result":{"type":"string"}},"required":["result"]}</textarea></div>'+
-    '<div><label for="ops-stop">Stopvoorwaarde</label><input id="ops-stop" required placeholder="missing-evidence"></div>'+
-    '<div class="wide"><label for="ops-tools">Toegestane hulpmiddelen (komma’s)</label><input id="ops-tools" placeholder="source-read, file-parser"></div>'+
+    '<div><label for="ops-stop">Stopvoorwaarde</label><input id="ops-stop" required placeholder="missing-evidence" value="'+h(bp?"no-usable-result":"") +'"></div>'+
+    '<div class="wide"><label for="ops-tools">Toegestane hulpmiddelen (komma’s)</label><input id="ops-tools" placeholder="source-read, file-parser" value="'+h((bp?.requiredCapabilities||[]).join(", ")) +'"></div>'+
     '<div class="wide"><label for="ops-permissions">Gevraagde rechten (komma’s)</label><input id="ops-permissions" placeholder="read:sources"></div>'+
     '<div class="wide"><button class="btn primary" type="submit">'+(live?'Registreer kandidaat via API':'Maak voorbeeldcontract')+'</button></div></form></div>')+'</div>';
 }
@@ -256,7 +256,7 @@ function library(){
   const q=s.catalogSearch.toLowerCase();
   const matches=source.filter(x=>(s.catalogGroup==="Alle"||x.group===s.catalogGroup)&&
     (x.name+" "+x.id+" "+x.specialization+" "+x.taskKinds.join(" ")).toLowerCase().includes(q));
-  const selected=source.find(x=>x.id===s.selectedCatalog)||matches[0];
+  const selected=matches.find(x=>x.id===s.selectedCatalog)||matches[0];
   const count=(group)=>source.filter(x=>x.group===group).length;
   const live=Boolean(s.liveCatalog);
   const detail=selected?'<div class="contract-definition"><div class="row"><b>'+h(selected.name)+'</b>'+badge(selected.registryStage==='unregistered'?'ontwerp':selected.registryStage)+'</div><p class="muted smalltext">'+h(selected.specialization)+'</p><dl>'+
