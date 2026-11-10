@@ -517,6 +517,12 @@ function realMissions(){
       (rec.run?'<p class="smalltext">Worker: '+h(rec.run.workerId)+' v'+h(rec.run.workerVersion)+' · '+h(rec.run.verification)+' · '+h(rec.run.elapsedMs??'—')+' ms</p>':'')+
       (rec.run?.output?'<pre class="contract-code">'+h(JSON.stringify(rec.run.output,null,2))+'</pre>':'')+
       (rec.run?.errorCode?'<p class="contract-error">'+h(rec.run.errorCode)+'</p>':'')+
+      ((rec.attempts||[]).length?
+        '<div class="contract-code"><b>Vorige pogingen</b>'+
+        rec.attempts.map(run=>'<p class="smalltext">'+h(run.runId)+' · '+h(run.adapterId)+
+          ' · '+h(run.startedAt)+' · beoordeling: '+h(run.retryReview?.by||'niet geregistreerd')+
+          ' · '+h(run.retryReview?.reason||'geen reden vastgelegd')+'</p>').join('')+'</div>':'')+
+
       (['running','failed'].includes(rec.status)&&(!t.effect||t.effect==='local')?
         '<div class="mt"><label class="field-label" for="retry-'+h(selected.plan.id)+'-'+h(t.id)+'">Motivering voor opnieuw starten</label>'+
         '<input class="field" id="retry-'+h(selected.plan.id)+'-'+h(t.id)+'" maxlength="600" style="width:100%" placeholder="Controleer eerst of de vorige poging geen externe actie uitvoerde">'+
