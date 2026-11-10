@@ -676,7 +676,7 @@ export function makeServer(cfg: Config) {
           return json(res,200,{missionId:releaseList[1],revision:mission.revision,
             candidates:Object.values(mission.releaseCandidates??{}),
             publicationAllowed:false,
-            note:"Submitted CI and artifact references have not been independently verified."});
+            note:"GitHub CI provenance is not independently verified. Uploaded artifact bytes may have a separately recorded server-side SHA-256 check."});
         }
         const missionExtend=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/extend$/.exec(url.pathname);
         if(req.method==="POST"&&missionExtend){
