@@ -1,6 +1,6 @@
 /** Local Ollama code proposal. No model-initiated writes, commands or network egress. */
 import {createHash,randomUUID} from "node:crypto";
-import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,writeFileSync} from "node:fs";
+import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
 import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
 
@@ -76,7 +76,7 @@ const boundedResponse=async(response:Response)=>{
   catch{throw new Error("Codevoorstel heeft geen geldig JSON-formaat")}
   if(!proposal||typeof proposal!=="object"||Array.isArray(proposal)||
      Object.keys(proposal).some(k=>!["replacement","explanation","checks"].includes(k))||
-     typeof proposal.replacement!=="string"||Buffer.byteLength(proposal.replacement)>32768||
+     typeof proposal.replacement!=="string"||!proposal.replacement.trim()||Buffer.byteLength(proposal.replacement)>32768||
      typeof proposal.explanation!=="string"||proposal.explanation.length>3000||
      !Array.isArray(proposal.checks)||proposal.checks.length>8||
      proposal.checks.some((c:unknown)=>typeof c!=="string"||c.length>200))
@@ -176,12 +176,16 @@ export class LocalCodeWorkspace {
     const backupFd=openSync(backUp,"wx",0o600);
     try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
     const target=file+"."+randomUUID()+".eaiwork-tmp";
-    const fd=openSync(target,"wx",0o600);
-    try{writeFileSync(fd,record.replacement);fsyncSync(fd)}finally{closeSync(fd)}
-    // A second on-disk check detects local changes before the atomic replacement.
-    if(sha(readBounded(file))!==record.sourceSha256)
-      throw new Error("Bronbestand is opnieuw gewijzigd; wijziging niet toegepast");
-    renameSync(target,file);
+    let renamed=false;
+    try{
+      const fd=openSync(target,"wx",0o600);
+      try{writeFileSync(fd,record.replacement);fsyncSync(fd)}finally{closeSync(fd)}
+      // Keep the source file's permissions; no shell execution is performed.
+      chmodSync(target,lstatSync(file).mode&0o777);
+      if(sha(readBounded(file))!==record.sourceSha256)
+        throw new Error("Bronbestand is opnieuw gewijzigd; wijziging niet toegepast");
+      renameSync(target,file);renamed=true;
+    }finally{if(!renamed&&existsSync(target))unlinkSync(target)}
     saveJson(join(this.storage,record.id+".json"),{
       ...record,status:"applied",appliedAt:new Date().toISOString(),appliedBy:actorId
     });
