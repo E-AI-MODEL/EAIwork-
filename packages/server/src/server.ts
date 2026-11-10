@@ -411,6 +411,16 @@ export function makeServer(cfg: Config) {
             modelId:cfg.codeWorkspace?.modelId??null,
             mode:"single-file-human-reviewed"});
         }
+        if(req.method==="GET"&&url.pathname==="/ops/code/proposals"){
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          try{return json(res,200,{proposals:cfg.codeWorkspace.list(20)})}
+          catch{return json(res,503,{error:"Codevoorstellen zijn niet beschikbaar"})}
+        }
+        if(req.method==="GET"&&url.pathname==="/ops/code/proposal"){
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          try{return json(res,200,cfg.codeWorkspace.inspect(url.searchParams.get("id")??""))}
+          catch{return json(res,404,{error:"Codevoorstel is niet gevonden of kan niet worden gelezen"})}
+        }
         if(req.method==="POST"&&url.pathname==="/ops/code/propose"){
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codevoorstellen aanvragen");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
@@ -461,6 +471,18 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422,"Ongeldige goedkeuring");
           try{return json(res,200,cfg.codeWorkspace.apply(input as any,actor.id))}
           catch{return json(res,409,{error:"Code is niet toegepast: bron of goedkeuring klopt niet"})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/restore"){
+          if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen code herstellen");
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+             Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
+            throw new HttpError(422,"Ongeldige herstelgoedkeuring");
+          try{return json(res,200,cfg.codeWorkspace.restore(input as any,actor.id))}
+          catch{return json(res,409,{error:"Herstellen geweigerd: bestandsinhoud of goedkeuring klopt niet"})}
         }
         if (req.method === "GET" && url.pathname === "/ops/model") {
           return json(res,200,{
