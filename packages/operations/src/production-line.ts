@@ -47,7 +47,13 @@ export interface ProductionLineMission {
     byteVerification:"unverified"|"local-bytes-matched";
     byteCheckedAt:string|null;
     byteSize:number|null;
-    artifactOriginVerified:false;
+    artifactOriginVerified:boolean;
+    githubArtifactVerification:"unverified"|"run-artifact-matched";
+    githubArtifactName:string|null;
+    githubArtifactEntry:string|null;
+    githubArtifactId:number|null;
+    githubArchiveSha256:string|null;
+    githubArtifactObservedAt:string|null;
   };
 }
 export interface ProductionLineView {
@@ -138,6 +144,8 @@ export function productionLineView(
       const releaseStage:LineStage={id:"release",label:"Opleverdossier",
         status:dossier?"needs-review":"not-verified",
         detail:dossier?
+          dossier.githubArtifactObservation?
+            "Bestandshash komt overeen met een artifact uit de bevestigde GitHub-run. Dat bewijst geen reproduceerbare build, licentie of veilige publicatie.":
           dossier.artifactObservation?
             "De geüploade bestandsbytes komen overeen met de opgegeven SHA-256. Herkomst uit CI, licentie en bruikbaarheid zijn niet gecontroleerd.":
           dossier.ciObservation?
@@ -171,7 +179,14 @@ export function productionLineView(
           byteVerification:dossier.artifactObservation?"local-bytes-matched":"unverified",
           byteCheckedAt:dossier.artifactObservation?.checkedAt??null,
           byteSize:dossier.artifactObservation?.sizeBytes??null,
-          artifactOriginVerified:false,
+          artifactOriginVerified:!!dossier.githubArtifactObservation,
+          githubArtifactVerification:dossier.githubArtifactObservation?
+            "run-artifact-matched":"unverified",
+          githubArtifactName:dossier.githubArtifactObservation?.artifactName??null,
+          githubArtifactEntry:dossier.githubArtifactObservation?.entryPath??null,
+          githubArtifactId:dossier.githubArtifactObservation?.artifactId??null,
+          githubArchiveSha256:dossier.githubArtifactObservation?.archiveSha256??null,
+          githubArtifactObservedAt:dossier.githubArtifactObservation?.observedAt??null,
         }}:{}),
       };
     });
