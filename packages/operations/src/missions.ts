@@ -84,6 +84,22 @@ export interface MissionAutomation {
   stoppedReason?:SchedulerStopReason;
   stoppedAt?:string;
 }
+export interface ReleaseCandidate {
+  id:string;
+  revision:number;
+  repository:string;
+  commitSha:string;
+  artifactName:string;
+  artifactSha256:string;
+  /** A user-supplied link, never evidence the CI run actually passed. */
+  checkRunUrl:string;
+  checkCommitSha:string;
+  outputHashes:Record<string,string>;
+  proposedBy:string;
+  proposedAt:string;
+  status:"pending-review"|"changes-requested"|"accepted-for-verification"|"superseded";
+  review?:{by:string;at:string;decision:"request-changes"|"accept-for-verification";reason:string};
+}
 export interface MissionRecord {
   /** Plans begin at revision 1; every accepted extension is an audit event. */
   revision:number;
@@ -94,11 +110,18 @@ export interface MissionRecord {
   paused:boolean;
   resolvedGates:Record<string,GateResolution>;
   tasks:Record<string,MissionTaskRecord>;
+  releaseCandidates?:Record<string,ReleaseCandidate>;
 }
 export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
+  | {type:"mission.release.propose";missionId:string;candidate:{
+      id:string;revision:number;repository:string;commitSha:string;
+      artifactName:string;artifactSha256:string;checkRunUrl:string;checkCommitSha:string;
+    }}
+  | {type:"mission.release.review";missionId:string;candidateId:string;
+      decision:"request-changes"|"accept-for-verification";reason:string}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -258,9 +281,73 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
       mission.tasks[task.id]={spec:structuredClone(task),status:"queued"};
     mission.plan=structuredClone(e.plan);
     mission.revision++;
+    for(const c of Object.values(mission.releaseCandidates??{}))
+      if(c.status==="pending-review"||c.status==="accepted-for-verification")
+        c.status="superseded";
     // Approval for an earlier task cannot silently authorize a new task.
     // Reconfirm all source-anchored gates after scope expansion.
     mission.resolvedGates={};
+    return;
+  }
+  if(e.type==="mission.release.propose"){
+    if(actor.kind!=="person"||actor.id!==mission.createdBy)
+      fail("only the mission owner may submit a release candidate");
+    const c=e.candidate;
+    if(!plain(c)||typeof c.id!=="string"||!ID.test(c.id)||
+       !Number.isSafeInteger(c.revision)||c.revision!==mission.revision)
+      fail("invalid or stale release candidate");
+    if(Object.keys(c).some(k=>!["id","revision","repository","commitSha",
+       "artifactName","artifactSha256","checkRunUrl","checkCommitSha"].includes(k)))
+      fail("unexpected release candidate field");
+    if(!/^[a-zA-Z0-9_.-]{1,90}\\/[a-zA-Z0-9_.-]{1,90}$/.test(c.repository)||
+       !/^[a-f0-9]{40}$/.test(c.commitSha)||
+       !/^[a-f0-9]{64}$/.test(c.artifactSha256)||
+       c.checkCommitSha!==c.commitSha ||
+       typeof c.artifactName!=="string"||
+       !/^[a-zA-Z0-9_.-]{1,160}$/.test(c.artifactName)||
+       !/^https:\\/\\/github\\.com\\/[a-zA-Z0-9_.-]+\\/[a-zA-Z0-9_.-]+\\/actions\\/runs\\/[0-9]+$/.test(c.checkRunUrl)||
+       !c.checkRunUrl.startsWith("https://github.com/"+c.repository+"/actions/runs/"))
+      fail("release references must be exact and consistently scoped");
+    if(mission.paused||mission.automation?.enabled||
+       Object.values(mission.tasks).some(t=>t.status!=="done"||!t.run?.outputHash))
+      fail("all tasks must finish before a candidate can be submitted");
+    if((mission.plan.constraints??[]).some(g=>g.kind==="prohibition"||
+       !mission.resolvedGates[g.id]))
+      fail("source restrictions must be reviewed before a release candidate");
+    mission.releaseCandidates??={};
+    if(Object.keys(mission.releaseCandidates).length>=8)
+      fail("release candidate history limit reached");
+    if(mission.releaseCandidates[c.id]||
+       Object.values(mission.releaseCandidates).some(other=>
+         other.status==="pending-review"&&other.revision===mission.revision))
+      fail("release candidate already pending");
+    mission.releaseCandidates[c.id]={
+      ...structuredClone(c),
+      outputHashes:Object.fromEntries(mission.plan.tasks.map(t=>[
+        t.id,mission.tasks[t.id].run!.outputHash!,
+      ])),
+      proposedBy:actor.id,proposedAt:at,status:"pending-review",
+    };
+    return;
+  }
+  if(e.type==="mission.release.review"){
+    if(actor.kind!=="person"||actor.id===mission.createdBy)
+      fail("release review requires a different human reviewer");
+    const candidate=mission.releaseCandidates?.[e.candidateId];
+    if(!candidate||candidate.status!=="pending-review"||
+       candidate.revision!==mission.revision)
+      fail("unknown or stale release candidate for review");
+    if(!["request-changes","accept-for-verification"].includes(e.decision))
+      fail("invalid review decision");
+    bounded(e.reason,"review explanation",900);
+    if(Object.entries(candidate.outputHashes).some(([taskId,hash])=>
+       mission.tasks[taskId]?.run?.outputHash!==hash)||
+       mission.plan.tasks.length!==Object.keys(candidate.outputHashes).length)
+      fail("mission results changed since candidate submission");
+    candidate.review={by:actor.id,at,decision:e.decision,reason:e.reason};
+    candidate.status=e.decision==="request-changes"?
+      "changes-requested":"accepted-for-verification";
+    // Neither review result authorizes upload, deployment or publication.
     return;
   }
   if(e.type==="mission.pause"||e.type==="mission.resume"){
