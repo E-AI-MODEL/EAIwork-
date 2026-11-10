@@ -27,11 +27,16 @@ const measure = {
 test("registry does not grant availability without a test and human release",()=>{
   let s=registered();
   assert.equal(s.workers[contract.id].stage,"candidate");
-  assert.throws(()=>applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:"test:run-1"})),/recorded test/);
+  assert.throws(()=>applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:"test:run-1"})),/passed, trusted/);
   assert.throws(()=>applyOps(s,wrap({type:"quality.record",measurement:measure})),/trusted/);
   s=applyOps(s,wrap({type:"quality.record",measurement:measure},system));
   assert.equal(qualityOverview(s,contract.id)[0].success,.8);
-  s=applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:"test:run-1"}));
+  assert.throws(()=>applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:"test:run-1"})),/passed, trusted/);
+  const passed={...measure,id:"m-passed",numerator:10,denominator:10,
+    metric:"fixture-pass",suiteVersion:"evidence-review-v1",evidenceRef:"test:passed"};
+  const check={kind:"check" as const,id:"check:evidence-reviewer"};
+  s=applyOps(s,wrap({type:"quality.record",measurement:passed},check));
+  s=applyOps(s,wrap({type:"worker.release",id:contract.id,evidenceRef:"test:passed"}));
   assert.equal(s.workers[contract.id].stage,"ready");
   assert.throws(()=>applyOps(s,wrap({type:"worker.register",contract})),/already registered/);
   assert.throws(()=>applyOps(s,wrap({type:"quality.record",measurement:{...measure,id:"m-2",denominator:0}},system)),/invalid measurement/);
