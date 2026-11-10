@@ -154,3 +154,68 @@ test("pause or explicit stop revokes authorization and cannot be forged by a mod
     scheduler.close();
   }finally{ctx.cleanup()}
 });
+
+
+test("explicit restart consent preserves a bounded queue of not-yet-started local tasks",()=>{
+  const ctx=setup();
+  try{
+    ctx.admit("text-normalize");ctx.admit("text-metrics");
+    ctx.append({type:"mission.create",plan:ctx.plan("mission-restart-approved")});
+    ctx.append({type:"mission.automation.start",missionId:"mission-restart-approved",
+      maxStarts:2,resumeAfterRestart:true});
+    ctx.reopen();
+    const scheduler=new LocalMissionScheduler(ctx.store,0);
+    assert.equal(ctx.store.snapshot().missions["mission-restart-approved"].automation?.enabled,true);
+    assert.equal(ctx.store.snapshot().missions["mission-restart-approved"].automation?.starts,0);
+    assert.equal(scheduler.tick().started,1);
+    assert.deepEqual(scheduler.tick().stopped,[{missionId:"mission-restart-approved",reason:"complete"}]);
+    const m=ctx.store.snapshot().missions["mission-restart-approved"];
+    assert.equal(m.automation?.starts,2);
+    assert.equal(m.tasks["task-count"].status,"done");
+    assert.equal(m.automation?.stoppedReason,"complete");
+    assert.equal(ctx.store.verify().ok,true);
+    scheduler.close();
+  }finally{ctx.cleanup()}
+});
+test("a restart never retries a possibly executed in-flight task, even with explicit consent",()=>{
+  const ctx=setup();
+  try{
+    ctx.admit("text-normalize");
+    const id="mission-inflight-restart";
+    ctx.append({type:"mission.create",plan:{...ctx.plan(id),tasks:[ctx.plan(id).tasks[0]]}});
+    ctx.append({type:"mission.automation.start",missionId:id,
+      maxStarts:2,resumeAfterRestart:true});
+    ctx.append({type:"task.started",missionId:id,taskId:"task-clean",run:{
+      runId:"run-interrupted",workerId:"text-normalize",workerVersion:"1.0.0",
+      adapterId:"text-normalize",inputHash:"a".repeat(64),
+      startedAt:new Date().toISOString(),verification:"not-evaluated",
+    }},runner);
+    ctx.reopen();
+    const scheduler=new LocalMissionScheduler(ctx.store,0);
+    let m=ctx.store.snapshot().missions[id];
+    assert.equal(m.automation?.enabled,false);
+    assert.equal(m.automation?.stoppedReason,"needs-review");
+    assert.equal(m.automation?.starts,1);
+    assert.equal(m.tasks["task-clean"].status,"running");
+    assert.equal(scheduler.tick().started,0);
+    assert.equal(m.tasks["task-clean"].attempts?.length??0,0);
+    ctx.append({type:"task.retry",missionId:id,taskId:"task-clean",
+      reason:"Human checked that the local operation can safely be repeated"});
+    m=ctx.store.snapshot().missions[id];
+    assert.equal(m.tasks["task-clean"].status,"queued");
+    assert.equal(m.tasks["task-clean"].attempts?.[0].runId,"run-interrupted");
+    assert.equal(scheduler.tick().started,0);
+    scheduler.close();
+  }finally{ctx.cleanup()}
+});
+test("restart continuation consent must be an explicit boolean",()=>{
+  const ctx=setup();
+  try{
+    ctx.admit("text-normalize");
+    const id="mission-restart-bad-type";
+    ctx.append({type:"mission.create",plan:{...ctx.plan(id),tasks:[ctx.plan(id).tasks[0]]}});
+    assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:id,maxStarts:2,
+      resumeAfterRestart:"yes"} as any),/restart continuation consent/);
+    assert.equal(ctx.store.snapshot().missions[id].automation,undefined);
+  }finally{ctx.cleanup()}
+});
