@@ -1391,7 +1391,7 @@ function orderedPlanPanel(){
   const steps=active?.steps||[];
   const current=steps.find(step=>step.active);
   return '<div class="card pad">'+
-    '<p class="muted smalltext">Wijzig twee tot acht bestaande JavaScript-bestanden in een vaste volgorde. Elk bestand krijgt een voorstel en een losse test. Bij nieuwe plannen testen we daarnaast alle gekozen bestanden samen, vóór en na het toepassen. Een mislukte test blokkeert de volgende wijziging.</p>'+
+    '<p class="muted smalltext">Wijzig twee tot acht bestaande JavaScript-bestanden in een vaste volgorde. Elk bestand krijgt een voorstel. Bij nieuwe plannen testen we alle gekozen bestanden samen, vóór en na het toepassen. Een mislukte test blokkeert de volgende wijziging.</p>'+
     (codePlans.length?'<div class="code-history-head"><b>Bestaande plannen</b>'+btn('Ververs','code-plan-refresh','small')+'</div>'+
       codePlans.map(p=>'<button class="code-history-row" data-action="code-plan-open" data-id="'+h(p.id)+'"><b>'+
         h(p.title)+'</b><span>'+h(p.state==='active'?'Actief':p.state==='done'?'Afgerond':p.state==='blocked'?'Geblokkeerd':'Gestopt')+'</span>'+
@@ -1410,13 +1410,16 @@ function orderedPlanPanel(){
         '<p class="smalltext">'+h(current.instruction)+'</p>'+
         (current.status==='waiting'?btn('Maak voorstel voor dit bestand','code-plan-propose','primary'):
           current.status==='review'?
-            btn('Test voorstel in Docker','code-plan-test-pre','small')+
-            (active.suitePolicy==='project-node-v1'?'<div class="mt">'+btn('Test alle bestanden vóór toepassing','code-plan-project-pre','small',
-              current.testStatus==='passed'?'':'disabled')+'</div>'+
-              '<p class="smalltext">Gezamenlijke test vóór toepassing: '+h(current.projectPreStatus||'nog niet uitgevoerd')+'</p>':'')+
+            (active.suitePolicy==='project-node-v1'?
+              btn('Test alle bestanden vóór toepassing','code-plan-project-pre','small')+
+              '<p class="smalltext">Gezamenlijke test vóór toepassing: '+h(current.projectPreStatus||'nog niet uitgevoerd')+'</p>':
+              btn('Test voorstel in Docker','code-plan-test-pre','small'))+
             '<label class="smalltext"><input type="checkbox" id="codePlanAccept"> Ik heb het voorstel, de verschillen en de testresultaten gecontroleerd.</label>'+
             btn('Pas deze stap toe','code-plan-apply','primary',
-              (!codeInspection?.canApply||(active.suitePolicy==='project-node-v1'&&current.projectPreStatus!=='passed'))?'disabled':''):
+              (active.suitePolicy==='project-node-v1'?
+                !(current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
+                  codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed'):
+                !codeInspection?.canApply)?'disabled':''):
           current.status==='needs-post-test'?btn('Test toegepaste code','code-plan-test-post','primary'):
           current.status==='needs-project-test'?btn('Test alle bestanden na toepassing','code-plan-project-post','primary'):'')+
         '</div>':'')+
@@ -1609,9 +1612,12 @@ async function runOrderedCodeAction(action){
       if(action==='apply'){
         if(!document.getElementById('codePlanAccept')?.checked)
           throw new Error('Controleer eerst het voorstel en bevestig je keuze.');
-        if((plan.suitePolicy==='project-node-v1'&&step.projectPreStatus!=='passed')||
-           !codeInspection?.canApply||codeDraft?.id!==step.proposalId)
-          throw new Error('Controleer eerst de exacte code en testuitslag.');
+        const verified=plan.suitePolicy==='project-node-v1'?
+          step.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
+          codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
+          codeInspection?.canApply;
+        if(!verified||codeDraft?.id!==step.proposalId)
+          throw new Error('Controleer eerst de exacte code en de uitgevoerde tests.');
         body={...body,expectedSha256:codeDraft.replacementSha256,approve:true};
       }
     }
@@ -1619,7 +1625,7 @@ async function runOrderedCodeAction(action){
     codeNotice=action==='propose'?'Voorstel opgeslagen. Beoordeel de wijzigingen en test de code.':
       action==='test-pre'?'De test vóór toepassing is vastgelegd. Controleer het resultaat.':
       action==='apply'?'Eén bestand toegepast. Test nu de werkelijk opgeslagen versie.':
-      action==='test-post'?(result.report?.status==='passed'?'Losse test geslaagd. Start nu de gezamenlijke projecttest.':'Test niet geslaagd. Het plan is geblokkeerd.'):
+      action==='test-post'?(result.report?.status==='passed'?'Losse test geslaagd. Je kunt verdergaan.':'Test niet geslaagd. Het plan is geblokkeerd.'):
       action==='test-project-pre'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. Controleer het voorstel.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
       action==='test-project-post'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. De volgende stap is beschikbaar.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
       'Plan gestopt. Eerder toegepaste bestanden blijven staan.';
