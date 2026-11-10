@@ -136,3 +136,31 @@ test("local library does not fall back to the built-in demo catalog",()=>{
   assert.doesNotMatch(live,/Fictieve worker/);
   assert.match(live,/serverbibliotheek is nog niet geladen/);
 });
+
+test("local home shows actual code plans even without mission records",()=>{
+  const src=take("function liveOverview(){","function localConnectView(){");
+  const context={
+    s:{liveOps:{missions:{},workers:{},history:[],measurements:[],defects:{}}},
+    codePlans:[{title:"Proef met twee bestanden",state:"active",
+      steps:[{status:"done"},{status:"waiting"}]}],
+    codeConnections:{ollama:{status:"ready"}},
+    codeWorkspaceStatus:{modelId:"ollama:gemma2:latest"},
+    localPlannerStatus:null,
+    h:(value:unknown)=>String(value??""),
+    btn:(label:string)=>"<button>"+label+"</button>",
+    section:(title:string,body:string)=>"<section>"+title+body+"</section>",
+    dashControlsCard:(title:string,body:string)=>"<article>"+title+body+"</article>",
+    compactDashboard:()=>"<div>Werkelijke taken</div>"
+  };
+  const render=runInNewContext(src+"\\nliveOverview",context);
+  const empty=render();
+  assert.match(empty,/Codeplannen/);
+  assert.match(empty,/Proef met twee bestanden/);
+  assert.match(empty,/1\\/2 bestanden afgerond/);
+  assert.match(empty,/ollama:gemma2:latest/);
+  assert.doesNotMatch(empty,/Fictieve worker|Scientific Reviewer wijkt/);
+  context.s.liveOps.missions={one:{plan:{id:"one"},tasks:{}}};
+  const full=render();
+  assert.match(full,/Werkelijke taken/);
+  assert.match(full,/Proef met twee bestanden/);
+});
