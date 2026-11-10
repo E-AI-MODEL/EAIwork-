@@ -112,6 +112,28 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     const fixture=await evaluated.json() as any;
     assert.equal(fixture.passed,true);
     assert.equal((await request("POST","/ops/events",person,{type:"worker.release",id:"text-normalize",evidenceRef:fixture.evidenceRef})).status,201);
+    const revisedContract={...localContract,version:"1.1.0",name:"Text Normalize revised"};
+    assert.equal((await request("POST","/ops/events",person,{type:"worker.register",contract:revisedContract})).status,201);
+    let versionState=await(await request("GET","/ops/state",person)).json() as any;
+    assert.equal(versionState.workers["text-normalize"].contract.version,"1.0.0");
+    assert.equal(versionState.workerVersions["text-normalize"]["1.1.0"].stage,"candidate");
+    assert.equal((await request("POST","/ops/workers/text-normalize/evaluate",person,{})).status,422);
+    const result=await request("POST","/ops/workers/text-normalize/versions/1.1.0/evaluate",person,{});
+    assert.equal(result.status,200);
+    const revisionTest=await result.json() as any;
+    assert.equal(revisionTest.passed,true);
+    assert.equal((await request("POST","/ops/events",person,{
+      type:"worker.release",id:"text-normalize",version:"1.1.0",evidenceRef:revisionTest.evidenceRef
+    })).status,201);
+    versionState=await(await request("GET","/ops/state",person)).json() as any;
+    assert.equal(versionState.workers["text-normalize"].contract.version,"1.1.0");
+    assert.equal(versionState.workerVersions["text-normalize"]["1.0.0"].stage,"superseded");
+    assert.equal((await request("POST","/ops/events",person,{
+      type:"worker.activate-version",id:"text-normalize",version:"1.0.0",rationale:"rollback test"
+    })).status,201);
+    versionState=await(await request("GET","/ops/state",person)).json() as any;
+    assert.equal(versionState.workers["text-normalize"].contract.version,"1.0.0");
+
     assert.equal((await request("POST","/ops/events",system,{type:"defect.open",id:"d-1",workerId:"text-normalize",reason:"citation check failed",severity:"quality"})).status,201);
     for(let n=1;n<=3;n++){
       const a={candidateVersion:"1.0."+n,diagnosis:"citation mismatch",changeRef:"change-"+n,suiteVersion:"fixture-v1",resultRef:"test:"+n,passed:false,at:"2026-11-10T00:00:00Z"};
