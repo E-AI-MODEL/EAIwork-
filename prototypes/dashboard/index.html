@@ -122,12 +122,12 @@ function liveProductionLine(){
         '<div class="mt"><label class="smalltext">Kies het kandidaatbestand (maximaal 16 MB)'+
         '<input type="file" id="artifact-file-'+h(m.id)+'"></label>'+
         btn('Vergelijk bestandshash','release-check-bytes','small',
-          'data-id="'+h(m.id)+'" data-revision="'+h(m.revision)+'" data-name="'+h(dossier.artifactPath.split('/').at(-1))+'')+
+          'data-id="'+h(m.id)+'" data-revision="'+h(m.revision)+'" data-name="'+h(dossier.artifactPath.split('/').at(-1))+'"')+
         '</div>':'')+
       (dossier.byteVerification==='local-bytes-matched'?
         '<p class="muted smalltext">Gemeten: '+h(dossier.byteSize)+' bytes. Herkomst uit GitHub Actions is niet bewezen.</p>':'')+
       '<p class="smalltext">Beoordeling: '+h(dossier.reviewDecision)+'</p>'+
-      '<p class="muted smalltext">De opgegeven CI-run, licentie en bestanden zijn nog niet onafhankelijk gecontroleerd. Publiceren is niet beschikbaar.</p>'+
+      '<p class="muted smalltext">Een GitHub-controle en een passende bestands-SHA bewijzen nog niet dat het gekozen bestand uit die run komt. Licentie en publicatie blijven ongecontroleerd.</p>'+
       (dossier.reviewDecision==='awaiting-review'?
        '<label class="smalltext">Beoordeling door een andere bevoegde persoon<input id="release-reason-'+h(m.id)+'" placeholder="Wat moet nog gecontroleerd worden?"></label>'+
        btn('Vraag externe verificatie','release-review','small','data-id="'+h(m.id)+'" data-revision="'+h(m.revision)+'"'):'')+
