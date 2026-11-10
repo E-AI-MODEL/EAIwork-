@@ -124,6 +124,17 @@ test("two real deterministic workers execute dependent tasks through authorized 
     assert.equal(repeated.stopReason,"complete");
     assert.equal(repeated.batches.length,0);
     const before=await(await request("GET","/ops/missions",person)).json() as any;
+    assert.equal((await request("GET","/ops/missions/mission-brief/trace",readOnly)).status,403);
+    const traced=await request("GET","/ops/missions/mission-brief/trace",person);
+    assert.equal(traced.status,200);
+    const trace=await traced.json() as any;
+    assert.equal(trace.schema,"eai-mission-trace-v1");
+    assert.equal(trace.counts.tasks,2);
+    assert.equal(trace.counts.attempts,2);
+    assert.ok(trace.tasks.every((t:any)=>t.verification==="not-evaluated"));
+    assert.equal(trace.tasks[0].attempts[0].status,"completed");
+    assert.ok(!JSON.stringify(trace).includes("Hallo wereld\\nNu"));
+    assert.equal((await request("GET","/ops/missions/unknown-trace/trace",person)).status,404);
     const m=before.missions["mission-brief"];
     assert.equal(m.tasks["task-clean"].run.output.text,"Hallo wereld\nNu");
     assert.equal(m.tasks["task-count"].run.output.words,3);
