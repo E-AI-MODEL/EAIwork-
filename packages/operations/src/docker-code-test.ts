@@ -67,8 +67,8 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
       "Docker heeft geen controleerbare lokale afbeelding teruggegeven.");
   const stage=mkdtempSync(join(tmpdir(),"eaiwork-node-sandbox-"));
   const name="eaiwork-check-"+randomUUID();
-  let timedOut=false,output="",exitCode:number|null=null,started=false;
-  const append=(chunk:Buffer)=>{if(output.length<12000)output+=chunk.toString("utf8").slice(0,12000-output.length)};
+  let timedOut=false,output="",exitCode:number|null=null;
+  const append=(chunk:Buffer)=>{output=(output+chunk.toString("utf8")).slice(-12000)};
   try{
     if(/[,\r\n]/.test(stage))throw new Error("Ongeldige tijdelijke map voor Docker");
     chmodSync(stage,0o755);
@@ -99,7 +99,6 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
       };
       processHandle.stdout.on("data",append);
       processHandle.stderr.on("data",append);
-      processHandle.once("spawn",()=>{started=true});
       processHandle.once("error",e=>finish({code:null,error:String(e.message)}));
       processHandle.once("close",code=>finish({code}));
       const timeout=setTimeout(()=>{
@@ -115,10 +114,11 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
     });
     rmSync(stage,{recursive:true,force:true});
   }
+  const testSummary=/^# tests [1-9][0-9]*\s*$/m.test(output);
   return {
-    status:!started?"unavailable":timedOut||exitCode!==0?"failed":"passed",
+    status:!testSummary?"unavailable":timedOut||exitCode!==0?"failed":"passed",
     runner:"docker-node-test-v1",candidateSha256:sha(candidateSource),
-    testSha256:sha(testSource),imageId,testsExecuted:started,
+    testSha256:sha(testSource),imageId,testsExecuted:testSummary,
     exitCode,timedOut,output:output.slice(0,12000),
     recordedAt:new Date().toISOString()
   };
