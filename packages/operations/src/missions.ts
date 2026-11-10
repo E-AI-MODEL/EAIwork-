@@ -94,7 +94,7 @@ export function validateMissionPlan(plan:MissionPlan):void {
       new Set(task.dependsOn).size!==task.dependsOn.length)fail("invalid dependencies");
     if(task.evidenceAtomIds!==undefined && (!Array.isArray(task.evidenceAtomIds) ||
        task.evidenceAtomIds.length>24 ||
-       task.evidenceAtomIds.some(id=>typeof id!=="string"||!ID.test(id)) ||
+       task.evidenceAtomIds.some(id=>typeof id!=="string"||id.length>128||!id.trim()||/[\r\n\0]/.test(id)) ||
        new Set(task.evidenceAtomIds).size!==task.evidenceAtomIds.length))
        fail("invalid evidence links");
     if(task.textFrom!==undefined&&(typeof task.textFrom!=="string"||!ID.test(task.textFrom)))fail("invalid text source");
