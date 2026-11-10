@@ -23,13 +23,24 @@ docker pull node:22-alpine
 npm run local:ollama -- --example
 ```
 
-Er verschijnt automatisch een **genummerde lijst** met jouw geïnstalleerde Ollama-modellen. Typ alleen het nummer en druk op Enter. Staat er maar één model op je Mac, dan gebruikt EAIwork dat direct.
+Je ziet bijvoorbeeld dit in Terminal (de modellen op jouw Mac kunnen anders zijn):
 
-Het programma maakt zelf een nieuwe voorbeeldmap. Je hoeft geen mapnaam of modelnaam in te typen. Je eigen projecten blijven ongewijzigd.
+```text
+Kies je lokale Ollama-model:
+  1. llama3.2:3b
+  2. qwen2.5-coder:7b
+  3. deepseek-r1:8b
 
-**4. Open het dashboard**
+Typ het nummer en druk op Enter:
+```
 
-Open het adres uit Terminal, meestal [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard). Verbind via **Contracten en registratie** met het toegangstoken dat Terminal toont. Ga naar **Codeworker**.
+**Typ alleen een nummer.** Je hoeft nergens een modelnaam in te vullen. Met één geïnstalleerd model slaat EAIwork de keuze automatisch over.
+
+EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven ongewijzigd.
+
+**4. Open je lokale dashboard**
+
+Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
 **5. Plak deze twee regels in het nieuwe codeplan**
 
