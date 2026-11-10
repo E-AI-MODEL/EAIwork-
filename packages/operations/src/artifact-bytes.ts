@@ -10,7 +10,11 @@ export interface MeasuredArtifact {
   sizeBytes:number;
 }
 export class ArtifactInputError extends Error {
-  constructor(public readonly code:"empty"|"too-large"|"stream-error"){super(code)}
+  readonly code:"empty"|"too-large"|"stream-error";
+  constructor(code:"empty"|"too-large"|"stream-error"){
+    super(code);
+    this.code=code;
+  }
 }
 export async function measureArtifactBytes(
   request:AsyncIterable<Uint8Array>,
