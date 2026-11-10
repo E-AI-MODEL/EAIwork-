@@ -53,16 +53,24 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     const measurement={id:"test-1",workerId:"proof-worker",version:"1.0.0",
       taskKind:"test",dataset:"frozen-v1",suiteVersion:"fixture-v1",cohort:"holdout",
       metric:"pass-rate",numerator:10,denominator:10,measuredAt:"2026-11-10T00:00:00Z",evidenceRef:"test:1"};
-    assert.equal((await request("POST","/ops/events",person,{type:"quality.record",measurement})).status,422);
-    assert.equal((await request("POST","/ops/events",system,{type:"quality.record",measurement})).status,201);
-    assert.equal((await request("POST","/ops/events",person,{type:"worker.release",id:"proof-worker",evidenceRef:"test:1"})).status,201);
-    assert.equal((await request("POST","/ops/events",system,{type:"defect.open",id:"d-1",workerId:"proof-worker",reason:"citation check failed",severity:"quality"})).status,201);
+    assert.equal((await request("POST","/ops/events",person,{type:"quality.record",measurement})).status,403);
+    assert.equal((await request("POST","/ops/events",system,{type:"quality.record",measurement})).status,403);
+    assert.equal((await request("POST","/ops/events",person,{type:"worker.release",id:"proof-worker",evidenceRef:"test:1"})).status,422);
+    const localContract={...contract,id:"text-normalize",name:"Text Normalize",
+      taskKinds:["text-normalize"],testSuite:"builtin-fixture-v1"};
+    assert.equal((await request("POST","/ops/events",person,{type:"worker.register",contract:localContract})).status,201);
+    const evaluated=await request("POST","/ops/workers/text-normalize/evaluate",person,{});
+    assert.equal(evaluated.status,200);
+    const fixture=await evaluated.json() as any;
+    assert.equal(fixture.passed,true);
+    assert.equal((await request("POST","/ops/events",person,{type:"worker.release",id:"text-normalize",evidenceRef:fixture.evidenceRef})).status,201);
+    assert.equal((await request("POST","/ops/events",system,{type:"defect.open",id:"d-1",workerId:"text-normalize",reason:"citation check failed",severity:"quality"})).status,201);
     for(let n=1;n<=3;n++){
       const a={candidateVersion:"1.0."+n,diagnosis:"citation mismatch",changeRef:"change-"+n,suiteVersion:"fixture-v1",resultRef:"test:"+n,passed:false,at:"2026-11-10T00:00:00Z"};
       assert.equal((await request("POST","/ops/events",system,{type:"repair.record",defectId:"d-1",attempt:a})).status,201);
     }
     const state=await(await request("GET","/ops/state",person)).json() as any;
-    assert.equal(state.workers["proof-worker"].stage,"quarantined");
+    assert.equal(state.workers["text-normalize"].stage,"quarantined");
     assert.equal(state.defects["d-1"].state,"human-required");
     assert.equal(state.defects["d-1"].attempts.length,3);
     assert.equal((await request("POST","/ops/events",system,{type:"human.decide",defectId:"d-1",choice:"disable",rationale:"stop"})).status,422);
