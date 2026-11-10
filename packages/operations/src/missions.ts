@@ -299,7 +299,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   }
   if(e.type==="mission.gate.resolve"){
     const gate=mission.plan.constraints?.find(g=>g.id===e.constraintId);
-    if(!gate || !["approval","condition","deadline"].includes(gate.kind))
+    if(!gate || !["approval","condition","deadline","uncertainty"].includes(gate.kind))
       fail("constraint cannot be resolved");
     if(actor.kind!=="person" || (gate.kind==="approval" && actor.id!==gate.approverId))
       fail("constraint requires the designated person");
@@ -394,7 +394,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
 /** A proposal may identify constraints but may never clear them. */
 export function blockingConstraints(m:MissionRecord,taskId:string):MissionConstraint[] {
   return (m.plan.constraints??[]).filter(g=>g.taskIds.includes(taskId) &&
-    (g.kind==="prohibition"||((g.kind==="approval"||g.kind==="condition"||g.kind==="deadline")&&!m.resolvedGates?.[g.id])));
+    (g.kind==="prohibition"||((g.kind==="approval"||g.kind==="condition"||g.kind==="deadline"||g.kind==="uncertainty")&&!m.resolvedGates?.[g.id])));
 }
 export function missionProgress(m:MissionRecord){
   const tasks=Object.values(m.tasks);
