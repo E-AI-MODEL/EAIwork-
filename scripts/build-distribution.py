@@ -9,7 +9,7 @@ import zipfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "dist" / "eaiwork-local-demo.zip"
 FIXED = (2026, 1, 1, 0, 0, 0)
-INCLUDE = ("package.json", "LICENSE", "README.md", "scripts/local-demo.ts",
+INCLUDE = ("package.json", "LICENSE", "README.md", "packages/client/index.html", "scripts/local-demo.ts",
            "scripts/local-text-executor.ts")
 DIRECTORIES = ("packages", "packs", "prototypes/dashboard")
 MAX_FILES = 400
