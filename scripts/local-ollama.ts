@@ -3,8 +3,11 @@
  * Ollama only proposes plans. Human approval, task authority and local effects
  * remain with the EAIwork operations server.
  */
-import {pathToFileURL} from "node:url";
-import {resolve} from "node:path";
+import {pathToFileURL,fileURLToPath} from "node:url";
+import {createInterface} from "node:readline/promises";
+import {copyFileSync,mkdirSync,mkdtempSync} from "node:fs";
+import {homedir} from "node:os";
+import {resolve,join,dirname} from "node:path";
 import type {AddressInfo} from "node:net";
 import {createDemoServer} from "./local-demo.ts";
 import {defaultLocalProfileDir,openLocalProfile} from "./local-profile.ts";
@@ -19,6 +22,8 @@ export interface LocalOllamaOptions {
   timeoutMs?:number;
   dataDir?:string;
   worktreeDir?:string;
+  example?:boolean;
+  selectModel?:(models:string[])=>Promise<string>;
 }
 export function chooseInstalledModel(installed:string[],requested?:string):string{
   const names=[...new Set(installed.filter(v=>typeof v==="string" && v.length>0))].sort();
@@ -29,6 +34,38 @@ export function chooseInstalledModel(installed:string[],requested?:string):strin
   if(names.length===1)return names[0];
   if(names.length===0)throw new Error("Geen Ollama-modellen gevonden. Installeer eerst een model met: ollama pull qwen2.5:1.5b");
   throw new Error("Kies een lokaal model met --model=NAAM. Beschikbaar: "+names.join(", "));
+}
+/**
+ * A numbered menu avoids copying long Ollama model IDs.
+ * Keep this separate from readline so menu behavior is easy to test.
+ */
+export async function chooseModelFromMenu(
+  installed:string[],
+  ask:(question:string)=>Promise<string>,
+  write:(message:string)=>void
+):Promise<string>{
+  const names=[...new Set(installed.filter(x=>typeof x==="string"&&x.trim()))].sort();
+  if(names.length<=1)return chooseInstalledModel(names);
+  write("\nKies je lokale Ollama-model:\n");
+  names.forEach((name,index)=>write("  "+(index+1)+". "+name+"\n"));
+  for(let attempt=0;attempt<5;attempt++){
+    const raw=(await ask("Typ het nummer en druk op Enter: ")).trim();
+    const index=/^[0-9]+$/.test(raw)?Number(raw)-1:-1;
+    if(Number.isSafeInteger(index)&&index>=0&&index<names.length)return names[index];
+    write("Kies een nummer uit de lijst.\n");
+  }
+  throw new Error("Er is geen geldig model gekozen. Start de opdracht opnieuw.");
+}
+function makeExampleWorktree():string{
+  const destination=mkdtempSync(join(homedir(),"eaiwork-proef-"));
+  const source=fileURLToPath(new URL("../examples/multifile-smoke/",import.meta.url));
+  for(const path of ["src/amount.js","src/invoice.js",
+    "tests/amount.test.js","tests/invoice.test.js"]){
+    const output=join(destination,path);
+    mkdirSync(dirname(output),{recursive:true});
+    copyFileSync(join(source,path),output);
+  }
+  return destination;
 }
 export function parseLocalOllamaArgs(args:string[],env:NodeJS.ProcessEnv=process.env):LocalOllamaOptions{
   const result:LocalOllamaOptions={
@@ -41,6 +78,10 @@ export function parseLocalOllamaArgs(args:string[],env:NodeJS.ProcessEnv=process
   };
   const seen=new Set<string>();
   for(const arg of args){
+    if(arg==="--example"){
+      if(seen.has("example"))throw new Error("Gebruik --example slechts één keer");
+      seen.add("example");result.example=true;continue;
+    }
     const match=/^--(model|host|port|timeout-ms|data-dir|worktree)=(.+)$/.exec(arg);
     if(!match||seen.has(match[1]))throw new Error("Gebruik --model=NAAM, --host=LOOPBACK, --port=NUMMER of --timeout-ms=NUMMER of --data-dir=MAP of --worktree=MAP");
     seen.add(match[1]);
@@ -51,6 +92,8 @@ export function parseLocalOllamaArgs(args:string[],env:NodeJS.ProcessEnv=process
     if(match[1]==="data-dir")result.dataDir=match[2];
     if(match[1]==="worktree")result.worktreeDir=match[2];
   }
+  if(result.example&&result.worktreeDir)
+    throw new Error("Gebruik --example niet samen met --worktree");
   localOllamaHost(result.host);
   if(result.model && (result.model.length>120||!/^[-\w.:/]+$/.test(result.model)))
     throw new Error("Ongeldige lokale modelnaam");
@@ -71,10 +114,15 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
   let installed:string[];
   try{installed=await discoverLocalOllamaModels(host,5000)}
   catch{throw new Error("Ollama reageert niet op "+host+". Start Ollama op deze computer en probeer opnieuw.")}
-  const model=chooseInstalledModel(installed,options.model);
+  const chosen=options.model??(installed.length>1&&options.selectModel?
+    await options.selectModel(installed):undefined);
+  const model=chooseInstalledModel(installed,chosen);
+  if(options.example&&options.worktreeDir)
+    throw new Error("Gebruik --example niet samen met een eigen werkmap");
+  const worktreeDir=options.example?makeExampleWorktree():options.worktreeDir;
   const profileDir=options.dataDir??defaultLocalProfileDir();
-  const codeWorkspace=options.worktreeDir?new LocalCodeWorkspace({
-    workspaceDir:options.worktreeDir,profileDir:openLocalProfile(profileDir).root,
+  const codeWorkspace=worktreeDir?new LocalCodeWorkspace({
+    workspaceDir:worktreeDir,profileDir:openLocalProfile(profileDir).root,
     model,host,timeoutMs,
   }):undefined;
   const demo=createDemoServer({
@@ -95,14 +143,24 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   try{
     const options=parseLocalOllamaArgs(process.argv.slice(2));
-    const local=await startLocalOllama(options);
+    const local=await startLocalOllama({
+      ...options,
+      selectModel:process.stdin.isTTY&&process.stdout.isTTY?async models=>{
+        const line=createInterface({input:process.stdin,output:process.stdout});
+        try{return await chooseModelFromMenu(models,
+          question=>line.question(question),
+          message=>process.stdout.write(message))}
+        finally{line.close()}
+      }:undefined,
+    });
     process.stdout.write(
       "\nEAIwork lokaal met Ollama\n"+
       "Dashboard: "+local.address+"\n"+
       "Model voor planvoorstellen: "+local.model+" (Ollama op "+local.ollamaHost+")\n"+
       "Toegangstoken: "+local.token+"\n"+
       "Blijvende opslag: "+local.storageDir+"\n"+
-      (local.codeWorktree?"Codevoorstellen voor: "+local.codeWorktree+"\n":"") + "\n"+
+      (local.codeWorktree?"Codevoorstellen voor: "+local.codeWorktree+"\n":"") +
+      (options.example?"Dit is een nieuwe voorbeeldmap. Je eigen projecten blijven ongewijzigd.\n":"")+"\n"+
       "Open het dashboard, ga naar Meer > Contracten en registratie en verbind met het token.\n"+
       "Ga vervolgens naar Echte uitvoering en vraag een planvoorstel aan.\n"+
       "Het model mag alleen voorstellen doen. Jij keurt plannen en uitvoering goed.\n"+

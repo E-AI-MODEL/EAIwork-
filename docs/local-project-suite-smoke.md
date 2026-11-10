@@ -1,64 +1,109 @@
-# Lokale proef: twee bestanden samen testen met Ollama
+# EAIwork met Ollama testen op je Mac
 
-Deze proef controleert de lokale EAIwork-codeworker met twee kleine JavaScript-modules. De bestanden importeren elkaar. Er worden geen bestanden uit een echt project gewijzigd.
+Je hebt **Ollama**, Git en Node.js 22.18 of nieuwer nodig. Open Ollama en zorg dat er minstens één model is geïnstalleerd. Hieronder staan de terminalcommando's, ook voor het installeren van Docker.
 
-## Voorbereiden
+## Kopieer deze terminalcommando's
 
-Gebruik de ontwikkelbranch `feature/combined-project-docker-tests-v01-20261110` van EAIwork. Hiervoor zijn Node.js 22.18 of nieuwer, Ollama, Docker en een al geïnstalleerd Ollama-model nodig.
+**1. Installeer Docker Desktop via Terminal (eenmalig)**
 
-Start Ollama en Docker. Controleer het aanwezige model en de Docker-afbeelding:
+Controleer eerst of je Homebrew hebt:
 
 ```sh
-ollama list
+brew --version
+```
+
+Geeft dit `command not found`? Installeer dan eerst Homebrew:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Volg de aanwijzingen in Terminal, vooral de eventuele stappen om `brew` aan je `PATH` toe te voegen. Open daarna zo nodig Terminal opnieuw.
+
+Installeer Docker Desktop en start de app:
+
+```sh
+brew install --cask docker-desktop
+open -a Docker
+```
+
+Bij de eerste start kan Docker vragen om de voorwaarden te accepteren. Controleer zodra Docker is opgestart of de engine bereikbaar is:
+
+```sh
+docker info
+```
+
+Staat Docker Desktop al op je Mac? Sla de installatie over. `open -a Docker` en `docker info` zijn voldoende.
+
+**2. Download de Docker-testomgeving**
+
+```sh
 docker pull node:22-alpine
 ```
 
-Maak vanuit de hoofdmap van de EAIwork-repository een **afzonderlijke kopie** van het voorbeeldproject:
+**3. Haal EAIwork op**
 
 ```sh
-mkdir -p "$HOME/eaiwork-voorbeeld"
-cp -R examples/multifile-smoke/. "$HOME/eaiwork-voorbeeld/"
+git clone -b feature/easy-local-ollama-start-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+cd ~/EAIwork-test
 ```
 
-Start de lokale EAIwork-server met een model dat al onder `ollama list` staat. Vervang `MODELNAAM` door die naam:
+**4. Start EAIwork met een veilig voorbeeldproject**
 
 ```sh
-npm run local:ollama -- --model=MODELNAAM --worktree="$HOME/eaiwork-voorbeeld"
+npm run local:ollama -- --example
 ```
 
-Open het lokale dashboardadres uit de terminal. Verbind met het lokale toegangstoken en ga naar **Codeworker**. Er is geen cloudfallback.
-
-## Opdracht over twee bestanden
-
-Maak een plan met twee regels:
+Je ziet bijvoorbeeld dit in Terminal (de modellen op jouw Mac kunnen anders zijn):
 
 ```text
-src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount en schrijf een volledig geldig JavaScript-bestand.
-src/invoice.js | tests/invoice.test.js | Voeg export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de bestaande export total met de waarde amount * 2. Schrijf het volledige bestand.
+Kies je lokale Ollama-model:
+  1. llama3.2:3b
+  2. qwen2.5-coder:7b
+  3. deepseek-r1:8b
+
+Typ het nummer en druk op Enter:
 ```
 
-EAIwork bewaart de bronversies en de volgorde. Voor ieder bestand:
+**Typ alleen een nummer.** Je hoeft nergens een modelnaam in te vullen. Met één geïnstalleerd model slaat EAIwork de keuze automatisch over.
 
-1. Vraag een voorstel aan en controleer de verschillen en volledige vervangende code.
-2. Kies **Test alle bestanden vóór toepassing**. Dit test de voorgestelde vervanging samen met de actuele andere module en beide testbestanden.
-3. Bevestig de exacte wijziging. De goedkeuring geldt alleen voor deze versie.
-4. Kies **Test alle bestanden na toepassing**. Pas na een geslaagde gezamenlijke test mag de volgende stap beginnen.
+EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven ongewijzigd.
 
-De testomgeving kopieert alleen de gekozen twee `.js`-bestanden en hun twee `.test.js`-bestanden, maakt daarin een minimaal `package.json` aan en voert een vaste `node --test` uit. De originele projectmap wordt niet in de container gemount. Het netwerk staat uit. Het model mag geen eigen commando's bepalen of tests uitschakelen.
+**5. Open je lokale dashboard**
 
-## Waar let je op?
+Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
-- Beide afzonderlijke modelvoorstellen moeten in het dashboard terug te lezen zijn, inclusief de oorspronkelijke en voorgestelde SHA-256.
-- De projecttest hoort een manifesthash, Docker-afbeelding-ID, uitvoeringsstatus en testuitvoer te tonen.
-- Bij een mislukte of ontbrekende projecttest mag EAIwork geen nieuw bestand aanpassen.
-- Een gewijzigd test- of bronbestand moet oude testtoestemming ongeldig maken.
-- Een nieuwe start van EAIwork moet het bestaande plan en de goedkeuringen terugvinden.
-- Kijk in **Operationslog van de codeworker** of de gezamenlijke tests onder `suite-tested` zijn vastgelegd.
+**6. Leg de voorbeeldopdracht vast**
 
-Een mislukte of ongeldige wijziging blijft geblokkeerd voor beoordeling. EAIwork draait eerder toegepaste bestanden niet automatisch terug. Test daarom uitsluitend met de kopie van dit voorbeeldproject.
+De naam **Proef met twee bestanden** en de twee opdrachtregels staan in de voorbeeldmodus al ingevuld. Je hoeft niets te plakken. Klik **Leg volgorde vast**.
 
-## Testgrenzen
+Je ziet nu bovenaan het scherm je opgeslagen plan met `src/amount.js` als eerste bestand. Klik op **Maak voorstel voor dit bestand**. Ollama maakt een voorstel. Verderop onder **Controleer het voorstel** staan de code en de verschillen.
 
-De gewone CI gebruikt nagebootste Ollama- en Docker-antwoorden om de volgorde, hashes en blokkades te controleren. De aparte Docker-smoketest gebruikt werkelijk Docker en twee gekoppelde modules. **Een echte Ollama-uitvoer op jouw laptop is nog niet getest.**
+Klik daarna bovenaan op **Test alle bestanden vóór toepassing**. Pas vanaf die knop gebruikt EAIwork Docker. Controleer de uitslag. Bij `passed` kun je de wijziging aanvinken en **Pas deze stap toe** kiezen. Klik vervolgens op **Test alle bestanden na toepassing**. Na een geslaagde test kun je naar `src/invoice.js`.
 
-Deze uitvoering test alleen vooraf gekozen kleine JavaScript-bronnen en bijbehorende Node-tests. Het is geen algemene `npm test` over een volledig project en geen toestemming voor automatische commits, releases of publicatie.
+**Niets te zien na Leg volgorde vast?** Controleer of bovenaan **Proef met twee bestanden** staat met twee echte opdrachtregels. Grijze voorbeeldtekst in een leeg veld telt niet als invoer. De functie **Los bestandsvoorstel** verder naar beneden hoort niet bij deze proef.
+
+**Docker controleren:** open een tweede Terminal-venster terwijl EAIwork draait:
+
+```sh
+docker info
+docker image inspect node:22-alpine
+```
+
+Beide commando's moeten gegevens zonder verbindingsfout tonen. Het eerste bevestigt dat de Docker-engine bereikbaar is; het tweede dat de testafbeelding lokaal staat.
+
+**Stoppen:** druk in Terminal op **Ctrl+C**.
+
+Bij een mislukte test stopt het plan. De eerdere wijziging wordt niet vanzelf teruggedraaid. Deze proef gebruikt alleen de gemaakte voorbeeldmap.
+
+## Werkt het niet?
+
+- **Geen modellen gevonden:** open Ollama en zorg dat er minstens één model is gedownload. Controleer eventueel met `ollama list`.
+- **Docker niet bereikbaar:** voer `open -a Docker` uit en wacht totdat Docker gestart is. Controleer met `docker info` en probeer daarna stap 2 opnieuw.
+- **`brew: command not found`:** voer eerst de Homebrew-installatie uit stap 1 uit. Volg ook de getoonde instructie om Homebrew aan je `PATH` toe te voegen.
+- **Map bestaat al:** gebruik een andere mapnaam in stap 3, bijvoorbeeld `~/EAIwork-test2`, en ga daarna naar die map.
+- **Dashboard niet zichtbaar:** controleer de URL die Terminal toont.
+
+Docker Desktop is voor persoonlijk gebruik en onderwijs doorgaans gratis volgens de voorwaarden van Docker. Voor beheerde schoolcomputers kan installatie door ICT nodig zijn. Zie [Docker-installatie voor Mac](https://docs.docker.com/desktop/setup/install/mac-install/) en [Homebrew Docker Desktop](https://formulae.brew.sh/cask/docker-desktop).
+
+Een echte proef met jouw Ollama-model moet nog worden uitgevoerd. De GitHub-tests controleren de route met nagebootste modelantwoorden en een aparte echte Docker-test.
