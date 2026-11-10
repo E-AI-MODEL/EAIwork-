@@ -461,13 +461,19 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422,"invalid automation request");
           const missionId=missionAutomation[1],action=missionAutomation[2];
           if(action==="start" &&
-             (Object.keys(body).length!==1||!Object.prototype.hasOwnProperty.call(body,"maxStarts")))
+             (!Object.prototype.hasOwnProperty.call(body,"maxStarts") ||
+               Object.keys(body).some(k=>k!=="maxStarts"&&k!=="resumeAfterRestart") ||
+               ("resumeAfterRestart" in body &&
+                typeof (body as {resumeAfterRestart?:unknown}).resumeAfterRestart!=="boolean")))
             throw new HttpError(422,"expected automatic task budget");
           if(action==="stop"&&Object.keys(body).length)
             throw new HttpError(422,"stop requires an empty request");
           try{
             const event=action==="start"?
-              {type:"mission.automation.start" as const,missionId,maxStarts:(body as {maxStarts:number}).maxStarts}:
+              {type:"mission.automation.start" as const,missionId,
+                maxStarts:(body as {maxStarts:number}).maxStarts,
+                ...("resumeAfterRestart" in body?
+                  {resumeAfterRestart:(body as {resumeAfterRestart:boolean}).resumeAfterRestart}:{})}:
               {type:"mission.automation.stop" as const,missionId,reason:"user-stopped" as const};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,201,{missionId,action,seq:entry.seq,automation:operations.snapshot().missions[missionId].automation});
@@ -548,7 +554,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {

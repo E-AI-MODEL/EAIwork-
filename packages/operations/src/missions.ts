@@ -51,6 +51,8 @@ export interface TaskRun {
   errorCode?:"adapter-error"|"output-invalid"|"worker-unavailable";
   verification:"not-evaluated";
   retryReview?:{by:string;reason:string;at:string};
+  /** A stopped local calculation, not an external action, may be recovered. */
+  recovery?:{by:string;reason:"process-restart";at:string};
 }
 export interface MissionTaskRecord {
   spec:MissionTask;
@@ -61,6 +63,8 @@ export interface MissionTaskRecord {
 export type SchedulerStopReason = "complete"|"budget-exhausted"|"blocked"|"needs-review"|"interrupted"|"paused"|"user-stopped";
 export interface MissionAutomation {
   enabled:boolean;
+  /** Explicit opt-in to continue queued, side-effect-free work after restart. */
+  resumeAfterRestart?:boolean;
   maxStarts:number;
   starts:number;
   approvedBy:string;
@@ -81,10 +85,11 @@ export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.resume";missionId:string}
-  | {type:"mission.automation.start";missionId:string;maxStarts:number}
+  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
+  | {type:"task.recover";missionId:string;taskId:string;runId:string}
   | {type:"task.started";missionId:string;taskId:string;run:Pick<TaskRun,"runId"|"workerId"|"workerVersion"|"adapterId"|"inputHash"|"startedAt"|"verification">}
   | {type:"task.completed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;output:Record<string,unknown>;outputHash:string}
   | {type:"task.failed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;errorCode:"adapter-error"|"output-invalid"|"worker-unavailable"};
@@ -191,6 +196,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(actor.id!==mission.createdBy)fail("only the mission creator may approve automatic execution");
     if(!Number.isInteger(e.maxStarts)||e.maxStarts<1||e.maxStarts>32)
       fail("automatic task budget must be 1-32");
+    if(e.resumeAfterRestart!==undefined&&typeof e.resumeAfterRestart!=="boolean")
+      fail("invalid restart continuation consent");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
     const tasks=Object.values(mission.tasks);
     if(tasks.some(t=>t.status==="running"||t.status==="failed"))
@@ -201,6 +208,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
          !kinds.has(t.spec.taskKind)))
       fail("automatic execution is limited to fixed local text workers");
     mission.automation={enabled:true,maxStarts:e.maxStarts,starts:0,
+      resumeAfterRestart:e.resumeAfterRestart===true,
       approvedBy:actor.id,approvedAt:at};
     return;
   }
@@ -246,6 +254,31 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(task.attempts.length>=3)fail("manual retry review limit reached");
     task.attempts.push({...structuredClone(task.run),
       retryReview:{by:actor.id,reason:e.reason,at}});
+    task.status="queued";
+    task.run=undefined;
+    return;
+  }
+  if(e.type==="task.recover"){
+    if(actor.kind!=="system"||actor.id!=="system:mission-scheduler")
+      fail("only trusted scheduler may recover local work");
+    if(!mission.automation?.enabled||!mission.automation.resumeAfterRestart||mission.paused)
+      fail("no human consent to recover after restart");
+    if(mission.automation.starts>=mission.automation.maxStarts)
+      fail("no remaining approved task starts");
+    const task=mission.tasks[e.taskId];
+    if(!task||task.status!=="running"||!task.run||task.run.runId!==e.runId)
+      fail("no matching in-flight task to recover");
+    // Recovery is permitted only for these two pure, built-in adapters.
+    // Other composed or external adapters require human review.
+    if((task.spec.effect!==undefined&&task.spec.effect!=="local")||
+       !["text-normalize","text-metrics"].includes(task.spec.taskKind) ||
+       task.run.workerId!==task.spec.taskKind ||
+       task.run.adapterId!==task.spec.taskKind)
+      fail("only known side-effect-free builtins can recover automatically");
+    task.attempts??=[];
+    if(task.attempts.length>=3)fail("automatic recovery history limit reached");
+    task.attempts.push({...structuredClone(task.run),
+      recovery:{by:actor.id,reason:"process-restart",at}});
     task.status="queued";
     task.run=undefined;
     return;

@@ -1,7 +1,8 @@
 /**
  * Small, single-process scheduler for specifically approved local text tasks.
  * Each task start consumes one persisted budget unit before its adapter runs.
- * The scheduler never retries interrupted work or executes external actions.
+ * After explicit consent, it may requeue a crashed pure, deterministic
+ * built-in with a new budgeted run. External actions are never retried.
  */
 import {randomUUID} from "node:crypto";
 import type {OpsStore} from "./store.ts";
@@ -22,7 +23,8 @@ export class LocalMissionScheduler {
     this.store=store;
     if(!Number.isInteger(intervalMs)||intervalMs<0||(intervalMs>0&&(intervalMs<25||intervalMs>5000)))
       throw new Error("scheduler interval must be zero (manual) or 25-5000 ms");
-    // Fail closed across process restart. A fresh human approval is required.
+    // Resume only where prior human consent explicitly covers restart.
+    // Record requeue decisions before performing any further work.
     this.recoverInterrupted();
     if(intervalMs>0){
       this.timer=setInterval(()=>{try{this.tick()}catch{
@@ -43,10 +45,34 @@ export class LocalMissionScheduler {
     const missions=this.store.snapshot().missions;
     let stopped=0;
     for(const [id,m] of Object.entries(missions)){
-      if(m.automation?.enabled){
-        this.stop(id,"interrupted");
-        stopped++;
+      if(!m.automation?.enabled)continue;
+      if(!m.automation.resumeAfterRestart){
+        this.stop(id,"interrupted");stopped++;continue;
       }
+      // The only safe automatic recovery is a pure, deterministic local
+      // calculation. Replay keeps the previous run and spends a new budget
+      // unit if the calculation starts again. Any other case needs review.
+      const running=Object.entries(m.tasks).filter(([,task])=>task.status==="running");
+      if(running.length===1 && !m.paused && !Object.values(m.tasks).some(t=>t.status==="failed") &&
+         m.automation.starts<m.automation.maxStarts){
+        const [taskId,task]=running[0];
+        if(task.run && (task.attempts?.length??0)<3 &&
+           ["text-normalize","text-metrics"].includes(task.spec.taskKind) &&
+           task.spec.effect!== "external-write" && task.spec.effect!=="publish" &&
+           task.spec.effect!=="destructive" &&
+           task.run.adapterId===task.spec.taskKind &&
+           task.run.workerId===task.spec.taskKind){
+          this.emit({type:"task.recover",missionId:id,taskId,runId:task.run.runId});
+        }
+      }
+      const current=this.store.snapshot().missions[id];
+      const progress=missionProgress(current);
+      const reason:SchedulerStopReason|undefined=current.paused?"paused":
+        progress.running||progress.failed?"needs-review":
+        progress.status==="complete"?"complete":
+        current.automation!.starts>=current.automation!.maxStarts?"budget-exhausted":
+        !progress.ready?"blocked":undefined;
+      if(reason){this.stop(id,reason);stopped++}
     }
     return stopped;
   }
