@@ -24,6 +24,7 @@ import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
+import type {LocalCodeWorkspace} from "../../operations/src/code-worker.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
@@ -69,6 +70,8 @@ export interface Config {
   repoSearchRoot?: string;
   /** Optional local planning model; drafts always require human approval. */
   planningModel?: PlanningModel;
+  /** Optional, operator-approved local code worktree. No shell or arbitrary file writes. */
+  codeWorkspace?: LocalCodeWorkspace;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -402,6 +405,37 @@ export function makeServer(cfg: Config) {
       if (url.pathname.startsWith("/ops/")) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        if (req.method === "GET" && url.pathname === "/ops/code/workspace") {
+          return json(res,200,{enabled:!!cfg.codeWorkspace,
+            worktree:cfg.codeWorkspace?.root??null,
+            modelId:cfg.codeWorkspace?.modelId??null,
+            mode:"single-file-human-reviewed"});
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/propose"){
+          if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codevoorstellen aanvragen");
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+              Object.keys(input).some(k=>!["path","instruction"].includes(k)))
+            throw new HttpError(422,"Vul een relatief bestand en opdracht in");
+          const item=input as {path:string;instruction:string};
+          try{return json(res,200,await cfg.codeWorkspace.propose(item.path,item.instruction))}
+          catch{return json(res,422,{error:"Codevoorstel kon niet veilig worden gemaakt"})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/apply"){
+          if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codewijzigingen goedkeuren");
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+             Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
+            throw new HttpError(422,"Ongeldige goedkeuring");
+          try{return json(res,200,cfg.codeWorkspace.apply(input as any,actor.id))}
+          catch{return json(res,409,{error:"Code is niet toegepast: bron of goedkeuring klopt niet"})}
+        }
         if (req.method === "GET" && url.pathname === "/ops/model") {
           return json(res,200,{
             configured:!!cfg.planningModel,

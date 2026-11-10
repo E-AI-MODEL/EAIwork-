@@ -62,3 +62,11 @@ test("dashboard screen routes all point to existing functions and mobile layout 
     "mobile dashboard must not use two stretched CSS grid rows");
   assert.match(html,/registratie:registration/,"registration route must call the named function");
 });
+
+test("local codeworker is available only in the controlled local dashboard",()=>{
+  assert.match(html,/function codeWorkbench\(/);
+  assert.match(html,/codeWorkspaceStatus/);
+  assert.match(html,/case 'code-apply':approveCodeProposal\(\)/);
+  assert.match(html,/ops\/code\/propose/);
+  assert.match(html,/ops\/code\/apply/);
+});

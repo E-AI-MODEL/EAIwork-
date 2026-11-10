@@ -70,7 +70,9 @@ EAIwork kan een **lokaal Ollama-model** gebruiken om een conceptwerkplan voor te
 
 Geen cloudmodel, externe API-sleutel of installatie van een browser-LLM nodig. Het modelendpoint is uitsluitend een lokaal loopback-adres en het programma publiceert niets. Een Ollama-model kan onjuiste of niet-uitvoerbare taken voorstellen. Niet-ondersteunde taken worden door de server geblokkeerd; een planvoorstel is geen bewijs van zelfstandig uitgevoerde softwareontwikkeling.
 
-**Nog een proef:** de huidige lokale start gebruikt een tijdelijke operationsmap. Na Ctrl+C worden de testgegevens verwijderd. Voor langdurig gebruik moeten we de blijvende opslag, sleutelbeheer en herstelroute afzonderlijk inrichten. Zie [Ollama lokaal starten](docs/local-ollama-first-run.md).
+**Lokale opslag:** `npm run local:ollama` bewaart het operationslog en ondertekeningssleutels standaard in `~/.eaiwork/local`. Na herstart lees je dezelfde opdrachten terug. Er zijn nog geen automatische back-ups. Een beschadigd log wordt niet stilzwijgend gereset. Zie [Ollama lokaal starten](docs/local-ollama-first-run.md).
+
+**Codeworker (afgeschermde proef):** geef een bestaande lokale projectmap vrij met `npm run local:ollama -- --model=qwen2.5:1.5b --worktree=/pad/naar/project`. Onder **Meer > Codeworker** kun je voor één bestaand bronbestand een volledige vervanging laten voorstellen. Pas na het bekijken van de code en een afzonderlijke bevestiging kan EAIwork die ene wijziging toepassen. De oorspronkelijke inhoud wordt bewaard. Er is nog geen automatische testuitvoering, git-commit of algemene autonome codeproductie.
 
 ## EAIwork-dashboard lokaal uitproberen
 
