@@ -5,7 +5,7 @@ import {runIsolatedNodeTest} from "../packages/operations/src/docker-code-test.t
 test("real Docker node:test runs candidate in read-only networkless container",
   {skip:process.env.EAI_DOCKER_SMOKE!=="1"},async()=>{
     const testPath="tests/counter.test.js";
-    const testSource='import {test} from "node:test";\nimport assert from "node:assert/strict";\nimport {count} from "../src/counter.js";\ntest("expected count",()=>assert.equal(count,2));\n';
+    const testSource='import {test} from "node:test";\nimport assert from "node:assert/strict";\nimport {writeFileSync} from "node:fs";\nimport {count} from "../src/counter.js";\ntest("expected count",()=>assert.equal(count,2));\ntest("project volume read only",()=>assert.throws(()=>writeFileSync("src/counter.js","new code")));\ntest("no network connection",async()=>assert.rejects(fetch("http://1.1.1.1",{signal:AbortSignal.timeout(2500)})));\n';
     const input={candidatePath:"src/counter.js",
       candidateSource:"export const count = 2;\n",testPath,testSource};
     const passed=await runIsolatedNodeTest(input);
