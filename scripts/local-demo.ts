@@ -36,12 +36,15 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   );
   const token=randomBytes(32).toString("hex");
   const workerToken=randomBytes(32).toString("hex");
+  const reviewerToken=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
   const {server,operations,scheduler}=makeServer({
     dir:join(root,"evidence"),operationsDir:join(root,"operations"),
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
-    tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}}},
+    tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}},
+      [reviewerToken]:{actor:{kind:"person",id:"person:release-reviewer"},
+        access:{read:"*",write:[],audit:true}}},
     executorTokens:{[workerToken]:{ownerId:"executor-local-demo",
       taskKinds:["text-normalize","text-metrics"]}},
   });
@@ -107,7 +110,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     rmSync(root,{recursive:true,force:true});
     rmSync(witnessDir,{recursive:true,force:true});
   }
-  return {server,token,workerToken,scheduler,close};
+  return {server,token,workerToken,reviewerToken,scheduler,close};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const demo=createDemoServer();

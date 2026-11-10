@@ -84,10 +84,29 @@ export interface MissionAutomation {
   stoppedReason?:SchedulerStopReason;
   stoppedAt?:string;
 }
+export interface ReleaseCandidate {
+  repository:string;
+  commitSha:string;
+  artifactPath:string;
+  artifactSha256:string;
+  ciHeadSha:string;
+  ciRunUrl:string;
+  licenseRef:string;
+  checkNames:string[];
+}
+export interface ReleaseDossier {
+  revision:number;
+  candidate:ReleaseCandidate;
+  submittedAt:string;
+  submittedBy:string;
+  review?:{decision:"changes-requested"|"external-verification-needed";by:string;at:string;reason:string};
+}
 export interface MissionRecord {
   /** Plans begin at revision 1; every accepted extension is an audit event. */
   revision:number;
   automation?:MissionAutomation;
+  /** A human-supplied dossier; never evidence that CI or artifacts were verified. */
+  releaseDossier?:ReleaseDossier;
   plan:MissionPlan;
   createdAt:string;
   createdBy:string;
@@ -99,6 +118,8 @@ export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
+  | {type:"mission.release.submit";missionId:string;expectedRevision:number;candidate:ReleaseCandidate}
+  | {type:"mission.release.review";missionId:string;expectedRevision:number;decision:"changes-requested"|"external-verification-needed";reason:string}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -117,6 +138,38 @@ const bounded=(value:unknown,name:string,max=500)=>{
   if(typeof value!=="string"||!value.trim()||value.length>max)fail("invalid "+name);
 };
 const plain=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
+/** This checks references and syntax only, not CI, artifact bytes or licensing. */
+export function validateReleaseCandidate(candidate:ReleaseCandidate):void {
+  if(!plain(candidate)||Object.keys(candidate).sort().join(",")!==
+     ["artifactPath","artifactSha256","checkNames","ciHeadSha","ciRunUrl",
+      "commitSha","licenseRef","repository"].sort().join(","))
+    fail("invalid release candidate fields");
+  if(typeof candidate.repository!=="string"||
+     !/^[A-Za-z0-9_.-]{1,80}\/[A-Za-z0-9_.-]{1,100}$/.test(candidate.repository))
+    fail("invalid release repository");
+  const hash=/^[a-f0-9]{40}$/i;
+  if(typeof candidate.commitSha!=="string"||!hash.test(candidate.commitSha)||
+     candidate.commitSha.toLowerCase()!==candidate.ciHeadSha?.toLowerCase())
+    fail("CI head must match exact 40-character commit SHA");
+  if(typeof candidate.artifactSha256!=="string"||
+     !/^[a-f0-9]{64}$/i.test(candidate.artifactSha256))
+    fail("invalid artifact SHA256");
+  if(typeof candidate.artifactPath!=="string"||
+     candidate.artifactPath.length>240||
+     !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(candidate.artifactPath)||
+     candidate.artifactPath.split("/").some(x=>x==="."||x===".."))
+    fail("invalid artifact path");
+  if(typeof candidate.ciRunUrl!=="string"||
+     !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9][0-9]*$/.test(candidate.ciRunUrl)||
+     !candidate.ciRunUrl.startsWith("https://github.com/"+candidate.repository+"/"))
+    fail("CI run must reference the candidate repository");
+  bounded(candidate.licenseRef,"license reference",240);
+  if(!Array.isArray(candidate.checkNames)||candidate.checkNames.length<1||
+     candidate.checkNames.length>16||new Set(candidate.checkNames).size!==candidate.checkNames.length||
+     candidate.checkNames.some(x=>typeof x!=="string"||!x.trim()||x.length>100||
+       /[\r\n\0]/.test(x)))
+    fail("invalid release check names");
+}
 export function validateMissionPlan(plan:MissionPlan):void {
   if(!plain(plan)||typeof plan.id!=="string"||!ID.test(plan.id))fail("invalid mission id");
   bounded(plan.title,"mission title",160);bounded(plan.goal,"mission goal",1500);
@@ -261,6 +314,39 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     // Approval for an earlier task cannot silently authorize a new task.
     // Reconfirm all source-anchored gates after scope expansion.
     mission.resolvedGates={};
+    return;
+  }
+  if(e.type==="mission.release.submit"){
+    if(actor.kind!=="person"||actor.id!==mission.createdBy)
+      fail("only the mission owner may submit a release dossier");
+    if(!Number.isSafeInteger(e.expectedRevision)||e.expectedRevision!==mission.revision)
+      fail("stale release dossier revision");
+    if(mission.releaseDossier?.revision===mission.revision)
+      fail("release dossier already submitted for this revision");
+    if(mission.paused||mission.automation?.enabled||
+       Object.values(mission.tasks).some(t=>t.status!=="done"||!t.run))
+      fail("all mission tasks must finish before a release dossier");
+    for(const constraint of mission.plan.constraints??[]){
+      if(constraint.kind==="prohibition")fail("release dossier blocked by a source prohibition");
+      if(!mission.resolvedGates[constraint.id])
+        fail("release dossier blocked by an unresolved source condition");
+    }
+    validateReleaseCandidate(e.candidate);
+    mission.releaseDossier={revision:mission.revision,
+      candidate:structuredClone(e.candidate),submittedAt:at,submittedBy:actor.id};
+    return;
+  }
+  if(e.type==="mission.release.review"){
+    if(actor.kind!=="person"||actor.id===mission.createdBy)
+      fail("release dossier requires a separate human reviewer");
+    const dossier=mission.releaseDossier;
+    if(!dossier||dossier.revision!==mission.revision||
+       e.expectedRevision!==mission.revision||dossier.review)
+      fail("no current unreviewed release dossier");
+    if(!["changes-requested","external-verification-needed"].includes(e.decision))
+      fail("invalid release review decision");
+    bounded(e.reason,"release review explanation",600);
+    dossier.review={decision:e.decision,by:actor.id,at,reason:e.reason};
     return;
   }
   if(e.type==="mission.pause"||e.type==="mission.resume"){

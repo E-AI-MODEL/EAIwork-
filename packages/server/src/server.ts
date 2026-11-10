@@ -609,6 +609,50 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:plan.id,revision:expectedRevision+1,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
+        const releaseRoute=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/(submit|review)$/.exec(url.pathname);
+        if(req.method==="POST"&&releaseRoute){
+          if(actor.kind!=="person")throw new HttpError(403,"release dossier requires a person");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body))
+            throw new HttpError(422,"expected release dossier request");
+          const obj=body as Record<string,unknown>;
+          const action=releaseRoute[2],missionId=releaseRoute[1];
+          const validKeys=action==="submit"?
+            ["candidate","expectedRevision"]:["decision","expectedRevision","reason"];
+          if(Object.keys(obj).some(k=>!validKeys.includes(k))||
+             validKeys.some(k=>!Object.prototype.hasOwnProperty.call(obj,k))||
+             !Number.isSafeInteger(obj.expectedRevision))
+            throw new HttpError(422,"release request fields invalid");
+          const current=operations.snapshot(),mission=current.missions[missionId];
+          if(!mission)throw new HttpError(404,"unknown mission");
+          if(obj.expectedRevision!==mission.revision)
+            throw new HttpError(409,"mission has changed");
+          if(action==="submit"&&actor.id!==mission.createdBy)
+            throw new HttpError(403,"only the mission creator can submit");
+          if(action==="review"&&actor.id===mission.createdBy)
+            throw new HttpError(403,"a separate person must review the dossier");
+          // No automatic release can be derived from a user-supplied CI URL.
+          if(action==="submit"&&Object.values(current.defects).some(d=>
+             ["open","human-required"].includes(d.state)&&
+             Object.values(mission.tasks).some(t=>t.run?.workerId===d.workerId)))
+            throw new HttpError(422,"unresolved worker defects block a release dossier");
+          const event=action==="submit"?
+            {type:"mission.release.submit" as const,missionId,
+              expectedRevision:obj.expectedRevision as number,
+              candidate:obj.candidate as import("../../operations/src/missions.ts").ReleaseCandidate}:
+            {type:"mission.release.review" as const,missionId,
+              expectedRevision:obj.expectedRevision as number,
+              decision:obj.decision as "changes-requested"|"external-verification-needed",
+              reason:obj.reason as string};
+          try{
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId,revision:mission.revision,seq:entry.seq,
+              publicationAllowed:false,verification:"not-verified"});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})(?:\/versions\/(\d+\.\d+\.\d+))?\/evaluate$/.exec(url.pathname);
         if(req.method==="POST"&&builtinTest){
           if(actor.kind!=="person")throw new HttpError(403,"person required to request worker evaluation");
@@ -772,7 +816,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
