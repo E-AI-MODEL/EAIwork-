@@ -26,6 +26,9 @@ const steps=[
   {path:"src/invoice.js",testPath:"tests/invoice.test.js",
     instruction:"Voeg een export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de export total."}
 ];
+// Remove the parent node:test marker: otherwise a nested Node runner silently skips tests.
+const acceptanceEnv=()=>Object.fromEntries(Object.entries(process.env)
+  .filter(([key])=>key!=="NODE_TEST_CONTEXT"));
 const replacements:Record<string,string>={
   "src/amount.js":"export const amount = 12;\n",
   "src/invoice.js":'import {amount} from "./amount.js";\nexport const total = amount * 2;\nexport function totalWithShipping(shipping = 0) {\n  return amount * 2 + shipping;\n}\n'
@@ -63,10 +66,12 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
   try{
     assert.ok(existsSync(join(project,"acceptance/final-product.test.js")));
     const premature=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
-      cwd:project,encoding:"utf8",timeout:10000
+      cwd:project,encoding:"utf8",timeout:10000,env:acceptanceEnv()
     });
     assert.notEqual(premature.status,0,
       "De oplevercontrole moet vóór de wijzigingen mislukken.");
+    assert.match(premature.stdout,/^# tests [1-9][0-9]*$/m,
+      "De negatieve eindtest moet daadwerkelijk worden uitgevoerd.");
     assert.equal(readFileSync(join(project,"src/amount.js"),"utf8"),"export const amount = 10;\n");
     await new Promise<void>(resolve=>app.server.listen(0,"127.0.0.1",resolve));
     const origin="http://127.0.0.1:"+((app.server.address() as AddressInfo).port);
@@ -117,9 +122,11 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     const completed=plans.data.plans.find((p:any)=>p.id===id);
     assert.equal(completed?.state,"done","De codewerkopdracht moet afgerond zijn.");
     const final=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
-      cwd:project,encoding:"utf8",timeout:10000
+      cwd:project,encoding:"utf8",timeout:10000,env:acceptanceEnv()
     });
     assert.equal(final.status,0,"Het opgeleverde product voldoet niet aan de vraag:\n"+final.stdout+"\n"+final.stderr);
+    assert.match(final.stdout,/^# tests [1-9][0-9]*$/m,
+      "Een lege of overgeslagen test mag nooit als geslaagde oplevering tellen.");
     assert.equal((await call("/ops/verify")).data.ok,true);
     const result={
       opdracht:"Eerste bruikbare product",status:"opgeleverd binnen deze afgebakende proef",
