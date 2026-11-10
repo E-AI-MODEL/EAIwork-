@@ -30,7 +30,7 @@ test("production line status is derived read-only, does not promote or release o
   const state=stateWithMission(),original=structuredClone(state);
   const line=productionLineView(state,runtime,true);
   assert.equal(line.schema,"eai-production-line-v1");
-  assert.equal(line.releaseGate,"not-implemented");
+  assert.equal(line.releaseGate,"candidate-review-only");
   assert.equal(line.independentOperationsWitness,false);
   assert.equal(line.operationsJournalVerified,true);
   assert.equal(line.missions.length,1);
@@ -59,7 +59,7 @@ test("production overview API uses existing audit authorization and omits task i
     const line=await reply.json() as ReturnType<typeof productionLineView>;
     assert.equal(line.schema,"eai-production-line-v1");
     assert.equal(line.operationsJournalVerified,true);
-    assert.equal(line.releaseGate,"not-implemented");
+    assert.equal(line.releaseGate,"candidate-review-only");
     assert.ok(Array.isArray(line.missions));
     assert.ok(line.missions.length>0);
     assert.equal(line.summary.missions,line.missions.length);
