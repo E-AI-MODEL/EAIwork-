@@ -15,9 +15,11 @@ test("ephemeral local demo starts with real registered workers, trace and execut
     assert.equal((await request("GET","/dashboard")).status,200);
     assert.equal((await request("GET","/ops/state",undefined,"wrong")).status,401);
     const state=await(await request("GET","/ops/state")).json() as any;
-    assert.equal(Object.keys(state.workers).length,4);
-    assert.equal(Object.values(state.workers).filter((w:any)=>w.stage==="ready").length,4);
-    assert.equal(state.measurements.length,4);
+    assert.equal(Object.keys(state.workers).length,5);
+    assert.equal(Object.values(state.workers).filter((w:any)=>w.stage==="ready").length,5);
+    assert.equal(state.workers["reference-extract"].stage,"ready");
+    assert.equal(state.workers["text-inspector"].stage,"ready");
+    assert.equal(state.measurements.length,5);
     assert.equal(Object.keys(state.missions).length,4);
     assert.equal(state.missions["mission-demo-automatic"].tasks["task-clean-auto"].status,"queued");
     assert.equal(state.missions["mission-demo-text"].tasks["task-clean"].status,"done");
