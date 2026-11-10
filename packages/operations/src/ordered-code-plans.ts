@@ -6,15 +6,18 @@ import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,re
 import {join} from "node:path";
 import type {LocalCodeWorkspace} from "./code-worker.ts";
 import type {DockerTestResult} from "./docker-code-test.ts";
+import {runIsolatedProjectSuite,projectManifestSha256,type ProjectTestInput,type ProjectTestResult} from "./docker-project-suite.ts";
 
 type StepInput={path:string;instruction:string;testPath:string};
 type PlannedStep=StepInput & {
   sourceSha256:string;testSha256:string;proposalId?:string;
   postTest?:DockerTestResult;
+  projectPreTest?:ProjectTestResult;projectPostTest?:ProjectTestResult;
 };
 type PlanRecord={
   id:string;title:string;createdAt:string;createdBy:string;
-  steps:PlannedStep[];stoppedAt?:string;stoppedBy?:string;
+  steps:PlannedStep[];suitePolicy?:"single-file-v1"|"project-node-v1";
+  stoppedAt?:string;stoppedBy?:string;
 };
 const sha=(input:string)=>createHash("sha256").update(input).digest("hex");
 const uuid=/^[0-9a-f-]{36}$/;
@@ -36,7 +39,9 @@ export class OrderedCodePlans {
   private readonly folder:string;
   private busy=false;
   private readonly workspace:LocalCodeWorkspace;
-  constructor(workspace:LocalCodeWorkspace){
+  private readonly suiteRunner:(input:ProjectTestInput)=>Promise<ProjectTestResult>;
+  constructor(workspace:LocalCodeWorkspace,config:{suiteRunner?:(input:ProjectTestInput)=>Promise<ProjectTestResult>}={}){
+    this.suiteRunner=config.suiteRunner??runIsolatedProjectSuite;
     this.workspace=workspace;
     this.folder=workspace.planDir;
     if(existsSync(this.folder)){
@@ -69,8 +74,9 @@ export class OrderedCodePlans {
   view(id:string){
     const plan=this.load(id);
     let released=true;
+    const suiteRequired=plan.suitePolicy==="project-node-v1";
     const steps=plan.steps.map((step,index)=>{
-      let status:"waiting"|"review"|"needs-post-test"|"done"|"blocked"="waiting";
+      let status:"waiting"|"review"|"needs-post-test"|"needs-project-test"|"done"|"blocked"="waiting";
       let detail="";
       let proposal:null|ReturnType<LocalCodeWorkspace["inspect"]>=null;
       try{
@@ -82,13 +88,22 @@ export class OrderedCodePlans {
              proposal.testPath!==step.testPath){status="blocked";detail="Voorstel hoort niet bij deze stap"}
           else if(proposal.status==="restored"){status="blocked";detail="Eerder toegepaste code is hersteld"}
           else if(proposal.status==="applied"){
-            if(!proposal.sourceChanged&&step.postTest?.status==="passed"&&step.postTest.testsExecuted&&
-               step.postTest.candidateSha256===proposal.replacementSha256&&
-               step.postTest.testSha256===step.testSha256)status="done";
+            if(suiteRequired){
+              if(proposal.sourceChanged){status="blocked";detail="Toegepaste bron is gewijzigd"}
+              else if(step.projectPostTest?.status==="passed"&&step.projectPostTest.testsExecuted)
+                status="done";
+              else if(step.projectPostTest){status="blocked";detail="Gezamenlijke projecttest is niet geslaagd"}
+              else status="needs-project-test";
+            }else if(!proposal.sourceChanged&&step.postTest?.status==="passed"&&step.postTest.testsExecuted&&
+                     step.postTest.candidateSha256===proposal.replacementSha256&&
+                     step.postTest.testSha256===step.testSha256)status="done";
             else if(!proposal.sourceChanged&&!step.postTest)status="needs-post-test";
             else {status="blocked";detail="Test mislukt of toegepaste bron is veranderd"}
           }else if(proposal.status==="requires-human-review"&&proposal.sourceUnchanged){
-            status="review";
+            if(suiteRequired&&step.projectPreTest&&
+               (step.projectPreTest.status!=="passed"||!step.projectPreTest.testsExecuted)){
+              status="blocked";detail="Gezamenlijke test vóór toepassen is niet geslaagd";
+            }else status="review";
           }else{status="blocked";detail="Bronbestand of voorstel is veranderd"}
         }else if(this.workspace.fileSha256(step.path)!==step.sourceSha256){
           status="blocked";detail="Bronbestand is na het vastleggen van het plan veranderd";
@@ -102,6 +117,8 @@ export class OrderedCodePlans {
         preflight:proposal?.preflight?.status??null,
         testStatus:proposal?.testReport?.status??null,
         postTestStatus:step.postTest?.status??null,
+        projectPreStatus:step.projectPreTest?.status??null,
+        projectPostStatus:step.projectPostTest?.status??null,
         active:false};
     });
     const next=steps.findIndex(s=>s.status!=="done");
@@ -112,9 +129,10 @@ export class OrderedCodePlans {
     if(state==="active"&&next>=0)steps[next].active=true;
     return {id:plan.id,title:plan.title,createdAt:plan.createdAt,
       createdBy:plan.createdBy,stoppedAt:plan.stoppedAt??null,
-      state,nextStep:state==="active"?next:null,steps};
+      state,nextStep:state==="active"?next:null,
+      suitePolicy:plan.suitePolicy??"single-file-v1",steps};
   }
-  create(input:{title:string;steps:StepInput[]},actorId:string){
+  create(input:{title:string;steps:StepInput[];suitePolicy?:"single-file-v1"|"project-node-v1"},actorId:string){
     if(this.busy)throw new Error("Er loopt al een codeactie");
     if(!actorId.startsWith("person:"))throw new Error("Een persoon moet het plan vastleggen");
     if(typeof input?.title!=="string"||!input.title.trim()||input.title.length>120||
@@ -122,14 +140,19 @@ export class OrderedCodePlans {
       throw new Error("Gebruik een titel en twee tot acht bestandsstappen");
     if(this.list().some(p=>p.state==="active"||p.state==="blocked"))
       throw new Error("Rond het bestaande codeplan af of stop het eerst");
+    if(input.suitePolicy!==undefined&&
+       !["single-file-v1","project-node-v1"].includes(input.suitePolicy))
+      throw new Error("Onbekende testmethode voor het codeplan");
     const paths=new Set<string>();
+    const tests=new Set<string>();
     for(const step of input.steps){
       if(!step||typeof step.path!=="string"||!step.path.endsWith(".js")||
          typeof step.testPath!=="string"||!step.testPath.endsWith(".test.js")||
          typeof step.instruction!=="string"||!step.instruction.trim()||
-         step.instruction.length>3000||step.path===step.testPath||paths.has(step.path))
+         step.instruction.length>3000||step.path===step.testPath||
+         paths.has(step.path)||tests.has(step.testPath))
         throw new Error("Elke stap vereist een uniek .js-bestand, een .test.js-bestand en een opdracht");
-      paths.add(step.path);
+      paths.add(step.path);tests.add(step.testPath);
     }
     if(input.steps.some(step=>paths.has(step.testPath)))
       throw new Error("Testbestanden mogen niet tegelijk gewijzigde bronbestanden zijn");
@@ -139,7 +162,8 @@ export class OrderedCodePlans {
       testSha256:this.workspace.fileSha256(step.testPath)
     }));
     const record:PlanRecord={id:randomUUID(),title:input.title.trim(),
-      createdAt:new Date().toISOString(),createdBy:actorId,steps};
+      createdAt:new Date().toISOString(),createdBy:actorId,steps,
+      suitePolicy:input.suitePolicy??"single-file-v1"};
     this.save(record);
     return this.view(record.id);
   }
@@ -186,6 +210,85 @@ export class OrderedCodePlans {
     record.steps[index]={...step,postTest:result};
     this.save(record);
     return this.view(id);
+  }
+  private projectInput(record:PlanRecord,index:number,proposalId:string,phase:"pre"|"post"):ProjectTestInput{
+    const selected=record.steps[index];
+    const proposal=this.workspace.inspect(proposalId);
+    if(selected.proposalId!==proposalId||proposal.path!==selected.path||
+       proposal.sourceSha256!==selected.sourceSha256||
+       proposal.testPath!==selected.testPath)
+      throw new Error("Projecttest verwijst niet naar dezelfde voorstelversie");
+    const files:ProjectTestInput["files"]=[];
+    const testPaths:string[]=[];
+    for(let i=0;i<record.steps.length;i++){
+      const step=record.steps[i];
+      const actual=this.workspace.readApprovedFile(step.path);
+      const test=this.workspace.readApprovedFile(step.testPath);
+      if(sha(test)!==step.testSha256)
+        throw new Error("Testbestand is gewijzigd; projecttest geweigerd");
+      let expected=step.sourceSha256;
+      if(i<index){
+        if(!step.proposalId)throw new Error("Een eerdere wijziging heeft geen voorstel");
+        const prior=this.workspace.inspect(step.proposalId);
+        if(prior.status!=="applied"||step.projectPostTest?.status!=="passed"||!step.projectPostTest.testsExecuted)
+          throw new Error("Een eerdere bestandsstap is niet volledig goedgekeurd");
+        expected=prior.replacementSha256;
+      }else if(i===index&&phase==="post"){
+        if(proposal.status!=="applied")throw new Error("Code is nog niet toegepast");
+        expected=proposal.replacementSha256;
+      }
+      if(sha(actual)!==expected)
+        throw new Error("Een gepland bronbestand is gewijzigd; projecttest geweigerd");
+      files.push({path:step.path,content:i===index&&phase==="pre"?proposal.replacement:actual});
+      files.push({path:step.testPath,content:test});
+      testPaths.push(step.testPath);
+    }
+    return {files,testPaths};
+  }
+  projectPreApproved(id:string,proposalId:string){
+    const {record,index,step,status}=this.active(id);
+    if(record.suitePolicy!=="project-node-v1")return true;
+    if(status!=="review"||step.proposalId!==proposalId||
+       step.projectPreTest?.status!=="passed"||!step.projectPreTest.testsExecuted)
+      return false;
+    const manifest=projectManifestSha256(this.projectInput(record,index,proposalId,"pre"));
+    return step.projectPreTest.manifestSha256===manifest;
+  }
+  async runProjectSuite(id:string,proposalId:string,phase:"pre"|"post",onResult?:(result:ProjectTestResult)=>void){
+    const current=this.active(id);
+    const {record,index,step,status}=current;
+    if(record.suitePolicy!=="project-node-v1")
+      throw new Error("Dit codeplan gebruikt geen gezamenlijke projecttests");
+    if(step.proposalId!==proposalId||
+       status!==(phase==="pre"?"review":"needs-project-test"))
+      throw new Error("De test hoort niet bij de huidige bestandsstap");
+    const inspected=this.workspace.inspect(proposalId);
+    if(phase==="pre"&&(!inspected.sourceUnchanged||!inspected.replacementHashMatches||
+       inspected.preflight.status==="failed"))
+      throw new Error("Controleer eerst de voorgestelde code");
+    if(phase==="post"&&(inspected.status!=="applied"||inspected.sourceChanged))
+      throw new Error("De toegepaste code is gewijzigd of ontbreekt");
+    const input=this.projectInput(record,index,proposalId,phase);
+    const manifest=projectManifestSha256(input);
+    const result=await this.suiteRunner(input);
+    const latest=this.active(id);
+    if(latest.index!==index||latest.step.proposalId!==proposalId||
+       latest.status!==status||
+       projectManifestSha256(this.projectInput(latest.record,index,proposalId,phase))!==manifest)
+      throw new Error("De projectbestanden zijn tijdens de test veranderd");
+    if(result.runner!=="docker-project-node-v1"||
+       result.manifestSha256!==manifest||
+       result.fileCount!==input.files.length||
+       JSON.stringify(result.testPaths)!==JSON.stringify([...input.testPaths].sort())||
+       !["passed","failed","unavailable"].includes(result.status)||
+       (result.status==="passed"&&!result.testsExecuted))
+      throw new Error("De gezamenlijke testuitslag hoort niet bij deze bronversies");
+    // Write the measured outcome to the operations journal before advancing the plan.
+    onResult?.(result);
+    latest.record.steps[index]={...latest.step,
+      ...(phase==="pre"?{projectPreTest:result}:{projectPostTest:result})};
+    this.save(latest.record);
+    return {result,plan:this.view(id)};
   }
   stop(id:string,actorId:string){
     if(this.busy)throw new Error("Er loopt een codeactie");

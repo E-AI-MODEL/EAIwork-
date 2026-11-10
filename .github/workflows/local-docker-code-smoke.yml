@@ -6,12 +6,15 @@ on:
     paths:
       - '.github/workflows/local-docker-code-smoke.yml'
       - 'packages/operations/src/docker-code-test.ts'
+      - 'packages/operations/src/docker-project-suite.ts'
       - 'tests/docker-sandbox-smoke.test.ts'
+      - 'tests/project-docker-smoke.test.ts'
   pull_request:
     paths:
       - '.github/workflows/local-docker-code-smoke.yml'
       - 'packages/operations/src/docker-code-test.ts'
       - 'tests/docker-sandbox-smoke.test.ts'
+      - 'tests/project-docker-smoke.test.ts'
 permissions:
   contents: read
 jobs:
@@ -33,4 +36,4 @@ jobs:
       - name: Run real JavaScript tests in a container without network and write access
         env:
           EAI_DOCKER_SMOKE: "1"
-        run: node --test tests/docker-sandbox-smoke.test.ts
+        run: node --test tests/docker-sandbox-smoke.test.ts tests/project-docker-smoke.test.ts

@@ -65,10 +65,10 @@ export interface Defect {
 }
 export type OpsEvent =
   | MissionEvent
-  | { type: "code.activity"; proposalId:string; action:"proposed"|"imported"|"tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted";
+  | { type: "code.activity"; proposalId:string; action:"proposed"|"imported"|"tested"|"suite-tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted";
       path:string; sourceSha256:string; replacementSha256:string;
       result:"review-required"|"legacy-unverified"|"passed"|"failed"|"unavailable"|"pending"|"applied"|"restored"|"aborted";
-      modelId:string; testSha256?:string }
+      modelId:string; testSha256?:string; projectManifestSha256?:string }
   | { type: "worker.register"; contract: WorkerContract }
   | { type: "worker.release"; id: string; version?: string; evidenceRef: string }
   | { type: "worker.activate-version"; id: string; version: string; rationale: string }
@@ -148,7 +148,7 @@ function transitionOps(
     // This journal records server-observed transitions. It is NOT an
     // authorization to modify files and carries no source-code contents.
     if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(e.proposalId)||
-       !["proposed","imported","tested","apply-started","applied","restore-started","restored","aborted"].includes(e.action)||
+       !["proposed","imported","tested","suite-tested","apply-started","applied","restore-started","restored","aborted"].includes(e.action)||
        typeof e.path!=="string"||e.path.length>240||!e.path.trim()||
        e.path.includes("..")||e.path.startsWith("/")||
        !/^[0-9a-f]{64}$/.test(e.sourceSha256)||
@@ -157,8 +157,14 @@ function transitionOps(
     meaningful(e.modelId,"code model ID",160);
     if(e.testSha256!==undefined&&!/^[0-9a-f]{64}$/.test(e.testSha256))
       fail("invalid code test fingerprint");
+    if(e.projectManifestSha256!==undefined&&
+       !/^[0-9a-f]{64}$/.test(e.projectManifestSha256))
+      fail("invalid project test manifest");
+    if(e.action!=="suite-tested"&&e.projectManifestSha256!==undefined)
+      fail("project manifest must come from the project test route");
     const actionResults:Record<string,string[]> = {
       proposed:["review-required"],imported:["legacy-unverified"],tested:["passed","failed","unavailable"],
+      "suite-tested":["passed","failed","unavailable"],
       "apply-started":["pending"],applied:["applied"],"restore-started":["pending"],restored:["restored"],aborted:["aborted"]
     };
     if(!actionResults[e.action]?.includes(e.result))fail("invalid code action result");
@@ -180,13 +186,18 @@ function transitionOps(
       if(last.type!=="code.activity")fail("invalid code history");
       if(e.action==="tested"){
         if(envelope.actor.kind!=="check")fail("code test outcome requires trusted checker");
-        if(!["proposed","imported","tested","applied"].includes(last.action)||!e.testSha256)
+        if(!["proposed","imported","tested","suite-tested","applied"].includes(last.action)||!e.testSha256)
           fail("code test requires pending proposal and test fingerprint");
+      }else if(e.action==="suite-tested"){
+        if(envelope.actor.kind!=="check"||!e.projectManifestSha256||
+           e.testSha256!==undefined||
+           !["proposed","imported","tested","suite-tested","applied"].includes(last.action))
+          fail("project test requires trusted checker and recorded source manifest");
       }else if(e.action==="apply-started"){
         requireHuman(envelope.actor);
         const abortedApply=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
           previous.at(-2)?.event.action==="apply-started";
-        if((!["proposed","imported","tested"].includes(last.action)||previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedApply)
+        if((!["proposed","imported","tested","suite-tested"].includes(last.action)||previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedApply)
           fail("code apply intent requires pending proposal");
         if(e.testSha256!==undefined)fail("apply intent must not invent test evidence");
       }else if(e.action==="applied"){
@@ -199,7 +210,7 @@ function transitionOps(
         requireHuman(envelope.actor);
         const abortedRestore=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
           previous.at(-2)?.event.action==="restore-started";
-        if(!["applied","imported"].includes(last.action)&&!(last.action==="tested"&&previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedRestore)
+        if(!["applied","imported"].includes(last.action)&&!((last.action==="tested"||last.action==="suite-tested")&&previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedRestore)
           fail("code restore intent requires applied proposal");
         if(e.testSha256!==undefined)fail("restore intent must not invent test evidence");
       }else if(e.action==="restored"){

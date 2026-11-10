@@ -26,6 +26,7 @@ import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import type {LocalCodeWorkspace} from "../../operations/src/code-worker.ts";
 import {OrderedCodePlans} from "../../operations/src/ordered-code-plans.ts";
+import type {ProjectTestInput,ProjectTestResult} from "../../operations/src/docker-project-suite.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
@@ -73,6 +74,8 @@ export interface Config {
   planningModel?: PlanningModel;
   /** Optional, operator-approved local code worktree. No shell or arbitrary file writes. */
   codeWorkspace?: LocalCodeWorkspace;
+  /** Test-only injection for deterministic multi-file checks; production uses Docker. */
+  projectSuiteRunner?: (input:ProjectTestInput)=>Promise<ProjectTestResult>;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -222,7 +225,7 @@ export function makeServer(cfg: Config) {
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
-  const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace):null;
+  const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace,{suiteRunner:cfg.projectSuiteRunner}):null;
   const today = cfg.today ?? (() => new Date().toISOString().slice(0, 10));
   const validFor = Object.fromEntries(cfg.pack.atoms.filter((a) => a.valid_for_days).map((a) => [a.id, a.valid_for_days!]));
   const maxBodyBytes = cfg.maxBodyBytes ?? 64 * 1024;
@@ -408,10 +411,10 @@ export function makeServer(cfg: Config) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
         const recordCodeAction=(
-          action:"proposed"|"tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted",
+          action:"proposed"|"tested"|"suite-tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted",
           detail:{id:string;path:string;sourceSha256:string;replacementSha256:string;modelId:string},
           result:"review-required"|"passed"|"failed"|"unavailable"|"pending"|"applied"|"restored"|"aborted",
-          testSha256?:string
+          testSha256?:string,projectManifestSha256?:string
         )=>{
           const exists=operations.snapshot().history.some(row=>
             row.event.type==="code.activity"&&row.event.proposalId===detail.id);
@@ -427,9 +430,11 @@ export function makeServer(cfg: Config) {
           }
           const entry=operations.append({id:"ops-"+randomUUID(),
             at:new Date().toISOString(),
-            actor:action==="tested"?{kind:"check" as const,id:"check:docker-code-test"}:actor,
+            actor:action==="tested"||action==="suite-tested"?
+              {kind:"check" as const,id:action==="tested"?"check:docker-code-test":"check:docker-project-suite"}:actor,
             event:{type:"code.activity",action,...common,result,
-              ...(testSha256?{testSha256}:{})}
+              ...(testSha256?{testSha256}:{}),
+              ...(projectManifestSha256?{projectManifestSha256}:{})}
           });
           return entry.seq;
         };
@@ -481,7 +486,7 @@ export function makeServer(cfg: Config) {
           if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag een codeplan maken");
           const {plans}=requirePlan();
           requireNoPendingCodeAction();
-          const request=await codePlanRequest(["title","steps"]);
+          const request=await codePlanRequest(["title","steps","suitePolicy"]);
           try{return json(res,200,plans.create(request as any,actor.id))}
           catch(e){return json(res,409,{error:String((e as Error).message)})}
         }
@@ -539,14 +544,19 @@ export function makeServer(cfg: Config) {
             return json(res,200,await plans.exclusive(async()=>{
               plans.assertProposal(request.planId as string,request.proposalId as string,"review");
               const pre=workspace.inspect(request.proposalId as string);
-              if(!pre.canApply||pre.testReport?.status!=="passed"||
-                 !pre.testReport.testsExecuted||pre.replacementSha256!==request.expectedSha256)
-                throw new Error("Goedgekeurde Docker-test of voorstelversie ontbreekt");
+              const projectMode=plans.view(request.planId as string).suitePolicy==="project-node-v1";
+              if(pre.replacementSha256!==request.expectedSha256||
+                 (projectMode?
+                   (!pre.sourceUnchanged||!pre.replacementHashMatches||
+                    pre.preflight.status==="failed"||
+                    !plans.projectPreApproved(request.planId as string,request.proposalId as string)):
+                   (!pre.canApply||pre.testReport?.status!=="passed"||!pre.testReport.testsExecuted)))
+                throw new Error("De vereiste tests en goedkeuring horen niet bij deze codeversie");
               recordCodeAction("apply-started",{id:pre.id,...pre},"pending");
               const applied=workspace.apply({
                 proposalId:request.proposalId as string,
                 expectedSha256:request.expectedSha256 as string,approve:true
-              },actor.id);
+              },actor.id,{projectSuiteApproved:projectMode});
               recordCodeAction("applied",{id:pre.id,...pre},"applied");
               return {applied,plan:plans.view(request.planId as string)};
             }));
@@ -568,6 +578,25 @@ export function makeServer(cfg: Config) {
               const plan=plans.storePostTest(request.planId as string,request.proposalId as string,report);
               return {report,plan};
             }));
+          }catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&
+           ["/ops/code/plan/test-project-pre","/ops/code/plan/test-project-post"].includes(url.pathname)){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen personen mogen projecttests aanvragen");
+          const {workspace,plans}=requirePlan();
+          const request=await codePlanRequest(["planId","proposalId"]);
+          if(typeof request.planId!=="string"||typeof request.proposalId!=="string")
+            throw new HttpError(422,"Geef een plan en een codevoorstel op");
+          requireNoPendingCodeAction();
+          const phase=url.pathname.endsWith("-pre")?"pre":"post";
+          try{
+            return json(res,200,await plans.exclusive(async()=>
+              plans.runProjectSuite(request.planId as string,request.proposalId as string,
+                phase,result=>{
+                  const inspected=workspace.inspect(request.proposalId as string);
+                  recordCodeAction("suite-tested",inspected,result.status,
+                    undefined,result.manifestSha256);
+                })));
           }catch(e){return json(res,409,{error:String((e as Error).message)})}
         }
         if(req.method==="GET"&&url.pathname==="/ops/code/recovery"){
@@ -632,7 +661,7 @@ export function makeServer(cfg: Config) {
           return json(res,200,{enabled:!!cfg.codeWorkspace,
             worktree:cfg.codeWorkspace?.root??null,
             modelId:cfg.codeWorkspace?.modelId??null,
-            mode:"single-file-human-reviewed"});
+            mode:"ordered-project-tests-available"});
         }
         if(req.method==="GET"&&url.pathname==="/ops/code/proposals"){
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});

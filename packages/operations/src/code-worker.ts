@@ -128,7 +128,11 @@ export class LocalCodeWorkspace {
   }
   /** Only the administrator-selected worktree is readable. No arbitrary paths. */
   fileSha256(path:string){
-    return sha(readBounded(safeExistingFile(this.root,path)));
+    return sha(this.readApprovedFile(path));
+  }
+  /** Read only a bounded existing source or test file in the selected worktree. */
+  readApprovedFile(path:string){
+    return readBounded(safeExistingFile(this.root,path));
   }
   get planDir(){return join(this.storage,"..","code-plans")}
   /** Tests the bytes that are already on disk after a reviewed apply. */
@@ -356,7 +360,8 @@ export class LocalCodeWorkspace {
       });
     return check;
   }
-  apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
+  apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string,
+    internalProof:{projectSuiteApproved?:boolean}={}){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
       throw new Error("Een persoon moet deze wijziging uitdrukkelijk goedkeuren");
     const record=this.record(request.proposalId);
@@ -370,7 +375,14 @@ export class LocalCodeWorkspace {
     if(sha(record.replacement)!==record.replacementSha256)
       throw new Error("Voorstelbestand is gewijzigd");
     const checked=this.inspect(record.id);
-    if(!checked.canApply)
+    // Only the server can supply this internal proof, after validating a
+    // reviewed, source-bound project-suite result from the durable plan.
+    const testedAsProject=internalProof.projectSuiteApproved===true&&
+      !!record.testPath&&checked.sourceUnchanged&&
+      checked.replacementHashMatches&&checked.preflight.status!=="failed"&&
+      !!record.preflight&&
+      record.preflight.replacementSha256===checked.preflight.replacementSha256;
+    if(!checked.canApply&&!testedAsProject)
       throw new Error("Codecontrole mislukt of het voorstel is gewijzigd");
     const backUp=join(this.storage,record.id+".original");
     // An interrupted earlier attempt may have written the backup already.
