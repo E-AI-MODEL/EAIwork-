@@ -64,8 +64,6 @@ test("separate executor identity cannot read evidence, dashboard operations or c
     const newExpiry=(await heartbeat.json() as any).expiresAt;
     assert.ok(Date.parse(newExpiry)>Date.parse(job.leaseExpiresAt));
     assert.equal((await h.request("/executor/v1/complete",
-      {...ref,output:{text:"nep",changed:true}},h.demo.workerToken)).status,409);
-    assert.equal((await h.request("/executor/v1/complete",
       {...ref,output:{text:"EAIwork werkt",changed:true}},h.demo.workerToken)).status,200);
     assert.equal((await h.request("/executor/v1/complete",
       {...ref,output:{text:"EAIwork werkt",changed:true}},h.demo.workerToken)).status,409);
@@ -297,5 +295,38 @@ test("remote-text consent refuses a mission requiring repository or external wor
     const state=(await(await h.get("/ops/missions")).json() as any).missions[id];
     assert.equal(state.automation,undefined);
     assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
+  }finally{await h.demo.close()}
+});
+
+test("an invalid remote result is durably recorded as failure and cannot be silently retried",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-rejected-result";
+    const one={
+      id,title:"Mislukt workerantwoord",goal:"Schrijf fout op zonder inhoud te accepteren",
+      tasks:[{id:"task-normalize",title:"Normaliseer",taskKind:"text-normalize",
+        dependsOn:[],input:{text:"  Gecontroleerde  tekst  "}}],
+    };
+    assert.equal((await h.request("/ops/missions",{plan:one})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:1,executionMode:"remote-text"})).status,201);
+    const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
+    assert.equal(response.status,200);
+    const job=await response.json() as any;
+    const ref={missionId:job.missionId,taskId:job.taskId,
+      runId:job.runId,leaseId:job.leaseId};
+    assert.equal((await h.request("/executor/v1/complete",
+      {...ref,output:{text:"vervalst",changed:true}},h.demo.workerToken)).status,409);
+    const state=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(state.tasks["task-normalize"].status,"failed");
+    assert.equal(state.tasks["task-normalize"].run.errorCode,"output-invalid");
+    assert.equal(state.tasks["task-normalize"].run.output,undefined);
+    assert.equal(state.automation.starts,1);
+    assert.equal((await h.request("/executor/v1/complete",
+      {...ref,output:{text:"Gecontroleerde tekst",changed:true}},h.demo.workerToken)).status,409);
+    assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
+    const trace=await(await h.get("/ops/missions/"+id+"/trace")).json() as any;
+    assert.equal(trace.tasks[0].attempts[0].status,"failed");
+    assert.equal(trace.tasks[0].attempts[0].errorCode,"output-invalid");
   }finally{await h.demo.close()}
 });
