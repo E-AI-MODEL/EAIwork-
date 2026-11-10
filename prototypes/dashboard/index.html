@@ -1449,21 +1449,21 @@ function automationPanel(m){
       'paused':'Gepauzeerd','user-stopped':'Gestopt door gebruiker'}[a.stoppedReason]||a.stoppedReason):
     'Nog niet ingeschakeld';
   const id=h(m.plan.id);
-  return section('Automatische uitvoering · lokale proef',
+  return section('Automatisch verdergaan',
     '<div class="card pad"><div class="row"><b>'+h(status)+'</b>'+badge(active?'running':'paused')+'</div>'+
-    '<p class="muted smalltext">Laat de server zelf de volgende uitvoerbare teksttaak starten. De server bewaart iedere taakstart en stopt bij het ingestelde maximum, ontbrekende workers, fouten of onopgeloste voorwaarden. Externe acties, RepoSearch en taalmodellen zijn uitgesloten.</p>'+
+    '<p class="muted smalltext">EAIwork kan deze teksttaken zelf achter elkaar uitvoeren. Jij geeft toestemming voor een maximaal aantal stappen. Bij fouten of ontbrekende toestemming stopt het werk.</p>'+
     (a?'<div class="contract-line"><span>Starten toegestaan door</span><span>'+h(a.approvedBy)+'</span></div>'+
       '<div class="contract-line"><span>Gestarte taken in deze toestemming</span><b>'+h(a.starts)+' / '+h(a.maxStarts)+'</b></div>'+
       (a.stoppedAt?'<div class="contract-line"><span>Gestopt</span><span>'+h(a.stoppedAt)+'</span></div>':''):'')+
-    (active?'<div class="mt">'+btn('Stop automatische uitvoering','automation-stop','small','data-id="'+id+'"')+'</div>'+
+    (active?'<div class="mt">'+btn('Stop automatisch werken','automation-stop','small','data-id="'+id+'"')+'</div>'+
       '<p class="muted smalltext">De status wordt automatisch ververst zolang de uitvoering loopt.</p>':
-      '<div class="mt"><label for="automaticLimit" class="field-label">Maximaal aantal taakstarts (1 tot 32)</label>'+
+      '<div class="mt"><label for="automaticLimit" class="field-label">Hoeveel stappen mag EAIwork zelf starten? (1 tot 32)</label>'+
       '<input id="automaticLimit" class="field" type="number" min="1" max="32" step="1" value="4" style="width:110px">'+
-      '<label class="smalltext" style="display:block;margin-top:10px"><input type="checkbox" id="automaticConsent"> Ik geef toestemming om uitsluitend de lokale teksttaken van deze opdracht automatisch te starten.</label>'+
-      '<div class="mt">'+btn('Start binnen deze grenzen','automation-start','primary','data-id="'+id+'" '+(!canStart?'disabled':''))+'</div></div>')+
+      '<label class="smalltext" style="display:block;margin-top:10px"><input type="checkbox" id="automaticConsent"> EAIwork mag alleen de teksttaken van deze opdracht automatisch uitvoeren.</label>'+
+      '<div class="mt">'+btn('Start automatisch','automation-start','primary','data-id="'+id+'" '+(!canStart?'disabled':''))+'</div></div>')+
     (!localOnly?'<p class="contract-error">Deze opdracht bevat taken buiten de toegestane lokale tekstbewerkingen. Automatisch starten is hier uitgeschakeld.</p>':'')+
     (runningOrFailed?'<p class="contract-error">Een eerdere taak is onderbroken of mislukt. Beoordeel die poging voordat je opnieuw toestemming geeft.</p>':'')+
-    '<p class="muted smalltext">Dit is nog geen zelfstandige AI-workerpool. De server voert telkens één korte lokale taak uit, in een afgeschermd proces.</p></div>');
+    '<p class="muted smalltext">Dit werkt nu alleen voor korte lokale teksttaken. Nieuwe codewijzigingen en publicatie vragen nog jouw goedkeuring.</p></div>');
 }
 async function controlAutomation(id,action){
   try{
@@ -1597,7 +1597,8 @@ function realMissions(){
       section('Je opdrachten','<div class="card pad">'+
         (list||'<p class="muted smalltext">Nog geen opdrachten. Maak hieronder je eerste teksttaak.</p>')+
         '</div>')+
-      (selected?'<div class="mt">'+section('Wat gebeurt er nu?',selectedControls)+'</div>':'')+
+      (selected?'<div class="mt">'+automationPanel(selected)+'</div>'+
+        '<div class="mt">'+section('Wat gebeurt er nu?',selectedControls)+'</div>':'')+
       '</div><div class="dash-side-column">'+
       section('Nieuwe teksttaak',jobForm)+
       '<div class="mt">'+section('Een project laten aanpassen','<div class="card pad">'+
@@ -1606,7 +1607,7 @@ function realMissions(){
       '</div></div>'+
     (selected&&(selected.plan.constraints||[]).length?'<div class="mt">'+missionGates(selected)+'</div>':'')+
     '<details class="card pad mt"><summary>Meer mogelijkheden en technische details</summary>'+
-      (selected?automationPanel(selected)+missionTracePanel(selected):'')+
+      (selected?missionTracePanel(selected):'')+
       plannerProposalPanel()+'</details>'+
     (s.liveRunNote?'<div class="notice mt">'+h(s.liveRunNote)+'</div>':'')+
     (s.liveError?'<p role="alert" class="contract-error">'+h(s.liveError)+'</p>':'');
@@ -1734,7 +1735,7 @@ function codeWorkbench(){
       (line.kind==='added'?'+':line.kind==='removed'?'−':' ')+'</span><code>'+h(line.text)+'</code></div>').join('')+
     (comparison.truncated?'<p>Niet alle regels zijn getoond. Bekijk ook de volledige code.</p>':'')+'</div>':
     '<p class="muted smalltext">Oorspronkelijke inhoud voor dit oudere voorstel niet opgeslagen.</p>';
-  return header('Codeworker','Lokale voorstellen en gecontroleerde wijzigingen. Geen terminalcommando’s of automatische publicatie.')+
+  return header('Codeworker','EAIwork maakt voorstellen en test je code. Jij beslist welke wijziging echt wordt toegepast.')+
     section('Verbindingen',connectionsPanel())+
     section('Opdracht over meerdere bestanden',orderedPlanPanel())+
     (codeError?'<p class="contract-error" role="alert">'+h(codeError)+'</p>':'')+
