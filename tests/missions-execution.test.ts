@@ -63,7 +63,7 @@ test("two real deterministic workers execute dependent tasks through authorized 
     assert.equal((await request("POST","/ops/missions",person,{plan:mission})).status,422);
     const blocked=await(await request("POST","/ops/missions/mission-brief/step",person,{})).json() as any;
     assert.equal(blocked.started.length,0);
-    assert.equal(blocked.blocked[0].reason,"register-and-test");
+    assert.equal(blocked.blocked[0].reason,"search-and-build");
     const ids=[["text-normalize","text-normalize"],["text-metrics","text-metrics"]] as const;
     for(const [id,taskKind] of ids){
       const contract={
