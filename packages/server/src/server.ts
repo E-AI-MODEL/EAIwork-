@@ -15,6 +15,7 @@ import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
 import {productionLineView} from "../../operations/src/production-line.ts";
 import {verifyGitHubActionsRun,type GitHubReader} from "../../operations/src/github-actions.ts";
+import {measureArtifactBytes,preflightArtifactUpload,ArtifactInputError} from "../../operations/src/artifact-bytes.ts";
 import {claimTextJob,heartbeatTextJob,completeTextJob,validateJobReference,
   validateExecutorIdentities,type ExecutorIdentity,type JobReference} from "../../operations/src/executor-channel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
@@ -54,6 +55,8 @@ export interface Config {
   githubReadToken?:string;
   /** Test-only injection of GitHub HTTP transport. */
   githubActionReader?:GitHubReader;
+  /** Optional smaller local upload limit used in deterministic tests. */
+  maxArtifactBytes?:number;
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   workers?: Record<string, WorkerRuntime>;
@@ -217,6 +220,10 @@ export function makeServer(cfg: Config) {
   const today = cfg.today ?? (() => new Date().toISOString().slice(0, 10));
   const validFor = Object.fromEntries(cfg.pack.atoms.filter((a) => a.valid_for_days).map((a) => [a.id, a.valid_for_days!]));
   const maxBodyBytes = cfg.maxBodyBytes ?? 64 * 1024;
+  const maxArtifactBytes=cfg.maxArtifactBytes??16*1024*1024;
+  if(!Number.isSafeInteger(maxArtifactBytes)||maxArtifactBytes<1||
+     maxArtifactBytes>16*1024*1024)
+    throw new Error("artifact byte limit must be 1-16777216");
   const maxRequestsPerMinute = cfg.maxRequestsPerMinute ?? 240;
   const rate = new Map<string, { started: number; count: number }>();
 
@@ -648,6 +655,55 @@ export function makeServer(cfg: Config) {
             return json(res,200,{observation,seq:entry.seq,publicationAllowed:false});
           }catch{throw new HttpError(409,"CI observation could not be saved")}
         }
+        const verifyArtifact=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/verify-bytes$/.exec(url.pathname);
+        if(req.method==="POST"&&verifyArtifact){
+          if(actor.kind!=="person")throw new HttpError(403,"a person must supply the candidate file");
+          requireWritableIntegrity();
+          const missionId=verifyArtifact[1];
+          const mission=operations.snapshot().missions[missionId];
+          if(!mission)throw new HttpError(404,"unknown mission");
+          const dossier=mission.releaseDossier;
+          if(!dossier||dossier.revision!==mission.revision||
+             dossier.artifactObservation)
+            throw new HttpError(409,"no current release artifact awaiting byte verification");
+          const submittedRevision=req.headers["x-eai-mission-revision"];
+          if(submittedRevision!==String(mission.revision))
+            throw new HttpError(409,"candidate revision has changed");
+          const expectedName=dossier.candidate.artifactPath.split("/").at(-1)!;
+          try{preflightArtifactUpload(req,maxArtifactBytes,expectedName)}
+          catch(error){
+            if(error instanceof ArtifactInputError)throw new HttpError(413,"artifact file is empty or too large");
+            throw new HttpError(422,"artifact filename or content type invalid");
+          }
+          const before=JSON.stringify(dossier);
+          let measured:Awaited<ReturnType<typeof measureArtifactBytes>>;
+          try{measured=await measureArtifactBytes(req,maxArtifactBytes)}
+          catch(error){
+            if(error instanceof ArtifactInputError)
+              throw new HttpError(error.code==="too-large"?413:422,"artifact bytes unavailable or outside limit");
+            throw new HttpError(422,"artifact byte inspection failed");
+          }
+          if(measured.sha256.toLowerCase()!==dossier.candidate.artifactSha256.toLowerCase())
+            throw new HttpError(422,"artifact SHA-256 does not match candidate");
+          const current=operations.snapshot().missions[missionId];
+          if(!current||current.revision!==mission.revision||
+             JSON.stringify(current.releaseDossier)!==before)
+            throw new HttpError(409,"release dossier changed while checking artifact");
+          const observation={source:"local-file-upload" as const,
+            sha256:measured.sha256,sizeBytes:measured.sizeBytes,
+            artifactPath:dossier.candidate.artifactPath,
+            checkedAt:new Date().toISOString(),checkedBy:actor.id};
+          try{
+            const entry=operations.append({
+              id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"check",id:"check:artifact-bytes"},
+              event:{type:"mission.release.artifact.observe" as const,
+                missionId,expectedRevision:mission.revision,observation},
+            });
+            return json(res,200,{observation,seq:entry.seq,publicationAllowed:false,
+              originVerified:false});
+          }catch{throw new HttpError(409,"artifact observation could not be saved")}
+        }
         const releaseRoute=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/(submit|review)$/.exec(url.pathname);
         if(req.method==="POST"&&releaseRoute){
           if(actor.kind!=="person")throw new HttpError(403,"release dossier requires a person");
@@ -855,7 +911,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.release.artifact.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {

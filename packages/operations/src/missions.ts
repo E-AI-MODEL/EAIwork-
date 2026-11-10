@@ -101,6 +101,8 @@ export interface ReleaseDossier {
   submittedBy:string;
   ciObservation?:{source:"github-actions-api";runId:number;attempt:number;
     commitSha:string;observedAt:string;result:"success"};
+  artifactObservation?:{source:"local-file-upload";sha256:string;sizeBytes:number;
+    artifactPath:string;checkedAt:string;checkedBy:string};
   review?:{decision:"changes-requested"|"external-verification-needed";by:string;at:string;reason:string};
 }
 export interface MissionRecord {
@@ -124,6 +126,9 @@ export type MissionEvent =
   | {type:"mission.release.review";missionId:string;expectedRevision:number;decision:"changes-requested"|"external-verification-needed";reason:string}
   | {type:"mission.release.ci.observe";missionId:string;expectedRevision:number;
       observation:{source:"github-actions-api";runId:number;attempt:number;commitSha:string;observedAt:string;result:"success"}}
+  | {type:"mission.release.artifact.observe";missionId:string;expectedRevision:number;
+      observation:{source:"local-file-upload";sha256:string;sizeBytes:number;
+        artifactPath:string;checkedAt:string;checkedBy:string}}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -357,6 +362,24 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        !candidate.ciRunUrl.endsWith("/"+obs.runId))
       fail("CI observation does not match release candidate");
     dossier.ciObservation=structuredClone(obs);
+    return;
+  }
+  if(e.type==="mission.release.artifact.observe"){
+    if(actor.kind!=="check"||actor.id!=="check:artifact-bytes")
+      fail("artifact observation requires the server-side byte checker");
+    const dossier=mission.releaseDossier,obs=e.observation;
+    if(!dossier||dossier.revision!==mission.revision||
+       e.expectedRevision!==mission.revision||dossier.artifactObservation)
+      fail("no current unchecked release artifact");
+    const candidate=dossier.candidate;
+    if(!plain(obs)||obs.source!=="local-file-upload"||
+       typeof obs.sha256!=="string"||obs.sha256.toLowerCase()!==candidate.artifactSha256.toLowerCase()||
+       typeof obs.artifactPath!=="string"||obs.artifactPath!==candidate.artifactPath||
+       !Number.isSafeInteger(obs.sizeBytes)||obs.sizeBytes<1||obs.sizeBytes>32*1024*1024||
+       typeof obs.checkedBy!=="string"||!/^person:[a-z0-9-]{2,100}$/.test(obs.checkedBy)||
+       typeof obs.checkedAt!=="string"||!Number.isFinite(Date.parse(obs.checkedAt)))
+      fail("artifact observation does not match current release candidate");
+    dossier.artifactObservation=structuredClone(obs);
     return;
   }
   if(e.type==="mission.release.review"){
