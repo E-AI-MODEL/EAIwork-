@@ -5,7 +5,7 @@ import { WORKER_BLUEPRINTS, workerCatalog, draftContractFromBlueprint } from "..
 import { selectWorker, catalogOverview } from "../packages/operations/src/selector.ts";
 import { applyOps, emptyOps, type OpsEnvelope, type OpsEvent } from "../packages/operations/src/registry.ts";
 const human = { kind:"person" as const, id:"operator" };
-const check = { kind:"check" as const, id:"test-runner" };
+const check = { kind:"check" as const, id:"check:web-search-fixtures" };
 let num=0;
 const apply = (s:ReturnType<typeof emptyOps>,e:OpsEvent,actor:typeof human|typeof check=human) =>
   applyOps(s,{id:"catalog-test-"+(++num),at:"2026-11-10T02:00:00Z",actor,event:e} as OpsEnvelope);
@@ -22,8 +22,8 @@ const registered = () => {
 const ready=()=>{
   let s=registered();
   const m={id:"q1",workerId:"websearch",version:"0.1.0",taskKind:"web-search",
-    dataset:"frozen-web",suiteVersion:"v1",cohort:"holdout",metric:"pass-rate",
-    numerator:42,denominator:50,measuredAt:"2026-11-10T02:00:00Z",evidenceRef:"test:websearch"};
+    dataset:"frozen-web",suiteVersion:"websearch-v1",cohort:"holdout",metric:"fixture-pass",
+    numerator:50,denominator:50,measuredAt:"2026-11-10T02:00:00Z",evidenceRef:"test:websearch"};
   s=apply(s,{type:"quality.record",measurement:m},check);
   s=apply(s,{type:"worker.release",id:"websearch",evidenceRef:"test:websearch"});
   return s;
