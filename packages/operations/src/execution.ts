@@ -4,6 +4,10 @@
  * Provider-backed, asynchronous worker pools are NOT enabled here.
  */
 import { createHash, randomUUID } from "node:crypto";
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {searchLocalRepository} from "./reposearch.ts";
 import type { OpsStore } from "./store.ts";
 import { selectWorker, type RuntimeInventory } from "./selector.ts";
 import { blockingConstraints, missionProgress, type MissionRecord } from "./missions.ts";
@@ -33,6 +37,32 @@ export function evaluateBuiltin(id:string,contract:{
   id:string;version:string;taskKinds:string[];testSuite:string;
   modelPolicy:{preferred:string};tools:string[];requestedPermissions:string[];
 }) {
+  if(id==="repo-search"){
+    if(contract.id!=="repo-search"||!contract.taskKinds.includes("repo-search") ||
+       contract.testSuite!=="repo-search-fixture-v1"||
+       contract.modelPolicy.preferred!=="deterministic"||
+       JSON.stringify(contract.tools)!==JSON.stringify(["repo.search"])||
+       JSON.stringify(contract.requestedPermissions)!==JSON.stringify(["read:repo"]))
+      throw new Error("no trusted repository search fixture suite for this contract");
+    const root=mkdtempSync(join(tmpdir(),"eai-reposearch-fixtures-"));
+    try{
+      mkdirSync(join(root,"src"));
+      writeFileSync(join(root,"src","fixture.ts"),"// verified worker candidate\n");
+      const matched=searchLocalRepository(root,"verified worker");
+      const empty=searchLocalRepository(root,"not-present");
+      let rejected=false;
+      try{searchLocalRepository(root,"\n")}catch{rejected=true}
+      const checks=[
+        matched.results.length===1&&matched.results[0].path==="src/fixture.ts",
+        empty.results.length===0,
+        rejected,
+      ];
+      return {numerator:checks.filter(Boolean).length,denominator:checks.length,
+        metric:"fixture-pass",taskKind:"repo-search",dataset:"repo-search-fixture-v1",
+        suiteVersion:"repo-search-fixture-v1",cohort:"fixed-fixtures",
+        note:"Fixed local read-only fixture. Source hits are not a code-quality or licence certification."};
+    }finally{rmSync(root,{recursive:true,force:true})}
+  }
   const adapter=BUILTINS[id];
   if(!adapter||contract.id!==id||!contract.taskKinds.includes(adapter.taskKind)||
      contract.modelPolicy.preferred!=="deterministic" ||
@@ -56,11 +86,11 @@ export function evaluateBuiltin(id:string,contract:{
     dataset:"builtin-fixture-v1",suiteVersion:"builtin-fixture-v1",cohort:"fixed-fixtures",
     note:"Closed deterministic test cases only; not a general-purpose accuracy measurement."};
 }
-export function builtinInventory():RuntimeInventory {
+export function builtinInventory(repoSearchRoot?:string):RuntimeInventory {
   return {
-    adapterIds:Object.keys(BUILTINS),
-    capabilities:[],
-    grantedPermissions:[],
+    adapterIds:repoSearchRoot?[...Object.keys(BUILTINS),"repo-search"]:Object.keys(BUILTINS),
+    capabilities:repoSearchRoot?["repo.search"]:[],
+    grantedPermissions:repoSearchRoot?["read:repo"]:[],
     supportedModelSizes:["deterministic"],
   };
 }
@@ -83,7 +113,7 @@ export interface StepResult {
   progress:ReturnType<typeof missionProgress>;
   note:string;
 }
-export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepResult {
+export function runMissionStep(store:OpsStore,missionId:string,maximum=4,repoSearchRoot?:string):StepResult {
   if(!Number.isInteger(maximum)||maximum<1||maximum>4)fail("maximum must be 1-4");
   const state=store.snapshot();
   const mission=state.missions[missionId];
@@ -110,11 +140,17 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepRe
     try{payload=inputFor(now,spec.id)}catch{
       result.blocked.push({taskId:spec.id,reason:"dependency-output-unavailable"});continue;
     }
-    const choice=selectWorker({taskKind:spec.taskKind},current,builtinInventory());
+    const choice=selectWorker({taskKind:spec.taskKind},current,builtinInventory(repoSearchRoot));
     const id=choice.selectedWorkerId;
     if(!id){result.blocked.push({taskId:spec.id,reason:choice.nextStep});continue}
     const worker=current.workers[id];
-    const adapter=BUILTINS[id];
+    const adapter:LocalAdapter|undefined=id==="repo-search"&&repoSearchRoot?
+      {id:"repo-search",taskKind:"repo-search",run:(input)=>{
+        const search=searchLocalRepository(repoSearchRoot,input.text,{maxFiles:500,maxResults:5});
+        return {text:"RepoSearch: "+search.results.length+" bronfragmenten gevonden; inhoud nog niet beoordeeld.",
+          revision:search.revision,rootLabel:search.rootLabel,
+          visitedFiles:search.visitedFiles,truncated:search.truncated,results:search.results};
+      }}:BUILTINS[id];
     if(!worker || !adapter || adapter.taskKind!==spec.taskKind || worker.stage!=="ready"){
       result.blocked.push({taskId:spec.id,reason:"worker-unavailable"});continue;
     }
@@ -157,7 +193,7 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepRe
  * A bounded synchronous loop for explicit local execution. This is not a
  * persistent background scheduler. Each batch is committed before the next.
  */
-export function runMissionUntilBlocked(store:OpsStore,missionId:string,maxBatches=32){
+export function runMissionUntilBlocked(store:OpsStore,missionId:string,maxBatches=32,repoSearchRoot?:string){
   if(!Number.isInteger(maxBatches)||maxBatches<1||maxBatches>32)throw new Error("invalid batch limit");
   const batches:StepResult[]=[];
   let stopReason:"complete"|"blocked"|"review-required"|"batch-limit"="batch-limit";
@@ -168,7 +204,7 @@ export function runMissionUntilBlocked(store:OpsStore,missionId:string,maxBatche
     if(before.status==="complete"){stopReason="complete";break}
     if(before.status==="needs-review"||before.status==="paused"){stopReason="review-required";break}
     if(!before.ready){stopReason="blocked";break}
-    const batch=runMissionStep(store,missionId,4);
+    const batch=runMissionStep(store,missionId,4,repoSearchRoot);
     batches.push(batch);
     if(batch.failed.length){stopReason="review-required";break}
     if(!batch.started.length){stopReason="blocked";break}
