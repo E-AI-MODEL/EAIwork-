@@ -11,6 +11,7 @@ import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
+import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -39,6 +40,8 @@ export interface Config {
   workers?: Record<string, WorkerRuntime>;
   /** Optional separate operations journal. Existing evidence logs stay unchanged. */
   operationsDir?: string;
+  /** Administrator-allowlisted checkout; never taken from a caller or model. */
+  repoSearchRoot?: string;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -318,6 +321,18 @@ export function makeServer(cfg: Config) {
         }
         if (req.method === "GET" && url.pathname === "/ops/verify") {
           return json(res, 200, operations.verify());
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/reposearch"){
+          if(!cfg.repoSearchRoot)return json(res,503,{error:"RepoSearch is not configured on this server"});
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||Object.keys(raw).some(key=>key!=="query"))
+            throw new HttpError(422,"expected repository search query");
+          const query=(raw as {query?:unknown}).query;
+          if(typeof query!=="string"||!query.trim()||query.length>120)throw new HttpError(422,"invalid search query");
+          try{return json(res,200,searchLocalRepository(cfg.repoSearchRoot,query))}
+          catch{return json(res,503,{error:"repository search unavailable"})}
         }
         if (req.method === "GET" && url.pathname === "/ops/missions") {
           try {
@@ -712,6 +727,7 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
   const { server } = makeServer({
     dir: dataDir,
     operationsDir: process.env.EAI_OPERATIONS_DIR ? resolve(process.env.EAI_OPERATIONS_DIR) : undefined,
+    repoSearchRoot: process.env.EAI_REPO_SEARCH_ROOT ? resolve(process.env.EAI_REPO_SEARCH_ROOT) : undefined,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
     witness,
