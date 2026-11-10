@@ -149,10 +149,10 @@ test("a blocked task never becomes claimable through the executor protocol",asyn
 });
 test("invalid executor identities and privilege-sharing tokens are rejected at setup",()=>{
   const valid={ownerId:"executor-local-test",taskKinds:["text-normalize" as const]};
-  assert.throws(()=>validateExecutorIdentities({"a".repeat(32):valid},new Set(["a".repeat(32)])),
+  assert.throws(()=>validateExecutorIdentities({["a".repeat(32)]:valid},new Set(["a".repeat(32)])),
     /invalid or shared executor token/);
-  assert.throws(()=>validateExecutorIdentities({"a".repeat(32):{
+  assert.throws(()=>validateExecutorIdentities({["a".repeat(32)]:{
     ...valid,taskKinds:["repo-search" as any]}},new Set()),/only supports/);
-  assert.throws(()=>validateExecutorIdentities({"a".repeat(32):valid,"b".repeat(32):valid},new Set()),
+  assert.throws(()=>validateExecutorIdentities({["a".repeat(32)]:valid,["b".repeat(32)]:valid},new Set()),
     /duplicate executor identity/);
 });
