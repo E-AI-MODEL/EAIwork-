@@ -73,6 +73,8 @@ export interface MissionAutomation {
   stoppedAt?:string;
 }
 export interface MissionRecord {
+  /** Plans begin at revision 1; every accepted extension is an audit event. */
+  revision:number;
   automation?:MissionAutomation;
   plan:MissionPlan;
   createdAt:string;
@@ -84,6 +86,7 @@ export interface MissionRecord {
 export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
+  | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -174,13 +177,48 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     validateMissionPlan(e.plan);
     if(missions[e.plan.id])fail("duplicate mission");
     missions[e.plan.id]={
-      plan:structuredClone(e.plan),createdAt:at,createdBy:actor.id,paused:false,resolvedGates:{},
+      plan:structuredClone(e.plan),revision:1,createdAt:at,createdBy:actor.id,paused:false,resolvedGates:{},
       tasks:Object.fromEntries(e.plan.tasks.map(t=>[t.id,{spec:structuredClone(t),status:"queued"}])),
     };
     return;
   }
   if(typeof e.missionId!=="string")fail("missing mission");
   const mission=missions[e.missionId];if(!mission)fail("unknown mission");
+  if(e.type==="mission.extend"){
+    if(actor.kind!=="person"||actor.id!==mission.createdBy)
+      fail("mission extension requires the original human approver");
+    if(!Number.isSafeInteger(e.expectedRevision)||e.expectedRevision!==mission.revision)
+      fail("stale mission plan revision");
+    if(mission.automation?.enabled ||
+       Object.values(mission.tasks).some(t=>t.status==="running"))
+      fail("stop automatic or running work before changing plan");
+    validateMissionPlan(e.plan);
+    const old=mission.plan;
+    if(old.id!==e.plan.id||old.title!==e.plan.title||old.goal!==e.plan.goal||
+       old.sourceInstruction!==e.plan.sourceInstruction)
+      fail("an extension must preserve the original mission instruction");
+    if(e.plan.tasks.length<=old.tasks.length||
+       old.tasks.some((task,i)=>JSON.stringify(e.plan.tasks[i])!==JSON.stringify(task)))
+      fail("an extension may only append tasks, never rewrite existing work");
+    const added=e.plan.tasks.slice(old.tasks.length).map(t=>t.id);
+    for(const guard of old.constraints??[]){
+      const next=e.plan.constraints?.find(g=>g.id===guard.id);
+      if(!next || next.kind!==guard.kind || next.quote!==guard.quote ||
+         next.start!==guard.start || next.end!==guard.end ||
+         next.approverId!==guard.approverId ||
+         !guard.taskIds.every(id=>next.taskIds.includes(id)) ||
+         !added.every(id=>next.taskIds.includes(id)))
+        fail("existing instruction constraints must cover appended tasks");
+    }
+    for(const task of e.plan.tasks.slice(old.tasks.length))
+      mission.tasks[task.id]={spec:structuredClone(task),status:"queued"};
+    mission.plan=structuredClone(e.plan);
+    mission.revision++;
+    // Approval for an earlier task cannot silently authorize a new task.
+    // Reconfirm all source-anchored gates after scope expansion.
+    mission.resolvedGates={};
+    return;
+  }
   if(e.type==="mission.pause"||e.type==="mission.resume"){
     if(actor.kind!=="person")fail("person required to pause or resume");
     mission.paused=e.type==="mission.pause";
