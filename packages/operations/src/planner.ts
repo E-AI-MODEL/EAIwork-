@@ -16,6 +16,8 @@ export interface PlanProposal {
   sourceSha256:string;
   status:"requires-human-review";
   constraintCoverage:"not-evaluated";
+  /** Model-suggested clarification questions, not verified missing facts. */
+  missingInformation:string[];
   note:string;
 }
 export async function proposeMissionPlan(
@@ -27,14 +29,20 @@ export async function proposeMissionPlan(
   const raw=await model.propose(sourceInstruction);
   if(!raw || typeof raw!=="object"||Array.isArray(raw))throw new Error("model returned invalid plan");
   const item=raw as Record<string,unknown>;
-  if(Object.keys(item).some(k=>!["title","goal","tasks","constraints"].includes(k)))
+  if(Object.keys(item).some(k=>!["title","goal","tasks","constraints","missingInformation"].includes(k)))
     throw new Error("model returned unsupported plan fields");
+  const missing=item.missingInformation??[];
+  if(!Array.isArray(missing)||missing.length>16||
+     missing.some(x=>typeof x!=="string"||!x.trim()||x.length>240)||
+     new Set(missing).size!==missing.length)
+    throw new Error("invalid missing-information questions");
   const plan={id:approvedId,title:item.title,goal:item.goal,sourceInstruction,
     tasks:item.tasks,constraints:item.constraints??[]} as MissionPlan;
   validateMissionPlan(plan);
   return {plan,modelId:model.id,
     sourceSha256:createHash("sha256").update(sourceInstruction).digest("hex"),
     status:"requires-human-review",constraintCoverage:"not-evaluated",
+    missingInformation:[...missing],
     note:"The model proposal has passed structural checks only. Original prohibitions, approvals, omissions and task suitability require human review. No task has been scheduled."};
 }
 const schema={
@@ -50,6 +58,7 @@ const schema={
         textFrom:{type:"string"},
       },required:["id","title","taskKind","dependsOn"],additionalProperties:false,
     }},
+    missingInformation:{type:"array",maxItems:16,items:{type:"string",maxLength:240}},
     constraints:{type:"array",maxItems:32,items:{
       type:"object",properties:{
         id:{type:"string"},kind:{type:"string",enum:["prohibition","approval","condition","deadline","uncertainty"]},
@@ -71,7 +80,7 @@ export function localOllamaPlanningModel(config:{model:string;host?:string;timeo
         method:"POST",headers:{"content-type":"application/json"},signal:AbortSignal.timeout(timeout),
         body:JSON.stringify({model:config.model,stream:false,format:schema,options:{temperature:0,num_predict:1400},
           messages:[{role:"user",content:JSON.stringify({
-            instruction:"Suggest a minimal task plan. Do not execute tasks. Extract explicit prohibitions, approvals, deadlines and conditions as exact uninterrupted quotes with UTF-16 start/end offsets in sourceInstruction. Never silently discard a restriction. For any external, publication or destructive action include an approval constraint for that exact task. If information is missing, propose only local, non-destructive tasks. Every task uses exactly one of input:{text:string} or textFrom:(dependency task ID). Do not add fields or claim tests have run. Return JSON only.",
+            instruction:"Suggest a minimal task plan. Do not execute tasks. Extract explicit prohibitions, approvals, deadlines and conditions as exact uninterrupted quotes with UTF-16 start/end offsets in sourceInstruction. Never silently discard a restriction. For any external, publication or destructive action include an approval constraint for that exact task. If information is missing, propose only local, non-destructive tasks and list the unanswered questions in missingInformation. Do not guess answers. Every task uses exactly one of input:{text:string} or textFrom:(dependency task ID). Do not add fields or claim tests have run. Return JSON only.",
             sourceInstruction,
           })}],
         }),
