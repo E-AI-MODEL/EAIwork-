@@ -185,3 +185,28 @@ test("interrupted restore is reconciled without applying the same source twice",
     await stub.close();f.clean();
   }
 });
+
+test("corrupted leftover backup is never silently reused or marked as cancelled",async()=>{
+  const f=fixture(),stub=await ollamaStub();let instance:ReturnType<typeof connect>|undefined;
+  try{
+    instance=connect(f,stub.url);const api=await instance.start();
+    const proposal=await(await api.post("/ops/code/propose",
+      {path:"src/counter.js",instruction:"Zet teller op twee"})).json() as any;
+    (instance.worker as any).apply=(request:any)=>{
+      writeFileSync(join(f.profile,"code-proposals",request.proposalId+".original"),
+        "unexpected original");
+      throw Error("simulated interrupted backup write");
+    };
+    assert.equal((await api.post("/ops/code/apply",
+      {proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+    const current=(await(await api.get("/ops/code/recovery")).json() as any);
+    assert.equal(current.blocked,true);
+    assert.equal(current.pending[0].outcome,"manual-required");
+    assert.equal((await api.post("/ops/code/recover",
+      {proposalId:proposal.id,approve:true})).status,409);
+    assert.equal(readFileSync(f.file,"utf8"),f.source);
+  }finally{
+    if(instance)await instance.demo.close();
+    await stub.close();f.clean();
+  }
+});
