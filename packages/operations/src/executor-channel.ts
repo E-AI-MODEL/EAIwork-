@@ -151,10 +151,15 @@ export function completeTextJob(
   const input=inputFor(mission,ref.taskId);
   if(digest(input)!==task.run!.inputHash)fail("executor source input changed");
   const expected=runPureTextAdapter(task.spec.taskKind,input);
-  if(JSON.stringify(ref.output)!==JSON.stringify(expected))
-    fail("executor output failed independent deterministic verification");
   const finishedAt=nowIso();
   const elapsedMs=Math.max(0,Date.parse(finishedAt)-Date.parse(task.run!.startedAt));
+  if(JSON.stringify(ref.output)!==JSON.stringify(expected)){
+    // Keep the mismatch visible in the event log without retaining the
+    // untrusted worker output. Human review is required before a retry.
+    emit(store,{type:"task.failed",...ref,finishedAt,elapsedMs,
+      errorCode:"output-invalid"},finishedAt);
+    fail("executor output failed independent deterministic verification");
+  }
   emit(store,{type:"task.completed",...ref,finishedAt,elapsedMs,
     output:expected,outputHash:digest(expected)},finishedAt);
   return {status:"completed",runId:ref.runId};
