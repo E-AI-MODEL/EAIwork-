@@ -70,6 +70,18 @@ Geen universeel slagingscijfer voor alle workers. De eerste indicator vergelijkt
 
 **Ontbreekt nog:** uitvoeradapters, echte workerinstantiatie, scheduler, modelbenchmark per taak/cohort, RepoSearch-verbinding en een Worker Builder die werkelijk nieuwe code kan testen. Deze bibliotheek is voorbereid, geen bewijs dat 56 workers operationeel zijn.
 
+## Uitgevoerde verticale proef: goedgekeurde missies en twee lokale workers
+
+- \`packages/operations/src/missions.ts\`: plan en afzonderlijke taken, expliciete afhankelijkheden, afwijzing van cycli, begrensde invoer en herberekende voortgang.
+- \`packages/operations/src/execution.ts\`: twee **echt uitgevoerde deterministische** workers, \`text-normalize\` en \`text-metrics\`. Een nieuwe taak wordt pas toegelaten nadat het vorige resultaat beschikbaar is, de worker een geldig contract heeft en ingebouwde tests opnieuw slagen.
+- De bestaande operationele eventopslag bewaart nu ook missies, taakstart, taakresultaat, hashes, worker- en adapteridentiteit en uitvoeringstijd.
+- De server biedt \`/ops/missions\`, \`/ops/missions/:id/step\`, \`/ops/missions/:id/run\`, \`pause\` en \`resume\`, plus een veilige lokale \`/ops/workers/:id/evaluate\`-route.
+- De nieuwe dashboardpagina **Echte uitvoering** is strikt gescheiden van de fictieve taakdemo. Vanuit deze pagina kan een persoon een vast tweetrapsplan goedkeuren, in stappen uitvoeren, pauzeren en hervatten.
+- Bij herstart blijven voltooide taken in het log; nog niet begonnen taken worden niet als afgerond weergegeven. De server weigert directe, door de API-gebruiker verzonnen \`task.started\`-events.
+- Zie \`docs/mission-execution-v0.1.md\` en \`tests/missions-execution.test.ts\`.
+
+**Beperkingen:** maximaal twee echte lokale taaksoorten, geen taalmodelaanroep, geen externe zoekactie, geen parallelle workers en geen langdurige achtergrondjobs. De begrensde \`run\`-route werkt binnen één HTTP-verzoek. Het operationslog moet nog transactioneel, onafhankelijk controleerbaar en herstelbaar worden voordat we productie of lange looptijden claimen.
+
 ## Nog te bouwen, in deze volgorde
 
 ### Fase A: contracten en registratie afmaken (eerste verticale proef)
