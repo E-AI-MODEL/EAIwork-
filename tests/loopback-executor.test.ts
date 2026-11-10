@@ -44,7 +44,7 @@ test("separate executor identity cannot read evidence, dashboard operations or c
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
       {maxStarts:2,executionMode:"arbitrary"})).status,422);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     const first=await h.request("/executor/v1/claim",{},h.demo.workerToken);
     assert.equal(first.status,200);
     const job=await first.json() as any;
@@ -84,7 +84,7 @@ test("three concurrent requests can claim at most two independent leased tasks",
     const id="mission-executor-racing";
     assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text",resumeAfterRestart:false})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"],resumeAfterRestart:false})).status,201);
     const claims=await Promise.all([0,1,2].map(()=>
       h.request("/executor/v1/claim",{},h.demo.workerToken)));
     assert.deepEqual(claims.map(x=>x.status).sort(),[200,200,204]);
@@ -105,7 +105,7 @@ test("separate operating-system worker process completes a claimed job",async()=
     const id="mission-executor-process";
     assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     const execute=()=>new Promise<number>((resolve,reject)=>{
       const child=spawn(process.execPath,["scripts/local-text-executor.ts"],{
         cwd:process.cwd(),env:{EAI_EXECUTOR_URL:h.base,
@@ -138,7 +138,7 @@ test("a blocked task never becomes claimable through the executor protocol",asyn
         taskIds:["task-first","task-second"]}]};
     assert.equal((await h.request("/ops/missions",{plan:p})).status,201);
     assert.equal((await h.request("/ops/missions/"+p.id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
     const status=await(await h.get("/ops/missions")).json() as any;
     assert.equal(status.missions[p.id].automation.starts,0);
@@ -162,7 +162,7 @@ test("restart reconciliation revokes nonpersistent executor consent without retr
     const id="mission-executor-restart";
     assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text",resumeAfterRestart:false})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"],resumeAfterRestart:false})).status,201);
     const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
     assert.equal(response.status,200);
     const job=await response.json() as any;
@@ -187,7 +187,7 @@ test("restart reconciliation preserves explicitly resumable active lease without
     const id="mission-executor-allowed-restart";
     assert.equal((await h.request("/ops/missions",{plan:plan(id)})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text",resumeAfterRestart:true})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"],resumeAfterRestart:true})).status,201);
     const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
     assert.equal(response.status,200);
     const job=await response.json() as any;
@@ -222,7 +222,7 @@ test("one bounded local executor finishes dependent steps without manual restart
     };
     assert.equal((await h.request("/ops/missions",{plan:dependent})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     const inactive=h.demo.scheduler.tick();
     assert.equal(inactive.started,0,"local scheduler must not consume remote consent");
     const summary=await runExecutorBatch(h.base,h.demo.workerToken,{maxTasks:2});
@@ -255,7 +255,7 @@ test("one standalone worker process can finish two dependent jobs within an expl
     };
     assert.equal((await h.request("/ops/missions",{plan:dependent})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,201);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     const exit=await new Promise<number>((resolve,reject)=>{
       const child=spawn(process.execPath,["scripts/local-text-executor.ts","--max-tasks=2"],{
         cwd:process.cwd(),env:{EAI_EXECUTOR_URL:h.base,
@@ -291,7 +291,7 @@ test("remote-text consent refuses a mission requiring repository or external wor
     };
     assert.equal((await h.request("/ops/missions",{plan:unsafe})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:2,executionMode:"remote-text"})).status,422);
+      {maxStarts:2,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,422);
     const state=(await(await h.get("/ops/missions")).json() as any).missions[id];
     assert.equal(state.automation,undefined);
     assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
@@ -309,7 +309,7 @@ test("an invalid remote result is durably recorded as failure and cannot be sile
     };
     assert.equal((await h.request("/ops/missions",{plan:one})).status,201);
     assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
-      {maxStarts:1,executionMode:"remote-text"})).status,201);
+      {maxStarts:1,executionMode:"remote-text",executorIds:["executor-local-demo"]})).status,201);
     const response=await h.request("/executor/v1/claim",{},h.demo.workerToken);
     assert.equal(response.status,200);
     const job=await response.json() as any;

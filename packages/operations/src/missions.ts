@@ -77,6 +77,8 @@ export interface MissionAutomation {
   resumeAfterRestart?:boolean;
   /** Remote text mode still uses the same human-approved start budget. */
   executionMode?:"local-scheduler"|"remote-text";
+  /** Only these executor identities may receive the mission's text input. */
+  executorIds?:string[];
   maxStarts:number;
   starts:number;
   approvedBy:string;
@@ -123,7 +125,7 @@ export type MissionEvent =
   | {type:"mission.release.review";missionId:string;candidateId:string;
       decision:"request-changes"|"accept-for-verification";reason:string}
   | {type:"mission.resume";missionId:string}
-  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
+  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text";executorIds?:string[]}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
@@ -260,7 +262,10 @@ export function validateMissionExtension(mission:MissionRecord,plan:MissionPlan,
         fail("existing instruction constraints must cover appended tasks");
     }
 }
-export function applyMissionEvent(missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,at:string):void {
+export function applyMissionEvent(
+  missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,
+  at:string,verifiedJournalReplay=false,
+):void {
   if(e.type==="mission.create"){
     if(actor.kind!=="person")fail("a person must approve a mission");
     validateMissionPlan(e.plan);
@@ -374,6 +379,17 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.executionMode!==undefined &&
        !["local-scheduler","remote-text"].includes(e.executionMode))
       fail("invalid automation execution mode");
+    if(e.executionMode==="remote-text"){
+      // Legacy consent without an allowlist remains replayable, but no
+      // executor can claim work until a human grants fresh scoped consent.
+      if(e.executorIds!==undefined && (
+        !Array.isArray(e.executorIds)||e.executorIds.length<1||
+        e.executorIds.length>8||e.executorIds.some(id=>
+          typeof id!=="string"||!/^executor-[a-z0-9-]{3,55}$/.test(id))||
+        new Set(e.executorIds).size!==e.executorIds.length))
+        fail("invalid authorized executor list");
+    }else if(e.executorIds!==undefined)
+      fail("executor list only applies to remote text mode");
     const tasks=Object.values(mission.tasks);
     if(tasks.some(t=>t.status==="running"||t.status==="failed"))
       fail("interrupted or failed work needs manual review");
@@ -385,6 +401,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
       fail("automatic execution is limited to fixed local text workers");
     mission.automation={enabled:true,maxStarts:e.maxStarts,starts:0,
       executionMode:e.executionMode??"local-scheduler",
+      ...(e.executionMode==="remote-text"?{executorIds:[...(e.executorIds??[])]}:{}),
       resumeAfterRestart:e.resumeAfterRestart===true,
       approvedBy:actor.id,approvedAt:at};
     return;
@@ -517,8 +534,9 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.type==="task.lease.claim"){
       if(mission.automation?.enabled &&
          (mission.automation.executionMode!=="remote-text"||
-          !e.ownerId.startsWith("executor-")))
-        fail("leased subprocesses require approved remote-text dispatch");
+          (!mission.automation.executorIds?.includes(e.ownerId) &&
+           !(verifiedJournalReplay && mission.automation.executorIds?.length===0))))
+        fail("leased subprocesses require approval for this executor");
       if(typeof e.leaseId!=="string"||!ID.test(e.leaseId)||
          typeof e.ownerId!=="string"||!ID.test(e.ownerId))
         fail("invalid lease identity");

@@ -703,7 +703,7 @@ export function makeServer(cfg: Config) {
           const missionId=missionAutomation[1],action=missionAutomation[2];
           if(action==="start" &&
              (!Object.prototype.hasOwnProperty.call(body,"maxStarts") ||
-               Object.keys(body).some(k=>k!=="maxStarts"&&k!=="resumeAfterRestart"&&k!=="executionMode") ||
+               Object.keys(body).some(k=>k!=="maxStarts"&&k!=="resumeAfterRestart"&&k!=="executionMode"&&k!=="executorIds") ||
                ("executionMode" in body &&
                 !["local-scheduler","remote-text"].includes(
                   (body as {executionMode:string}).executionMode)) ||
@@ -712,6 +712,20 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422,"expected automatic task budget");
           if(action==="stop"&&Object.keys(body).length)
             throw new HttpError(422,"stop requires an empty request");
+          if(action==="start"){
+            const reqConsent=body as {executionMode?:unknown;executorIds?:unknown};
+            if(reqConsent.executionMode==="remote-text"){
+              if(!Array.isArray(reqConsent.executorIds)||
+                 reqConsent.executorIds.length<1||reqConsent.executorIds.length>8||
+                 reqConsent.executorIds.some(id=>typeof id!=="string")||
+                 new Set(reqConsent.executorIds).size!==reqConsent.executorIds.length)
+                throw new HttpError(422,"select 1-8 distinct authorized executor identities");
+              const known=new Set(Object.values(cfg.executorTokens??{}).map(e=>e.ownerId));
+              if(reqConsent.executorIds.some(id=>!known.has(id)))
+                throw new HttpError(422,"executor identity is not configured on this server");
+            }else if(reqConsent.executorIds!==undefined)
+              throw new HttpError(422,"executor identity list requires remote text mode");
+          }
           try{
             const event=action==="start"?
               {type:"mission.automation.start" as const,missionId,
@@ -719,7 +733,9 @@ export function makeServer(cfg: Config) {
                 ...("executionMode" in body?
                   {executionMode:(body as {executionMode:"local-scheduler"|"remote-text"}).executionMode}:{}),
                 ...("resumeAfterRestart" in body?
-                  {resumeAfterRestart:(body as {resumeAfterRestart:boolean}).resumeAfterRestart}:{})}:
+                  {resumeAfterRestart:(body as {resumeAfterRestart:boolean}).resumeAfterRestart}:{}),
+                ...("executorIds" in body?
+                  {executorIds:(body as {executorIds:string[]}).executorIds}:{})}:
               {type:"mission.automation.stop" as const,missionId,reason:"user-stopped" as const};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,201,{missionId,action,seq:entry.seq,automation:operations.snapshot().missions[missionId].automation});

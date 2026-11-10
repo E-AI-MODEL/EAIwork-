@@ -37,6 +37,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   const token=randomBytes(32).toString("hex");
   const reviewerToken=randomBytes(32).toString("hex");
   const workerToken=randomBytes(32).toString("hex");
+  const otherWorkerToken=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
   const {server,operations,scheduler}=makeServer({
     dir:join(root,"evidence"),operationsDir:join(root,"operations"),
@@ -45,8 +46,12 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}},
       [reviewerToken]:{actor:{kind:"person",id:"person:reviewer"},
         access:{read:"*",write:[],audit:true}}},
-    executorTokens:{[workerToken]:{ownerId:"executor-local-demo",
-      taskKinds:["text-normalize","text-metrics"]}},
+    executorTokens:{
+      [workerToken]:{ownerId:"executor-local-demo",
+        taskKinds:["text-normalize","text-metrics"]},
+      [otherWorkerToken]:{ownerId:"executor-other-demo",
+        taskKinds:["text-normalize","text-metrics"]},
+    },
   });
   if(!operations)throw new Error("demonstration operations journal missing");
   const emit=(event:OpsEvent,actor:OpsActor=person)=>operations.append({
@@ -110,7 +115,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     rmSync(root,{recursive:true,force:true});
     rmSync(witnessDir,{recursive:true,force:true});
   }
-  return {server,token,reviewerToken,workerToken,scheduler,close};
+  return {server,token,reviewerToken,workerToken,otherWorkerToken,scheduler,close};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const demo=createDemoServer();
