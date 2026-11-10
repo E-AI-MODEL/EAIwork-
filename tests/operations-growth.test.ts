@@ -116,3 +116,40 @@ test("replaying a longer journal preserves every ID and remains consistent with 
     store.close();
   }finally{dir.cleanup()}
 });
+
+
+test("worker and quality transitions do not mutate a previous staged state",()=>{
+  const worker={
+    id:"worker-growth",version:"1.0.0",name:"Growth worker",specialization:"Local deterministic check",
+    taskKinds:["text-normalize"],inputSchema:{type:"object"},outputSchema:{type:"object"},
+    tools:[],requestedPermissions:[],modelPolicy:{preferred:"deterministic" as const},
+    testSuite:"builtin-fixture-v1",stopConditions:["invalid-input"],
+  };
+  const item:OpsEnvelope={id:"registered-growth",at:"2026-11-10T08:00:00Z",actor,
+    event:{type:"worker.register",contract:worker}};
+  const initial=emptyOps();
+  const registered=stageOps(initial,item,new Set());
+  assert.equal(initial.workers[worker.id],undefined);
+  assert.ok(registered.workers[worker.id]);
+  registered.history.push(structuredClone(item));
+  const measured:OpsEnvelope={
+    id:"quality-growth",at:"2026-11-10T08:00:00Z",
+    actor:{kind:"check",id:"check:builtins"},
+    event:{type:"quality.record",measurement:{
+      id:"growth-metric",workerId:worker.id,version:"1.0.0",taskKind:"text-normalize",
+      dataset:"builtin-fixture-v1",suiteVersion:"builtin-fixture-v1",cohort:"fixed-fixtures",
+      metric:"fixture-pass",numerator:3,denominator:3,
+      measuredAt:"2026-11-10T08:00:00Z",evidenceRef:"fixture:growth",
+    }},
+  };
+  const measurements=stageOps(registered,measured,new Set([item.id]));
+  assert.equal(registered.measurements.length,0);
+  assert.equal(measurements.measurements.length,1);
+  measurements.history.push(structuredClone(measured));
+  const release:OpsEnvelope={id:"release-growth",at:"2026-11-10T08:00:00Z",actor,
+    event:{type:"worker.release",id:worker.id,evidenceRef:"fixture:growth"}};
+  const ready=stageOps(measurements,release,new Set([item.id,measured.id]));
+  assert.equal(ready.workers[worker.id].stage,"ready");
+  assert.equal(measurements.workers[worker.id].stage,"candidate");
+  assert.equal(ready.measurements.length,1);
+});
