@@ -12,6 +12,7 @@ import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
+import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -42,6 +43,8 @@ export interface Config {
   operationsDir?: string;
   /** Administrator-allowlisted checkout; never taken from a caller or model. */
   repoSearchRoot?: string;
+  /** Optional local planning model; drafts always require human approval. */
+  planningModel?: PlanningModel;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -321,6 +324,27 @@ export function makeServer(cfg: Config) {
         }
         if (req.method === "GET" && url.pathname === "/ops/verify") {
           return json(res, 200, operations.verify());
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/plans/propose"){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may request plan proposals");
+          if(!cfg.planningModel)return json(res,503,{error:"local task planner is not configured"});
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||Object.keys(raw).some(k=>k!=="instruction"))
+            throw new HttpError(422,"expected only the original instruction");
+          const instruction=(raw as {instruction?:unknown}).instruction;
+          if(typeof instruction!=="string"||!instruction.trim()||instruction.length>8000)
+            throw new HttpError(422,"invalid instruction");
+          try{
+            const proposal=await proposeMissionPlan(instruction,cfg.planningModel,"mission-"+randomUUID());
+            return json(res,200,proposal);
+          }catch(e){
+            const reason=(e as Error).message;
+            if(/invalid plan|unsupported plan fields|invalid task|constraint|cyclic|instruction|mission|dependencies|plan must|missing|source/.test(reason))
+              throw new HttpError(422,"planner proposal needs correction and human review");
+            throw new HttpError(503,"local planner unavailable");
+          }
         }
         if(req.method==="POST"&&url.pathname==="/ops/reposearch"){
           if(!cfg.repoSearchRoot)return json(res,503,{error:"RepoSearch is not configured on this server"});
@@ -728,6 +752,7 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
     dir: dataDir,
     operationsDir: process.env.EAI_OPERATIONS_DIR ? resolve(process.env.EAI_OPERATIONS_DIR) : undefined,
     repoSearchRoot: process.env.EAI_REPO_SEARCH_ROOT ? resolve(process.env.EAI_REPO_SEARCH_ROOT) : undefined,
+    planningModel: process.env.EAI_PLAN_MODEL ? localOllamaPlanningModel({model:process.env.EAI_PLAN_MODEL}) : undefined,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
     witness,
