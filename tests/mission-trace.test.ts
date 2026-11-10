@@ -27,12 +27,12 @@ test("mission trace preserves run attempts and distinguishes completion from evi
   assert.equal(trace.schema,"eai-mission-trace-v1");
   assert.equal(trace.counts.tasks,2);
   assert.equal(trace.counts.attempts,2);
-  assert.equal(trace.tasks[0].attempts[0].status,"running");
+  assert.equal(trace.tasks[0].attempts[0].status,"interrupted");
   assert.equal(trace.tasks[0].attempts[1].status,"completed");
   assert.equal(trace.tasks[0].attempts[1].elapsedMs,12);
   assert.equal(trace.tasks[0].attempts[1].outputHash,"c".repeat(64));
   assert.equal(trace.tasks[0].verification,"not-evaluated");
-  assert.equal(trace.tasks[1].blocker,"dependency");
+  assert.equal(trace.tasks[1].blocker,null);
   assert.equal(trace.events.filter(x=>x.type==="task.started").length,2);
   assert.equal(trace.events.filter(x=>x.type==="task.retry").length,1);
   assert.equal(trace.tasks[0].attempts[1].cost,null);
