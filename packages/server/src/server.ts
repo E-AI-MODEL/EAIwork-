@@ -402,6 +402,14 @@ export function makeServer(cfg: Config) {
       if (url.pathname.startsWith("/ops/")) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        if (req.method === "GET" && url.pathname === "/ops/model") {
+          return json(res,200,{
+            configured:!!cfg.planningModel,
+            modelId:cfg.planningModel?.id??null,
+            role:"proposal-only",
+            health:"not-checked",
+          });
+        }
         if (req.method === "GET" && url.pathname === "/ops/state") {
           try { return json(res, 200, operations.snapshot()); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }

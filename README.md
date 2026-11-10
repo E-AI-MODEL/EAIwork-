@@ -59,6 +59,19 @@ person / worker capsule / check        ├── review signals
 
 The core package has no network access. The server owns actor identity, event ids and time. Attempts to bypass status rules are rejected and stay observable through the event flow.
 
+## EAIwork lokaal met Ollama
+
+EAIwork kan een **lokaal Ollama-model** gebruiken om een conceptwerkplan voor te stellen. De gewone taakuitvoering en controle blijven bij EAIwork. Het model krijgt geen extra rechten.
+
+1. Installeer Node.js 22.18+ en [Ollama](https://ollama.com/). Start Ollama en download minstens één model, bijvoorbeeld `ollama pull qwen2.5:1.5b`.
+2. Start met `npm run local:ollama -- --model=qwen2.5:1.5b`. Bij precies één lokaal model is `npm run local:ollama` genoeg.
+3. Open het getoonde localhost-adres, kies **Meer > Contracten en registratie** en verbind met het tijdelijke token dat in je eigen terminal verschijnt.
+4. Kies **Uitvoering**, beschrijf de opdracht en vraag een voorstel van het lokale model. Controleer de taken, beperkingen en ontbrekende informatie zelf voordat je ze goedkeurt.
+
+Geen cloudmodel, externe API-sleutel of installatie van een browser-LLM nodig. Het modelendpoint is uitsluitend een lokaal loopback-adres en het programma publiceert niets. Een Ollama-model kan onjuiste of niet-uitvoerbare taken voorstellen. Niet-ondersteunde taken worden door de server geblokkeerd; een planvoorstel is geen bewijs van zelfstandig uitgevoerde softwareontwikkeling.
+
+**Nog een proef:** de huidige lokale start gebruikt een tijdelijke operationsmap. Na Ctrl+C worden de testgegevens verwijderd. Voor langdurig gebruik moeten we de blijvende opslag, sleutelbeheer en herstelroute afzonderlijk inrichten. Zie [Ollama lokaal starten](docs/local-ollama-first-run.md).
+
 ## EAIwork-dashboard lokaal uitproberen
 
 De nieuwe operationsomgeving staat voorlopig in [concept-PR #23](https://github.com/E-AI-MODEL/EAIwork-/pull/23). Je kunt een afgeschermde, tijdelijke proef starten zonder eerst tokens en een witnessbestand aan te maken:
