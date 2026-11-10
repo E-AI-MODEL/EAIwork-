@@ -62,6 +62,8 @@ test("one approved start is charged before execution; later tasks require a fres
     assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:0}),/budget/);
     assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:33}),/budget/);
     assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:1},runner),/person/);
+    assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:1},
+      {kind:"person",id:"person:other"}),/creator/);
     ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:1});
     assert.throws(()=>ctx.append({type:"mission.automation.start",missionId:"mission-automatic",maxStarts:1}),/already active/);
     const first=scheduler.tick();
@@ -135,6 +137,8 @@ test("pause or explicit stop revokes authorization and cannot be forged by a mod
     ctx.append({type:"mission.create",plan:{...ctx.plan("mission-stoppable"),tasks:[ctx.plan("mission-stoppable").tasks[0]]}});
     const scheduler=new LocalMissionScheduler(ctx.store,0);
     ctx.append({type:"mission.automation.start",missionId:"mission-stoppable",maxStarts:2});
+    assert.throws(()=>ctx.append({type:"mission.automation.stop",missionId:"mission-stoppable",reason:"user-stopped"},
+      {kind:"person",id:"person:other"}),/creator/);
     assert.throws(()=>ctx.append({type:"mission.automation.stop",missionId:"mission-stoppable",reason:"complete"},human),/own approval/);
     assert.throws(()=>ctx.append({type:"mission.automation.stop",missionId:"mission-stoppable",reason:"user-stopped"},
       {kind:"model",id:"model:planner"}),/invalid actor|trusted system actor/);
