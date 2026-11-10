@@ -107,4 +107,16 @@ De volledige code, Ollama-opdracht, toegangstoken en testuitvoer worden **niet**
 
 Voorstellen uit oudere previews komen niet met een verzonnen oorspronkelijke auteur in het log. Bij de eerstvolgende gecontroleerde handeling worden ze herkenbaar als `legacy-unverified` opgenomen.
 
-**Beperking:** het vervangen van een bestand en het wegschrijven naar het operationslog zijn nog twee afzonderlijke schrijfacties. Een fout tijdens het registreren kan optreden nadat het bestand al is gewijzigd. De API meldt dit expliciet en vraagt om inspectie. De nieuwe logregistratie bewijst dat een gebeurtenis door deze server is vastgelegd, niet dat de code inhoudelijk goed is of dat er nooit een onderbreking is geweest. Er is nog geen automatische herstelprocedure voor zo'n onvolledige registratie.
+## Onderbroken bestandswijzigingen controleren
+
+EAIwork schrijft vóór het wijzigen van een bronbestand eerst een `apply-started`- of `restore-started`-gebeurtenis in het bestaande operationslog. Na een crash kan de server daardoor zien dat een actie nog niet is afgerond. Zolang zo'n actie openstaat, weigert EAIwork nieuwe codewijzigingen en Docker-tests.
+
+Open na een herstart **Meer > Codeworker > Onderbroken acties** of vraag `GET /ops/code/recovery` op met het tijdelijke toegangstoken. De server vergelijkt de actuele bestandsinhoud met het oorspronkelijke voorstel en de lokale back-up.
+
+- **Ongewijzigd:** de actie kan na menselijke bevestiging als afgebroken worden afgesloten.
+- **Verwachte nieuwe inhoud met geldige back-up:** EAIwork kan de bestaande bestandsstatus na menselijke bevestiging in de registratie afronden. Het schrijft hierbij geen bronbestand.
+- **Andere inhoud, ontbrekende back-up of onduidelijke situatie:** EAIwork weigert het automatisch afronden. Controleer het bestand, de back-up en het voorstel handmatig. Er is bewust geen knop om een onbekende versie te overschrijven.
+
+De handeling `POST /ops/code/recover` vereist een bestaande onafgeronde actie, een persoon als actor en `approve:true`. Reeds afgeronde acties kunnen niet opnieuw worden bevestigd. De nieuwe gebeurtenis wordt opnieuw in het operationslog vastgelegd. Een controle of eerdere code daadwerkelijk correct werkt blijft nodig.
+
+**Beperking:** bronbestanden en het operationslog vormen nog geen gezamenlijke database-transactie. De nieuwe herstelroute vermindert de kans op stille inconsistenties, maar geeft geen garantie tegen een gelijktijdige externe bestandswijziging, schijffalen of verlies van de volledige profielmap. Voor echte gegevens zijn back-ups en een aparte OS-afgeschermde werkmap nodig. De testreeks simuleert onderbrekingen op schijf; een echte stroomuitval en Ollama op een gebruikerscomputer zijn nog niet getest.

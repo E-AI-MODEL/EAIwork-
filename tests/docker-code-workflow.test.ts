@@ -111,8 +111,12 @@ test("Docker test status must match candidate and unchanged test file before app
       "apply response does not itself execute tests");
     assert.equal(readFileSync(join(f.work,"src","counter.js"),"utf8"),"export const count = 2;\n");
     const appliedAudit=(await(await readAudit()).json() as any).events;
-    assert.deepEqual(appliedAudit.map((x:any)=>x.event.action),["proposed","tested","applied"]);
+    assert.deepEqual(appliedAudit.map((x:any)=>x.event.action),["proposed","tested","apply-started","applied"]);
     assert.equal(appliedAudit[2].actor.kind,"person");
+    assert.equal(appliedAudit[2].event.result,"pending");
+    assert.equal(appliedAudit[3].actor.kind,"person");
+    assert.equal((await(await fetch(address+"/ops/code/recovery",
+      {headers:{Authorization:"Bearer "+demo!.token}})).json() as any).blocked,false);
     assert.equal((await(await fetch(address+"/ops/verify",
       {headers:{Authorization:"Bearer "+demo!.token}})).json() as any).ok,true);
 

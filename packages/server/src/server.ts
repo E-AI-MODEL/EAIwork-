@@ -406,9 +406,9 @@ export function makeServer(cfg: Config) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
         const recordCodeAction=(
-          action:"proposed"|"tested"|"applied"|"restored",
+          action:"proposed"|"tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted",
           detail:{id:string;path:string;sourceSha256:string;replacementSha256:string;modelId:string},
-          result:"review-required"|"passed"|"failed"|"unavailable"|"applied"|"restored",
+          result:"review-required"|"passed"|"failed"|"unavailable"|"pending"|"applied"|"restored"|"aborted",
           testSha256?:string
         )=>{
           const exists=operations.snapshot().history.some(row=>
@@ -431,6 +431,68 @@ export function makeServer(cfg: Config) {
           });
           return entry.seq;
         };
+        const pendingCodeActions=()=>{
+          const latest=new Map<string,{
+            action:string;proposalId:string;path:string;sourceSha256:string;
+            replacementSha256:string;modelId:string
+          }>();
+          for(const row of operations.snapshot().history){
+            if(row.event.type==="code.activity")
+              latest.set(row.event.proposalId,row.event);
+          }
+          return [...latest.values()].filter(e=>
+            e.action==="apply-started"||e.action==="restore-started");
+        };
+        const requireNoPendingCodeAction=()=>{
+          if(pendingCodeActions().length)
+            throw new HttpError(409,"Er staat een onderbroken codewijziging open. Controleer die eerst onder Codeworker > Herstel.");
+        };
+        if(req.method==="GET"&&url.pathname==="/ops/code/recovery"){
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          try{
+            const pending=pendingCodeActions().map(row=>{
+              try{
+                return cfg.codeWorkspace!.inspectPending(row.proposalId,
+                  row.action as "apply-started"|"restore-started");
+              }catch{
+                return {proposalId:row.proposalId,path:row.path,action:row.action,
+                  outcome:"manual-required",reason:"Voorstel of bestand is niet veilig leesbaar"};
+              }
+            });
+            return json(res,200,{pending,blocked:pending.length>0,
+              note:"Alleen na een expliciet herstelverzoek wordt het log afgerond. Bronbestanden worden bij het herstellen niet geschreven."});
+          }catch{return json(res,503,{error:"Herstelstatus is niet beschikbaar"})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/recover"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag een onderbroken actie afronden");
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+             Object.keys(input).some(k=>!["proposalId","approve"].includes(k))||
+             (input as any).approve!==true||typeof (input as any).proposalId!=="string")
+            throw new HttpError(422,"Controleer het herstel en bevestig het voorstelnummer");
+          const proposalId=(input as any).proposalId as string;
+          let entry;
+          try{entry=pendingCodeActions().find(e=>e.proposalId===proposalId)}
+          catch{return json(res,503,{error:"Operationslog is niet beschikbaar"})}
+          if(!entry)return json(res,409,{error:"Voor dit voorstel staat geen onafgeronde codeactie open"});
+          const operation=entry.action as "apply-started"|"restore-started";
+          let outcome;
+          try{outcome=cfg.codeWorkspace.reconcilePending(proposalId,operation,actor.id)}
+          catch{return json(res,409,{error:"Het voorstel of bronbestand kan niet veilig worden gecontroleerd"})}
+          if(outcome.outcome==="manual-required")
+            return json(res,409,{...outcome,error:"Bestandsinhoud is onduidelijk. Verander niets en controleer de bron en back-up handmatig."});
+          try{
+            const seq=recordCodeAction(outcome.outcome==="aborted"?"aborted":
+              outcome.outcome==="applied"?"applied":"restored",
+              {id:entry.proposalId,path:entry.path,sourceSha256:entry.sourceSha256,
+                replacementSha256:entry.replacementSha256,modelId:entry.modelId},
+              outcome.outcome);
+            return json(res,200,{...outcome,journalSeq:seq});
+          }catch{return json(res,503,{error:"Bronmetadata gecontroleerd, maar logafsluiting mislukt. Herhaal de herstelcontrole."})}
+        }
         if(req.method==="GET"&&url.pathname==="/ops/code/activity"){
           try{
             const filter=url.searchParams.get("proposalId");
@@ -500,6 +562,7 @@ export function makeServer(cfg: Config) {
              Object.keys(input).some(k=>k!=="proposalId")||
              typeof (input as any).proposalId!=="string")
             throw new HttpError(422,"Geef een bestaand voorstelnummer op");
+          requireNoPendingCodeAction();
           const proposalId=(input as any).proposalId as string;
           // Verify and import older proposals before starting the Docker test.
           try{
@@ -532,6 +595,7 @@ export function makeServer(cfg: Config) {
           if(!input||typeof input!=="object"||Array.isArray(input)||
              Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
             throw new HttpError(422,"Ongeldige goedkeuring");
+          requireNoPendingCodeAction();
           const proposalId=(input as any).proposalId as string;
           // Import a legacy record BEFORE the file is changed.
           try{
@@ -546,9 +610,16 @@ export function makeServer(cfg: Config) {
                   result:"legacy-unverified"}});
             }
           }catch{return json(res,503,{error:"Registratie niet beschikbaar; code blijft ongewijzigd"})}
+          try{
+            const pre=cfg.codeWorkspace.inspect(proposalId);
+            if((input as any).approve!==true||
+               (input as any).expectedSha256!==pre.replacementSha256||!pre.canApply)
+              return json(res,409,{error:"Codecontrole of goedkeuring is niet meer geldig"});
+            recordCodeAction("apply-started",{id:proposalId,...pre},"pending");
+          }catch{return json(res,503,{error:"Codewijziging niet gestart; de voorregistratie is mislukt"})}
           let applied;
           try{applied=cfg.codeWorkspace.apply(input as any,actor.id)}
-          catch{return json(res,409,{error:"Code is niet toegepast: bron of goedkeuring klopt niet"})}
+          catch{return json(res,409,{error:"Codewijziging niet bevestigd. Bekijk de herstelstatus voordat je opnieuw probeert."})}
           try{
             const post=cfg.codeWorkspace.inspect(proposalId);
             const journalSeq=recordCodeAction("applied",{id:proposalId,...post},"applied");
@@ -564,6 +635,7 @@ export function makeServer(cfg: Config) {
           if(!input||typeof input!=="object"||Array.isArray(input)||
              Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
             throw new HttpError(422,"Ongeldige herstelgoedkeuring");
+          requireNoPendingCodeAction();
           const proposalId=(input as any).proposalId as string;
           try{
             const pre=cfg.codeWorkspace.inspect(proposalId);
@@ -577,9 +649,16 @@ export function makeServer(cfg: Config) {
                   result:"legacy-unverified"}});
             }
           }catch{return json(res,503,{error:"Registratie niet beschikbaar; herstel niet gestart"})}
+          try{
+            const pre=cfg.codeWorkspace.inspect(proposalId);
+            if((input as any).approve!==true||
+               (input as any).expectedSha256!==pre.replacementSha256||!pre.canRestore)
+              return json(res,409,{error:"Herstelcontrole of goedkeuring is niet meer geldig"});
+            recordCodeAction("restore-started",{id:proposalId,...pre},"pending");
+          }catch{return json(res,503,{error:"Herstel niet gestart; de voorregistratie is mislukt"})}
           let restored;
           try{restored=cfg.codeWorkspace.restore(input as any,actor.id)}
-          catch{return json(res,409,{error:"Herstellen geweigerd: bestandsinhoud of goedkeuring klopt niet"})}
+          catch{return json(res,409,{error:"Herstel niet bevestigd. Controleer eerst de openstaande herstelstatus."})}
           try{
             const post=cfg.codeWorkspace.inspect(proposalId);
             const journalSeq=recordCodeAction("restored",{id:proposalId,...post},"restored");

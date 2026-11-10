@@ -255,6 +255,71 @@ export class LocalCodeWorkspace {
         sourceSha256:r.sourceSha256,replacementSha256:r.replacementSha256
       }));
   }
+  /**
+   * Inspect an unfinished, journalled change without altering project files.
+   * Reconciliation is conservative: unknown hashes always require manual review.
+   */
+  inspectPending(proposalId:string,action:"apply-started"|"restore-started"){
+    const record=this.record(proposalId);
+    let currentHash:string|null=null;
+    try{currentHash=sha(readBounded(safeExistingFile(this.root,record.path)))}
+    catch{return {proposalId,path:record.path,action,outcome:"manual-required" as const,
+      reason:"Bronbestand ontbreekt of is niet veilig leesbaar"}}
+    if(sha(record.replacement)!==record.replacementSha256||
+       record.sourceSha256===record.replacementSha256)
+      return {proposalId,path:record.path,action,outcome:"manual-required" as const,
+        reason:"Opgeslagen code is gewijzigd of de hashes zijn niet te onderscheiden"};
+    let backupValid=false;
+    const backupPath=join(this.storage,record.id+".original");
+    const backupExists=existsSync(backupPath);
+    try{backupValid=sha(readBounded(backupPath))===record.sourceSha256}
+    catch{backupValid=false}
+    if(backupExists&&!backupValid)
+      return {proposalId,path:record.path,action,outcome:"manual-required" as const,
+        reason:"De bestaande back-up is beschadigd of komt niet overeen met het voorstel"};
+    if(action==="apply-started"){
+      if(currentHash===record.replacementSha256&&backupValid&&
+         ["requires-human-review","applied"].includes(record.status))
+        return {proposalId,path:record.path,action,outcome:"applied" as const,
+          reason:"Vervangende bron en gecontroleerde back-up zijn aanwezig"};
+      if(currentHash===record.sourceSha256&&record.status==="requires-human-review")
+        return {proposalId,path:record.path,action,outcome:"aborted" as const,
+          reason:"Bronbestand is nog ongewijzigd"};
+    }else{
+      if(currentHash===record.sourceSha256&&backupValid&&
+         ["applied","restored"].includes(record.status))
+        return {proposalId,path:record.path,action,outcome:"restored" as const,
+          reason:"Oorspronkelijke bron en gecontroleerde back-up komen overeen"};
+      if(currentHash===record.replacementSha256&&record.status==="applied")
+        return {proposalId,path:record.path,action,outcome:"aborted" as const,
+          reason:"De toegepaste code is nog aanwezig"};
+    }
+    return {proposalId,path:record.path,action,outcome:"manual-required" as const,
+      reason:"Bestandsinhoud en opgeslagen voorstel spreken elkaar tegen"};
+  }
+  /**
+   * Finalize proposal metadata only after a separately logged human confirmation.
+   * The source file itself is never written by this recovery method.
+   */
+  reconcilePending(proposalId:string,action:"apply-started"|"restore-started",actorId:string){
+    if(typeof actorId!=="string"||!actorId.startsWith("person:"))
+      throw new Error("Alleen een persoon mag een onderbroken wijziging afronden");
+    const check=this.inspectPending(proposalId,action);
+    if(check.outcome==="manual-required")return check;
+    if(check.outcome==="aborted")return check;
+    const record=this.record(proposalId);
+    if(check.outcome==="applied"&&record.status==="requires-human-review")
+      saveJson(join(this.storage,record.id+".json"),{
+        ...record,status:"applied",appliedAt:new Date().toISOString(),
+        appliedBy:actorId,recoveredAfterInterruption:true
+      });
+    if(check.outcome==="restored"&&record.status==="applied")
+      saveJson(join(this.storage,record.id+".json"),{
+        ...record,status:"restored",restoredAt:new Date().toISOString(),
+        restoredBy:actorId,recoveredAfterInterruption:true
+      });
+    return check;
+  }
   apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
       throw new Error("Een persoon moet deze wijziging uitdrukkelijk goedkeuren");
@@ -272,8 +337,15 @@ export class LocalCodeWorkspace {
     if(!checked.canApply)
       throw new Error("Codecontrole mislukt of het voorstel is gewijzigd");
     const backUp=join(this.storage,record.id+".original");
-    const backupFd=openSync(backUp,"wx",0o600);
-    try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
+    // An interrupted earlier attempt may have written the backup already.
+    // Reuse it only if its bytes still match this exact original revision.
+    if(existsSync(backUp)){
+      if(sha(readBounded(backUp))!==record.sourceSha256)
+        throw new Error("Eerdere back-up wijkt af; controleer het bronbestand handmatig");
+    }else{
+      const backupFd=openSync(backUp,"wx",0o600);
+      try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
+    }
     const target=file+"."+randomUUID()+".eaiwork-tmp";
     let renamed=false;
     try{

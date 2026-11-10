@@ -65,9 +65,9 @@ export interface Defect {
 }
 export type OpsEvent =
   | MissionEvent
-  | { type: "code.activity"; proposalId:string; action:"proposed"|"imported"|"tested"|"applied"|"restored";
+  | { type: "code.activity"; proposalId:string; action:"proposed"|"imported"|"tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted";
       path:string; sourceSha256:string; replacementSha256:string;
-      result:"review-required"|"legacy-unverified"|"passed"|"failed"|"unavailable"|"applied"|"restored";
+      result:"review-required"|"legacy-unverified"|"passed"|"failed"|"unavailable"|"pending"|"applied"|"restored"|"aborted";
       modelId:string; testSha256?:string }
   | { type: "worker.register"; contract: WorkerContract }
   | { type: "worker.release"; id: string; version?: string; evidenceRef: string }
@@ -148,7 +148,7 @@ function transitionOps(
     // This journal records server-observed transitions. It is NOT an
     // authorization to modify files and carries no source-code contents.
     if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(e.proposalId)||
-       !["proposed","imported","tested","applied","restored"].includes(e.action)||
+       !["proposed","imported","tested","apply-started","applied","restore-started","restored","aborted"].includes(e.action)||
        typeof e.path!=="string"||e.path.length>240||!e.path.trim()||
        e.path.includes("..")||e.path.startsWith("/")||
        !/^[0-9a-f]{64}$/.test(e.sourceSha256)||
@@ -159,7 +159,7 @@ function transitionOps(
       fail("invalid code test fingerprint");
     const actionResults:Record<string,string[]> = {
       proposed:["review-required"],imported:["legacy-unverified"],tested:["passed","failed","unavailable"],
-      applied:["applied"],restored:["restored"]
+      "apply-started":["pending"],applied:["applied"],"restore-started":["pending"],restored:["restored"],aborted:["aborted"]
     };
     if(!actionResults[e.action]?.includes(e.result))fail("invalid code action result");
     const previous=current.history.filter(row=>
@@ -182,15 +182,36 @@ function transitionOps(
         if(envelope.actor.kind!=="check")fail("code test outcome requires trusted checker");
         if(!["proposed","imported","tested"].includes(last.action)||!e.testSha256)
           fail("code test requires pending proposal and test fingerprint");
+      }else if(e.action==="apply-started"){
+        requireHuman(envelope.actor);
+        const abortedApply=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
+          previous.at(-2)?.event.action==="apply-started";
+        if(!["proposed","imported","tested"].includes(last.action)&&!abortedApply)
+          fail("code apply intent requires pending proposal");
+        if(e.testSha256!==undefined)fail("apply intent must not invent test evidence");
       }else if(e.action==="applied"){
         requireHuman(envelope.actor);
-        if(!["proposed","imported","tested"].includes(last.action))
+        // Previous previews contain applied events without a separate intent.
+        if(!["proposed","imported","tested","apply-started"].includes(last.action))
           fail("code apply requires pending proposal");
         if(e.testSha256!==undefined)fail("apply must not invent test evidence");
+      }else if(e.action==="restore-started"){
+        requireHuman(envelope.actor);
+        const abortedRestore=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
+          previous.at(-2)?.event.action==="restore-started";
+        if(!["applied","imported"].includes(last.action)&&!abortedRestore)
+          fail("code restore intent requires applied proposal");
+        if(e.testSha256!==undefined)fail("restore intent must not invent test evidence");
       }else if(e.action==="restored"){
         requireHuman(envelope.actor);
-        if(last.action!=="applied"&&last.action!=="imported")fail("code restoration requires applied proposal");
+        if(!["applied","imported","restore-started"].includes(last.action))
+          fail("code restoration requires applied proposal");
         if(e.testSha256!==undefined)fail("restore must not invent test evidence");
+      }else if(e.action==="aborted"){
+        requireHuman(envelope.actor);
+        if(!["apply-started","restore-started"].includes(last.action))
+          fail("only unfinished code intents can be cancelled");
+        if(e.testSha256!==undefined)fail("aborted intent must not invent test evidence");
       }
     }
   } else if (e.type === "worker.register") {
