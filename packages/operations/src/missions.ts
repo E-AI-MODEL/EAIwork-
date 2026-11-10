@@ -50,11 +50,13 @@ export interface TaskRun {
   outputHash?:string;
   errorCode?:"adapter-error"|"output-invalid"|"worker-unavailable";
   verification:"not-evaluated";
+  retryReview?:{by:string;reason:string;at:string};
 }
 export interface MissionTaskRecord {
   spec:MissionTask;
   status:"queued"|"running"|"done"|"failed";
   run?:TaskRun;
+  attempts?:TaskRun[];
 }
 export interface MissionRecord {
   plan:MissionPlan;
@@ -184,7 +186,16 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(!["running","failed"].includes(task.status)||!task.run)fail("task is not retryable");
     if(task.spec.effect!==undefined&&task.spec.effect!=="local")
       fail("external task must never be retried without a separate idempotency protocol");
+    const fixedAdapters=new Set(["text-normalize","text-metrics","text-inspect"]);
+    if(!fixedAdapters.has(task.run.adapterId) ||
+       !fixedAdapters.has(task.run.workerId) ||
+       !["text-normalize","text-metrics","text-inspect"].includes(task.spec.taskKind))
+      fail("retry requires a known side-effect-free local adapter");
     bounded(e.reason,"retry justification",600);
+    task.attempts??=[];
+    if(task.attempts.length>=3)fail("manual retry review limit reached");
+    task.attempts.push({...structuredClone(task.run),
+      retryReview:{by:actor.id,reason:e.reason,at}});
     task.status="queued";
     task.run=undefined;
     return;
