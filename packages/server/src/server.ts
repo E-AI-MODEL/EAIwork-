@@ -582,7 +582,7 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
-        const releaseSubmit=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases\\/candidates$/.exec(url.pathname);
+        const releaseSubmit=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/releases\/candidates$/.exec(url.pathname);
         if(req.method==="POST"&&releaseSubmit){
           if(actor.kind!=="person")throw new HttpError(403,"only a person may submit a release candidate");
           requireWritableIntegrity();
@@ -604,7 +604,7 @@ export function makeServer(cfg: Config) {
               candidateId:(body as {id:string}).id,status:"pending-review",seq:entry.seq});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
-        const releaseReview=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases\\/([a-z][a-z0-9-]{2,63})\\/review$/.exec(url.pathname);
+        const releaseReview=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/releases\/([a-z][a-z0-9-]{2,63})\/review$/.exec(url.pathname);
         if(req.method==="POST"&&releaseReview){
           if(actor.kind!=="person")throw new HttpError(403,"only a person may review a release candidate");
           requireWritableIntegrity();
@@ -625,7 +625,7 @@ export function makeServer(cfg: Config) {
               candidateId:releaseReview[2],decision,publicationAllowed:false,seq:entry.seq});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
-        const releaseList=/^\\/ops\\/missions\\/([a-z][a-z0-9-]{2,63})\\/releases$/.exec(url.pathname);
+        const releaseList=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/releases$/.exec(url.pathname);
         if(req.method==="GET"&&releaseList){
           const mission=operations.snapshot().missions[releaseList[1]];
           if(!mission)throw new HttpError(404,"unknown mission");
