@@ -45,6 +45,13 @@ const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
   "text-normalize":{id:"text-normalize",taskKind:"text-normalize",run:normalize},
   "text-metrics":{id:"text-metrics",taskKind:"text-metrics",run:metrics},
 });
+/** The child process can invoke only these two fixed, side-effect-free workers. */
+export function runPureTextAdapter(kind:string,input:{text:string}):Record<string,unknown>{
+  if(!["text-normalize","text-metrics"].includes(kind)||
+     !input||typeof input.text!=="string"||input.text.length>12000)
+    throw new Error("unsupported pure text input or adapter");
+  return BUILTINS[kind].run(structuredClone(input));
+}
 export function evaluateBuiltin(id:string,contract:{
   id:string;version:string;taskKinds:string[];testSuite:string;
   modelPolicy:{preferred:string};tools:string[];requestedPermissions:string[];
@@ -126,7 +133,8 @@ export function builtinInventoryForState(state:OpsState,repoSearchRoot?:string):
   return builtinInventory(repoSearchRoot,composedIds);
 }
 const fail=(s:string):never=>{throw new Error(s)};
-function inputFor(mission:MissionRecord,taskId:string):{text:string} {
+/** Read a bounded input from an already-approved mission dependency. */
+export function inputFor(mission:MissionRecord,taskId:string):{text:string} {
   const task=mission.tasks[taskId];
   if(task.spec.input)return structuredClone(task.spec.input);
   const source=mission.tasks[task.spec.textFrom??""];
