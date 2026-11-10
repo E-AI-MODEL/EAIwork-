@@ -563,9 +563,9 @@ export function makeServer(cfg: Config) {
             return json(res,200,await plans.exclusive(async()=>{
               plans.assertProposal(request.planId as string,request.proposalId as string,"needs-post-test");
               const report=await workspace.runAppliedTests(request.proposalId as string);
-              const plan=plans.storePostTest(request.planId as string,request.proposalId as string,report);
               recordCodeAction("tested",workspace.inspect(request.proposalId as string),
                 report.status,report.testSha256);
+              const plan=plans.storePostTest(request.planId as string,request.proposalId as string,report);
               return {report,plan};
             }));
           }catch(e){return json(res,409,{error:String((e as Error).message)})}
