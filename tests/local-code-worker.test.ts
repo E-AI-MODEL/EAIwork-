@@ -61,6 +61,18 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal(proposal.status,"requires-human-review");
   assert.equal(proposal.path,"src/counter.ts");
   assert.equal(proposal.modelId,"ollama:test-model");
+  const reviewResponse=await fetch(base+"/ops/code/proposal?id="+encodeURIComponent(proposal.id),
+    {headers:{Authorization:"Bearer "+app.token}});
+  assert.equal(reviewResponse.status,200);
+  const review=await reviewResponse.json() as any;
+  assert.equal(review.canApply,true);
+  assert.equal(review.staticCheck.status,"not-checked");
+  assert.equal(review.sourceChanged,false);
+  assert.ok(review.comparison.lines.some((r:any)=>r.kind==="removed"));
+  assert.ok(review.comparison.lines.some((r:any)=>r.kind==="added"));
+  const list=await fetch(base+"/ops/code/proposals",{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal(list.status,200);
+  assert.equal((await list.json() as any).proposals[0].id,proposal.id);
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 1;\n");
   assert.equal(requests.length,1);
   assert.equal(JSON.stringify(requests[0]).includes(app.token),false);
@@ -79,6 +91,22 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
   assert.equal(readFileSync(join(f.profile,"code-proposals",proposal.id+".original"),"utf8"),"export const count = 1;\n");
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  const persisted=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal((await persisted.json() as any).canRestore,true);
+  writeFileSync(f.file,"export const count = 4;\n");
+  assert.equal((await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  writeFileSync(f.file,"export const count = 2;\n");
+  const restored=await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true});
+  assert.equal(restored.status,200);
+  assert.equal((await restored.json() as any).status,"restored");
+  assert.equal(readFileSync(f.file,"utf8"),"export const count = 1;\n");
+  assert.equal((await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  const afterReview=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal((await afterReview.json() as any).status,"restored");
+
  }finally{
   if(app)await app.close();
   await new Promise<void>(done=>fake.close(()=>done()));

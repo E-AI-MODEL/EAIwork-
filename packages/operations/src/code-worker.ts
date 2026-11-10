@@ -1,14 +1,16 @@
 /** Local Ollama code proposal. No model-initiated writes, commands or network egress. */
 import {createHash,randomUUID} from "node:crypto";
-import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
+import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
 import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
+import {checkCandidate,compareSource} from "./code-review.ts";
 
 type ProposalRecord={
   id:string;path:string;sourceSha256:string;replacementSha256:string;
-  replacement:string;explanation:string;checks:string[];
-  createdAt:string;modelId:string;status:"requires-human-review"|"applied";
+  replacement:string;original?:string;explanation:string;checks:string[];
+  createdAt:string;modelId:string;status:"requires-human-review"|"applied"|"restored";
   appliedAt?:string;appliedBy?:string;
+  restoredAt?:string;restoredBy?:string;
 };
 const sha=(value:string)=>createHash("sha256").update(value).digest("hex");
 const safeRoot=(path:string)=>{
@@ -124,7 +126,7 @@ export class LocalCodeWorkspace {
     if(!info.isFile()||info.isSymbolicLink()||info.size>100000)
       throw new Error("Voorstelbestand is ongeldig");
     const record=JSON.parse(readFileSync(file,"utf8")) as ProposalRecord;
-    if(record.id!==id||!["requires-human-review","applied"].includes(record.status))
+    if(record.id!==id||!["requires-human-review","applied","restored"].includes(record.status))
       throw new Error("Voorstelbestand is onjuist");
     return record;
   }
@@ -151,13 +153,46 @@ export class LocalCodeWorkspace {
     });
     const proposed=await boundedResponse(response);
     const id=randomUUID();
-    const record:ProposalRecord={id,path,sourceSha256:sha(original),
+    const record:ProposalRecord={id,path,original,sourceSha256:sha(original),
       replacementSha256:sha(proposed.replacement),replacement:proposed.replacement,
       explanation:proposed.explanation,checks:proposed.checks,modelId:this.modelId,
       createdAt:new Date().toISOString(),status:"requires-human-review"};
     saveJson(join(this.storage,id+".json"),record);
     return {...record,originalBytes:Buffer.byteLength(original),
       replacementBytes:Buffer.byteLength(record.replacement)};
+  }
+  inspect(id:string){
+    const record=this.record(id);
+    if(typeof record.replacement!=="string"||sha(record.replacement)!==record.replacementSha256)
+      throw new Error("Het opgeslagen codevoorstel is veranderd");
+    const file=safeExistingFile(this.root,record.path);
+    const current=readBounded(file),currentSha256=sha(current);
+    const original=typeof record.original==="string"?record.original:
+      currentSha256===record.sourceSha256?current:null;
+    if(original!==null&&sha(original)!==record.sourceSha256)
+      throw new Error("De opgeslagen uitgangsversie is veranderd");
+    const sourceChanged=record.status==="requires-human-review"?
+      currentSha256!==record.sourceSha256:
+      record.status==="applied"?currentSha256!==record.replacementSha256:
+      currentSha256!==record.sourceSha256;
+    const check=checkCandidate(record.path,record.replacement);
+    return {...record,original:undefined,sourceChanged,currentSha256,
+      comparison:original===null?null:compareSource(original,record.replacement),
+      staticCheck:check,
+      canApply:record.status==="requires-human-review"&&!sourceChanged&&check.status!=="failed",
+      canRestore:record.status==="applied"&&!sourceChanged,
+      testsExecuted:false};
+  }
+  list(limit=20){
+    if(!Number.isInteger(limit)||limit<1||limit>50)throw new Error("Ongeldige geschiedenislimiet");
+    return readdirSync(this.storage).filter(n=>/^[0-9a-f-]{36}\.json$/.test(n))
+      .map(n=>this.record(n.slice(0,-5)))
+      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id))
+      .slice(0,limit).map(r=>({
+        id:r.id,path:r.path,modelId:r.modelId,status:r.status,createdAt:r.createdAt,
+        appliedAt:r.appliedAt??null,restoredAt:r.restoredAt??null,
+        sourceSha256:r.sourceSha256,replacementSha256:r.replacementSha256,
+      }));
   }
   apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
@@ -172,6 +207,8 @@ export class LocalCodeWorkspace {
       throw new Error("Bronbestand is gewijzigd; vraag een nieuw voorstel");
     if(sha(record.replacement)!==record.replacementSha256)
       throw new Error("Voorstelbestand is gewijzigd");
+    const staticCheck=checkCandidate(record.path,record.replacement);
+    if(staticCheck.status==="failed")throw new Error("Het voorstel faalt de syntaxiscontrole");
     const backUp=join(this.storage,record.id+".original");
     const backupFd=openSync(backUp,"wx",0o600);
     try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
@@ -191,6 +228,37 @@ export class LocalCodeWorkspace {
     });
     return {status:"applied",proposalId:record.id,path:record.path,
       sha256:record.replacementSha256,backupRef:record.id+".original",
-      testsExecuted:false};
+      staticCheck,testsExecuted:false};
+  }
+  restore(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
+    if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
+      throw new Error("Herstellen vereist uitdrukkelijke goedkeuring door een persoon");
+    const record=this.record(request.proposalId);
+    if(record.status!=="applied"||request.expectedSha256!==record.replacementSha256)
+      throw new Error("Dit voorstel kan niet met deze goedkeuring worden hersteld");
+    const file=safeExistingFile(this.root,record.path);
+    if(sha(readBounded(file))!==record.replacementSha256)
+      throw new Error("De code is na de wijziging aangepast: herstel geweigerd");
+    const backup=join(this.storage,record.id+".original");
+    if(!lstatSync(backup).isFile()||lstatSync(backup).isSymbolicLink())
+      throw new Error("De oorspronkelijke back-up is niet beschikbaar");
+    const original=readBounded(backup);
+    if(sha(original)!==record.sourceSha256)
+      throw new Error("De back-up komt niet overeen met het oorspronkelijke bestand");
+    const temporary=file+"."+randomUUID()+".eaiwork-restore";
+    let renamed=false;
+    try{
+      const fd=openSync(temporary,"wx",0o600);
+      try{writeFileSync(fd,original);fsyncSync(fd)}finally{closeSync(fd)}
+      chmodSync(temporary,lstatSync(file).mode&0o777);
+      if(sha(readBounded(file))!==record.replacementSha256)
+        throw new Error("Bestand gewijzigd tijdens herstel");
+      renameSync(temporary,file);renamed=true;
+    }finally{if(!renamed&&existsSync(temporary))unlinkSync(temporary)}
+    saveJson(join(this.storage,record.id+".json"),{
+      ...record,status:"restored",restoredAt:new Date().toISOString(),restoredBy:actorId,
+    });
+    return {status:"restored",proposalId:record.id,path:record.path,
+      sha256:record.sourceSha256,testsExecuted:false};
   }
 }

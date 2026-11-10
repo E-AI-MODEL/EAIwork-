@@ -65,3 +65,13 @@ Open de lokale werkruimte en kies **Meer > Codeworker**. Geef één **bestaand r
 - De codeworker voert **geen code, tests of shellcommando's** uit. Hij kan niet uit zichzelf publiceren of een nieuwe map kiezen. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
 
 Deze eerste codeworker is nog geen algemene autonome softwareontwikkelaar. Er is geen OS-sandbox, geen automatische git-commit en geen testexecutor. Gebruik voor de proef uitsluitend een afzonderlijke werkmap met niet-vertrouwelijke broncode.
+
+## Veranderde regels bekijken en terugzetten
+
+Het Codeworker-scherm toont nu de regels die Ollama wil toevoegen of verwijderen. De volledige vervangende tekst blijft ook beschikbaar. Je kunt eerdere voorstellen na een herstart opnieuw openen. Het scherm toont of het geselecteerde bronbestand inmiddels veranderd is.
+
+Voor `.json` controleert EAIwork of de voorgestelde tekst geldige JSON is. Voor `.js` laat EAIwork Node.js de syntaxis **alleen lezen**, zonder het programma uit te voeren. Een mislukte controle blokkeert het toepassen. Voor TypeScript, Python, CSS, HTML en Markdown staat expliciet **niet gecontroleerd**. Dit is geen bewijs dat de code correct werkt. De lokale werker voert nog geen eigen tests of scripts uit.
+
+Na een goedgekeurde wijziging biedt hetzelfde voorstel **Herstel de eerdere versie** aan. Herstellen vraagt opnieuw een afzonderlijke bevestiging en werkt uitsluitend wanneer het bestand nog precies overeenkomt met de eerder toegepaste vervanging. De oorspronkelijke back-up wordt vóór het herstellen op SHA-256 gecontroleerd. Je kunt dezelfde wijziging maar één keer terugzetten. Werk dat je intussen zelf aan het bestand hebt gedaan, wordt niet overschreven.
+
+De voorstelgeschiedenis staat in de bestaande lokale profielmap. Back-ups blijven lokaal; er is geen automatische back-up naar een andere schijf. De werkmap heeft nog geen geïsoleerde OS-sandbox, dus gebruik voorlopig een afzonderlijke kopie van je project.
