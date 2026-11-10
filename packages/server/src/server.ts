@@ -375,6 +375,22 @@ export function makeServer(cfg: Config) {
           try{return json(res,200,runMissionStep(operations,missionStep[1]))}
           catch(e){throw new HttpError(422,(e as Error).message)}
         }
+        const gateAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/gates\/([a-z][a-z0-9-]{2,63})\/resolve$/.exec(url.pathname);
+        if(req.method==="POST"&&gateAction){
+          if(actor.kind!=="person")throw new HttpError(403,"only designated people can resolve task gates");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(k=>k!=="evidenceRef"))
+            throw new HttpError(422,"expected a gate evidence reference");
+          try{
+            const event={type:"mission.gate.resolve" as const,missionId:gateAction[1],
+              constraintId:gateAction[2],evidenceRef:(body as {evidenceRef:string}).evidenceRef};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.missionId,constraintId:event.constraintId,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         const missionAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/(run|pause|resume)$/.exec(url.pathname);
         if(req.method==="POST"&&missionAction){
           if(actor.kind!=="person")throw new HttpError(403,"only a person may control mission execution");
@@ -400,7 +416,7 @@ export function makeServer(cfg: Config) {
           if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
             throw new HttpError(422, "operations event must be an object");
           }
-          if (["mission.create","mission.pause","mission.resume","task.started","task.completed","task.failed"].includes((raw as any).type)) {
+          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
