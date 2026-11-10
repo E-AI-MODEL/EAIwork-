@@ -10,6 +10,7 @@ import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
+import {runParallelPureText} from "../../operations/src/parallel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
@@ -587,6 +588,30 @@ export function makeServer(cfg: Config) {
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,201,{missionId,action,seq:entry.seq,automation:operations.snapshot().missions[missionId].automation});
           }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const parallelLocal=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/parallel\/run$/.exec(url.pathname);
+        if(req.method==="POST"&&parallelLocal){
+          if(actor.kind!=="person")throw new HttpError(403,"only people can start parallel local work");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="maxParallel")||
+             !Number.isInteger((body as {maxParallel?:unknown}).maxParallel)||
+             ![1,2].includes((body as {maxParallel:number}).maxParallel))
+            throw new HttpError(422,"parallel local work accepts maxParallel 1 or 2 only");
+          try{
+            return json(res,200,await runParallelPureText(operations,parallelLocal[1],
+              (body as {maxParallel:number}).maxParallel));
+          }catch(e){
+            if(/unknown mission/.test(String(e)))throw new HttpError(404,"unknown mission");
+            if(/capacity exhausted|already started|claimed work/.test(String(e)))
+              throw new HttpError(409,"parallel local work is already in progress");
+            if(/pause|automatic|worker|timeout|capacity|unsupported/.test(String(e)))
+              throw new HttpError(422,"parallel local execution is not allowed");
+            throw new HttpError(503,"parallel local worker could not finish safely");
+          }
         }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
         if(req.method==="POST"&&missionStep){
