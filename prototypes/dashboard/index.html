@@ -654,7 +654,8 @@ function liveOverview(){
     plans.filter(p=>p.steps.some(step=>step.active&&step.status==='review')).length;
   const autoMissions=missions.filter(m=>m.automation?.enabled);
   const canAutoStart=missions.filter(m=>!m.automation?.enabled&&
-    m.plan.tasks.every(t=>(!t.effect||t.effect==='local')&&
+    (m.plan?.tasks?.length??0)>0&&m.plan.tasks.every(t=>
+      (!t.effect||t.effect==='local')&&
       ['text-normalize','text-metrics','text-inspect'].includes(t.taskKind))&&
     Object.values(m.tasks||{}).some(t=>t.status!=='done'));
   const done=plans.filter(p=>p.state==='done').length+
