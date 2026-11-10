@@ -36,6 +36,12 @@ export interface ProductionLineMission {
   stages:LineStage[];
   nextAction:NextOperatorAction;
   publication:{allowed:false;status:"not-verified";reason:string};
+  releaseDossier?:{revision:number;repository:string;commitSha:string;
+    artifactPath:string;artifactSha256:string;ciRunUrl:string;
+    checkNames:string[];submittedBy:string;
+    reviewDecision:"awaiting-review"|"changes-requested"|"external-verification-needed";
+    reviewedBy:string|null;
+  };
 }
 export interface ProductionLineView {
   schema:"eai-production-line-v1";
@@ -120,14 +126,35 @@ export function productionLineView(
             "Er is nog geen volledig technisch resultaat om inhoudelijk te beoordelen.",
         taskIds:[...new Set([...specs.filter(t=>mission.tasks[t.id].status==="failed").map(t=>t.id),
           ...constrained.map(t=>t.id),...affected.map(t=>t.id)])]};
-      const releaseStage:LineStage={id:"release",label:"Vrijgave",
-        status:"not-verified",
-        detail:"Geen exact-SHA CI, controle van een artefact, menselijke vrijgave of publicatiebewijs geregistreerd.",
+      const dossier=mission.releaseDossier?.revision===mission.revision?
+        mission.releaseDossier:undefined;
+      const releaseStage:LineStage={id:"release",label:"Opleverdossier",
+        status:dossier?"needs-review":"not-verified",
+        detail:dossier?
+          "Kandidaat en aangeleverde verwijzingen zijn vastgelegd. CI-resultaten, artefactbytes en licentie zijn nog niet onafhankelijk gecontroleerd.":
+          "Nog geen opleverdossier met een exacte commit, artefacthash en testverwijzingen.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
         tasks:totals,stages:[planStage,workerStage,executing,reviewStage,releaseStage],
-        nextAction:action,publication:{allowed:false,status:"not-verified",
-          reason:"De operationsregistratie bevat nog geen gecontroleerd software-releasecontract."},
+        nextAction:totals.failed||constrained.length||missing.length||affected.length?
+          action:allDone&&dossier?
+          {kind:"inspect-result" as const,actor:"person" as const,target:"bewijs" as const,
+            label:dossier.review?"Bekijk de beoordeling":"Laat het opleverdossier beoordelen",
+            reason:"De aangeleverde testgegevens zijn nog geen onafhankelijk gecontroleerd releasebewijs."}:
+          action,
+        publication:{allowed:false,status:"not-verified",
+          reason:"CI, artefact en licentie zijn niet onafhankelijk gecontroleerd. Publicatie is uitgeschakeld."},
+        ...(dossier?{releaseDossier:{
+          revision:dossier.revision,repository:dossier.candidate.repository,
+          commitSha:dossier.candidate.commitSha,
+          artifactPath:dossier.candidate.artifactPath,
+          artifactSha256:dossier.candidate.artifactSha256,
+          ciRunUrl:dossier.candidate.ciRunUrl,
+          checkNames:[...dossier.candidate.checkNames],
+          submittedBy:dossier.submittedBy,
+          reviewDecision:dossier.review?.decision??"awaiting-review",
+          reviewedBy:dossier.review?.by??null,
+        }}:{}),
       };
     });
   return {schema:"eai-production-line-v1",source:"verified-operations-state",
