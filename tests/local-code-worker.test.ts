@@ -26,6 +26,7 @@ const reply=()=>({message:{role:"assistant",content:JSON.stringify({
 test("code worker never writes before explicit human approval; verifies source hash and keeps backup",async()=>{
  const f=workspace();
  const requests:any[]=[];
+ let invalidSyntax=false;
  const fake=createServer(async(req,res)=>{
   if(req.url==="/api/tags")return void res.end(JSON.stringify({models:[{name:"test-model"}]}));
   if(req.url==="/api/chat"){
@@ -33,7 +34,12 @@ test("code worker never writes before explicit human approval; verifies source h
     for await(const chunk of req)body+=chunk.toString("utf8");
     requests.push(JSON.parse(body));
     res.setHeader("content-type","application/json");
-    return void res.end(JSON.stringify(reply()));
+    return void res.end(JSON.stringify(invalidSyntax?
+      {message:{role:"assistant",content:JSON.stringify({
+        replacement:"export const count: number = ;",
+        explanation:"Ongeldige code voor een afwijzingsproef.",
+        checks:["Controleer de code zelf"]
+      })}}:reply()));
   }
   res.writeHead(404);res.end();
  });
@@ -61,6 +67,15 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal(proposal.status,"requires-human-review");
   assert.equal(proposal.path,"src/counter.ts");
   assert.equal(proposal.modelId,"ollama:test-model");
+  assert.equal(proposal.preflight.status,"passed");
+  assert.equal(proposal.preflight.testsExecuted,false);
+  const checked=await post("/ops/code/check",{proposalId:proposal.id});
+  assert.equal(checked.status,200);
+  const inspection=await checked.json() as any;
+  assert.equal(inspection.canApply,true);
+  assert.equal(inspection.sourceUnchanged,true);
+  assert.equal(inspection.preflight.status,"passed");
+  assert.equal(inspection.testsExecuted,false);
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 1;\n");
   assert.equal(requests.length,1);
   assert.equal(JSON.stringify(requests[0]).includes(app.token),false);
@@ -68,6 +83,8 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:"0".repeat(64),approve:true})).status,409);
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:false})).status,409);
   writeFileSync(f.file,"export const count = 3;\n");
+  const staleCheck=await post("/ops/code/check",{proposalId:proposal.id});
+  assert.equal((await staleCheck.json() as any).canApply,false);
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
   writeFileSync(f.file,"export const count = 1;\n");
   const approved=await post("/ops/code/apply",{
@@ -79,6 +96,15 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
   assert.equal(readFileSync(join(f.profile,"code-proposals",proposal.id+".original"),"utf8"),"export const count = 1;\n");
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  invalidSyntax=true;
+  const bad=await post("/ops/code/propose",{path:"src/counter.ts",instruction:"Introduce syntax error for test"});
+  assert.equal(bad.status,200);
+  const badProposal=await bad.json() as any;
+  assert.equal(badProposal.preflight.status,"failed");
+  const badCheck=await post("/ops/code/check",{proposalId:badProposal.id});
+  assert.equal((await badCheck.json() as any).canApply,false);
+  assert.equal((await post("/ops/code/apply",{proposalId:badProposal.id,expectedSha256:badProposal.replacementSha256,approve:true})).status,409);
+  assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
  }finally{
   if(app)await app.close();
   await new Promise<void>(done=>fake.close(()=>done()));

@@ -62,6 +62,8 @@ Open de lokale werkruimte en kies **Meer > Codeworker**. Geef één **bestaand r
 - EAIwork bewaart elk voorstel in `~/.eaiwork/local/code-proposals`. De werkmap wordt bij het voorstellen **niet** aangepast.
 - Lees de voorgestelde code zelf na. Voor het toepassen is een aangevinkte bevestiging, een tweede expliciete bevestiging en een overeenkomende SHA-256 verplicht.
 - De server controleert vóór het vervangen opnieuw de oorspronkelijke bestandsinhoud. Een gewijzigd bestand wordt niet overschreven. De oorspronkelijke tekst blijft als lokale back-up in de voorstelmap.
-- De codeworker voert **geen code, tests of shellcommando's** uit. Hij kan niet uit zichzelf publiceren of een nieuwe map kiezen. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
+- De codeworker voert **geen voorgestelde code en geen unittests** uit. Hij kan wel vóór goedkeuring de syntaxis van `.js`, `.ts` en `.json` controleren. Deze controle draait met een vaste parser, niet met de door Ollama gegenereerde code. Andere bestandstypen krijgen `not-evaluated`.
+- In het lokale dashboard staat een knop **Controleer voorstel opnieuw**. EAIwork vergelijkt de actuele bron met het oorspronkelijke bestand en berekent de syntaxisstatus opnieuw. Een voorstel met een syntaxisfout wordt geweigerd. Het toepassen controleert dezelfde gegevens nogmaals.
+- De syntaxisuitslag bewijst niet dat de code correct werkt. Tests, terminalcommando's en publicatie worden niet gestart. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
 
 Deze eerste codeworker is nog geen algemene autonome softwareontwikkelaar. Er is geen OS-sandbox, geen automatische git-commit en geen testexecutor. Gebruik voor de proef uitsluitend een afzonderlijke werkmap met niet-vertrouwelijke broncode.

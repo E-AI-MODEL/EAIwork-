@@ -3,11 +3,13 @@ import {createHash,randomUUID} from "node:crypto";
 import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
 import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
+import {checkCodeSyntax,type CodePreflight} from "./code-preflight.ts";
 
 type ProposalRecord={
   id:string;path:string;sourceSha256:string;replacementSha256:string;
   replacement:string;explanation:string;checks:string[];
   createdAt:string;modelId:string;status:"requires-human-review"|"applied";
+  preflight?:CodePreflight;
   appliedAt?:string;appliedBy?:string;
 };
 const sha=(value:string)=>createHash("sha256").update(value).digest("hex");
@@ -151,13 +153,30 @@ export class LocalCodeWorkspace {
     });
     const proposed=await boundedResponse(response);
     const id=randomUUID();
+    const preflight=checkCodeSyntax(path,proposed.replacement);
     const record:ProposalRecord={id,path,sourceSha256:sha(original),
       replacementSha256:sha(proposed.replacement),replacement:proposed.replacement,
       explanation:proposed.explanation,checks:proposed.checks,modelId:this.modelId,
-      createdAt:new Date().toISOString(),status:"requires-human-review"};
+      createdAt:new Date().toISOString(),status:"requires-human-review",preflight};
     saveJson(join(this.storage,id+".json"),record);
     return {...record,originalBytes:Buffer.byteLength(original),
       replacementBytes:Buffer.byteLength(record.replacement)};
+  }
+  inspect(proposalId:string){
+    const record=this.record(proposalId);
+    const file=safeExistingFile(this.root,record.path);
+    const unchanged=sha(readBounded(file))===record.sourceSha256;
+    const validStoredReplacement=sha(record.replacement)===record.replacementSha256;
+    const preflight=checkCodeSyntax(record.path,record.replacement);
+    return {
+      proposalId:record.id,path:record.path,modelId:record.modelId,
+      status:record.status,sourceUnchanged:unchanged,
+      replacementHashMatches:validStoredReplacement,
+      preflight,testsExecuted:false,
+      canApply:record.status==="requires-human-review"&&
+        unchanged&&validStoredReplacement&&preflight.status!=="failed"&&
+        !!record.preflight&&record.preflight.replacementSha256===preflight.replacementSha256,
+    };
   }
   apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
@@ -172,6 +191,9 @@ export class LocalCodeWorkspace {
       throw new Error("Bronbestand is gewijzigd; vraag een nieuw voorstel");
     if(sha(record.replacement)!==record.replacementSha256)
       throw new Error("Voorstelbestand is gewijzigd");
+    const checked=this.inspect(record.id);
+    if(!checked.canApply)
+      throw new Error("Codecontrole mislukt of het voorstel is gewijzigd");
     const backUp=join(this.storage,record.id+".original");
     const backupFd=openSync(backUp,"wx",0o600);
     try{writeFileSync(backupFd,original);fsyncSync(backupFd)}finally{closeSync(backupFd)}
@@ -191,6 +213,6 @@ export class LocalCodeWorkspace {
     });
     return {status:"applied",proposalId:record.id,path:record.path,
       sha256:record.replacementSha256,backupRef:record.id+".original",
-      testsExecuted:false};
+      testsExecuted:false,preflight:checked.preflight};
   }
 }

@@ -424,6 +424,19 @@ export function makeServer(cfg: Config) {
           try{return json(res,200,await cfg.codeWorkspace.propose(item.path,item.instruction))}
           catch{return json(res,422,{error:"Codevoorstel kon niet veilig worden gemaakt"})}
         }
+        if(req.method==="POST"&&url.pathname==="/ops/code/check"){
+          if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen voorstellen controleren");
+          if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+             Object.keys(input).some(k=>k!=="proposalId")||
+             typeof (input as any).proposalId!=="string")
+            throw new HttpError(422,"Geef een bestaand voorstelnummer op");
+          try{return json(res,200,cfg.codeWorkspace.inspect((input as any).proposalId))}
+          catch{return json(res,409,{error:"Codecontrole niet mogelijk: voorstel of bronbestand ontbreekt"})}
+        }
         if(req.method==="POST"&&url.pathname==="/ops/code/apply"){
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codewijzigingen goedkeuren");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
