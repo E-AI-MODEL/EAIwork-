@@ -17,7 +17,9 @@ export interface SchedulerTick {
 export class LocalMissionScheduler {
   private timer:ReturnType<typeof setInterval>|undefined;
   private ticking=false;
-  constructor(private readonly store:OpsStore,intervalMs=100) {
+  private readonly store:OpsStore;
+  constructor(store:OpsStore,intervalMs=100) {
+    this.store=store;
     if(!Number.isInteger(intervalMs)||intervalMs<0||(intervalMs>0&&(intervalMs<25||intervalMs>5000)))
       throw new Error("scheduler interval must be zero (manual) or 25-5000 ms");
     // Fail closed across process restart. A fresh human approval is required.
