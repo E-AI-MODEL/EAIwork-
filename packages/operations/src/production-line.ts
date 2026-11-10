@@ -22,7 +22,7 @@ export interface LineStage {
   taskIds:string[];
 }
 export interface NextOperatorAction {
-  kind:"review-task"|"review-condition"|"inspect-worker"|"run-ready-task"|"inspect-result"|"wait"|"inspect-plan";
+  kind:"review-task"|"review-condition"|"inspect-worker"|"run-ready-task"|"inspect-result"|"wait"|"inspect-plan"|"submit-release-candidate"|"review-release-candidate";
   actor:"person"|"worker";
   target:"uitvoering"|"hitl"|"registratie"|"planner"|"bewijs";
   label:string;
@@ -35,6 +35,10 @@ export interface ProductionLineMission {
   tasks:{total:number;queued:number;running:number;done:number;failed:number};
   stages:LineStage[];
   nextAction:NextOperatorAction;
+  releaseCandidate:null|{
+    id:string;status:string;revision:number;artifactName:string;
+    commitSha:string;proposedBy:string;reviewedBy:string|null;
+  };
   publication:{allowed:false;status:"not-verified";reason:string};
 }
 export interface ProductionLineView {
@@ -43,7 +47,7 @@ export interface ProductionLineView {
   generatedFrom:"operations-journal";
   operationsJournalVerified:boolean;
   independentOperationsWitness:false;
-  releaseGate:"not-implemented";
+  releaseGate:"candidate-review-only";
   missions:ProductionLineMission[];
   summary:{missions:number;technicalCompletions:number;runningTasks:number;humanReviews:number};
   note:string;
@@ -56,6 +60,8 @@ const ACTIONS={
   execute:{kind:"run-ready-task",actor:"person",target:"uitvoering",label:"Bekijk de volgende uitvoerbare taak",reason:"Een taak kan op basis van de huidige afhankelijkheden voor uitvoering worden voorgedragen. Starten vraagt afzonderlijke toestemming."},
   result:{kind:"inspect-result",actor:"person",target:"bewijs",label:"Controleer resultaat en herkomst",reason:"Technische voltooiing bewijst de inhoud niet en geeft geen publicatierecht."},
   plan:{kind:"inspect-plan",actor:"person",target:"planner",label:"Bekijk het werkplan",reason:"Controleer afhankelijkheden en voorwaarden voordat de uitvoering verdergaat."},
+  submit:{kind:"submit-release-candidate",actor:"person",target:"overzicht",label:"Dien een releasekandidaat in",reason:"Voeg de exacte commit en het artefact toe. CI-verwijzingen blijven onbeoordeelde claims."},
+  review:{kind:"review-release-candidate",actor:"person",target:"overzicht",label:"Laat een andere persoon de kandidaat beoordelen",reason:"Een beoordeling is nog geen gecontroleerde CI-uitkomst en geeft geen publicatietoestemming."},
 } as const satisfies Record<string,NextOperatorAction>;
 const count=(tasks:Array<{status:string}>,status:string)=>tasks.filter(t=>t.status===status).length;
 export function productionLineView(
@@ -88,11 +94,17 @@ export function productionLineView(
         Object.values(state.workers).some(w=>defectWorkers.has(w.contract.id)&&
           w.contract.taskKinds.includes(t.taskKind)));
       const allDone=totals.done===totals.total;
+      const latestCandidate=Object.values(mission.releaseCandidates??{}).at(-1)??null;
+      const candidateStatus=latestCandidate?.revision===mission.revision?
+        latestCandidate?.status:"superseded";
       const anyBlocked=constrained.length>0||missing.length>0||affected.length>0;
       const action:NextOperatorAction=totals.failed?ACTIONS.task:
         constrained.length?ACTIONS.constraint:
         affected.length||missing.length?ACTIONS.worker:
         totals.running?ACTIONS.running:
+        allDone&&candidateStatus==="pending-review"?ACTIONS.review:
+        allDone&&(!latestCandidate||candidateStatus==="changes-requested"||candidateStatus==="superseded")?
+          ACTIONS.submit:
         allDone?ACTIONS.result:
         ready.length?ACTIONS.execute:ACTIONS.plan;
       const planStage:LineStage={id:"plan",label:"Werkplan",status:"recorded",
@@ -121,18 +133,31 @@ export function productionLineView(
         taskIds:[...new Set([...specs.filter(t=>mission.tasks[t.id].status==="failed").map(t=>t.id),
           ...constrained.map(t=>t.id),...affected.map(t=>t.id)])]};
       const releaseStage:LineStage={id:"release",label:"Vrijgave",
-        status:"not-verified",
-        detail:"Geen exact-SHA CI, controle van een artefact, menselijke vrijgave of publicatiebewijs geregistreerd.",
+        status:latestCandidate&&candidateStatus==="pending-review"?"needs-review":
+          latestCandidate&&candidateStatus==="accepted-for-verification"?"waiting":
+          "not-verified",
+        detail:latestCandidate&&candidateStatus==="pending-review"?
+          "Releasekandidaat "+latestCandidate.id+" wacht op beoordeling door een andere persoon. Aangeleverde CI-verwijzingen zijn nog niet geverifieerd.":
+          latestCandidate&&candidateStatus==="accepted-for-verification"?
+          "Beoordeeld voor verdere verificatie. CI, artefact, licenties en publicatierechten zijn nog niet onafhankelijk gecontroleerd.":
+          "Er is geen beoordeelde, geverifieerde release met publicatiebewijs geregistreerd.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
         tasks:totals,stages:[planStage,workerStage,executing,reviewStage,releaseStage],
-        nextAction:action,publication:{allowed:false,status:"not-verified",
-          reason:"De operationsregistratie bevat nog geen gecontroleerd software-releasecontract."},
+        nextAction:action,
+        releaseCandidate:latestCandidate?{
+          id:latestCandidate.id,status:candidateStatus??latestCandidate.status,
+          revision:latestCandidate.revision,artifactName:latestCandidate.artifactName,
+          commitSha:latestCandidate.commitSha,proposedBy:latestCandidate.proposedBy,
+          reviewedBy:latestCandidate.review?.by??null,
+        }:null,
+        publication:{allowed:false,status:"not-verified",
+          reason:"Releasegegevens en CI-links zijn niet onafhankelijk geverifieerd. Er is geen publicatierecht."},
       };
     });
   return {schema:"eai-production-line-v1",source:"verified-operations-state",
     generatedFrom:"operations-journal",operationsJournalVerified,
-    independentOperationsWitness:false,releaseGate:"not-implemented",
+    independentOperationsWitness:false,releaseGate:"candidate-review-only",
     missions,summary:{
       missions:missions.length,
       technicalCompletions:missions.filter(m=>m.tasks.done===m.tasks.total).length,
@@ -140,6 +165,6 @@ export function productionLineView(
       humanReviews:missions.filter(m=>m.nextAction.actor==="person"&&
         ["review-task","review-condition","inspect-worker","inspect-result"].includes(m.nextAction.kind)).length,
     },
-    note:"De productielijn is een afgeleide weergave van werkelijk geregistreerde events. Sturing gebruikt bestaande beveiligde routes. Geen automatische codebouw of publicatie.",
+    note:"De productielijn is afgeleid van geregistreerde events. Releasekandidaten en een aparte menselijke beoordeling zijn mogelijk; onafhankelijke CI-verificatie en publicatie niet.",
   };
 }
