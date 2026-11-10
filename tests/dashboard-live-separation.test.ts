@@ -62,7 +62,7 @@ test("local menu omits all demo actions and demo-only pages",()=>{
   assert.match(live.footer.textContent||"",/lokale werkruimte/);
   const demo=render(false);
   const demoHtml=(demo.sidebar.innerHTML||"")+(demo.topbar.innerHTML||"");
-  assert.match(demoHtml,/Opdrachten \(demo\)/);
+  assert.match(demoHtml,/data-id="opdrachten"/);
   assert.match(demoHtml,/Herstellen/);
   assert.match(demoHtml,/Demonstratie/);
 });
