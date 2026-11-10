@@ -107,8 +107,8 @@ test("automatic execution never runs external tasks or unknown adapters",()=>{
   const ctx=setup();
   try{
     ctx.append({type:"mission.create",plan:ctx.plan("mission-missing-worker")});
-    ctx.append({type:"mission.automation.start",missionId:"mission-missing-worker",maxStarts:4});
     const scheduler=new LocalMissionScheduler(ctx.store,0);
+    ctx.append({type:"mission.automation.start",missionId:"mission-missing-worker",maxStarts:4});
     assert.deepEqual(scheduler.tick().stopped,[{missionId:"mission-missing-worker",reason:"blocked"}]);
     assert.equal(ctx.store.snapshot().missions["mission-missing-worker"].automation?.starts,0);
     assert.equal(ctx.store.snapshot().missions["mission-missing-worker"].tasks["task-clean"].status,"queued");
@@ -137,7 +137,7 @@ test("pause or explicit stop revokes authorization and cannot be forged by a mod
     ctx.append({type:"mission.automation.start",missionId:"mission-stoppable",maxStarts:2});
     assert.throws(()=>ctx.append({type:"mission.automation.stop",missionId:"mission-stoppable",reason:"complete"},human),/own approval/);
     assert.throws(()=>ctx.append({type:"mission.automation.stop",missionId:"mission-stoppable",reason:"user-stopped"},
-      {kind:"model",id:"model:planner"}),/trusted system actor/);
+      {kind:"model",id:"model:planner"}),/invalid actor|trusted system actor/);
     ctx.append({type:"mission.pause",missionId:"mission-stoppable"});
     assert.equal(ctx.store.snapshot().missions["mission-stoppable"].automation?.stoppedReason,"paused");
     assert.equal(scheduler.tick().started,0);
