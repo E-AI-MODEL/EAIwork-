@@ -35,7 +35,7 @@ export async function runExecutorOnce(baseUrl:string,token:string):Promise<Execu
   if(!claim.ok)throw new Error("executor claim rejected: "+claim.status);
   const job=await claim.json() as ExecutorJob;
   if(job.protocol!=="eai-local-executor-v1"||
-     !["text-normalize","text-metrics"].includes(job.kind)||
+     !["text-normalize","text-metrics","text-inspect","reference-extract"].includes(job.kind)||
      typeof job.input?.text!=="string"||job.input.text.length>12000||
      !/^[a-z][a-z0-9-]{2,63}$/.test(job.runId)||
      !/^[a-z][a-z0-9-]{2,63}$/.test(job.leaseId))
