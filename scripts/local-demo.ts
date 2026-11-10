@@ -24,7 +24,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(){
+export function createDemoServer(options:{schedulerIntervalMs?:number}={}){
   const root=mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
   const pair=generateKeyPairSync("ed25519");
@@ -35,9 +35,9 @@ export function createDemoServer(){
   );
   const token=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
-  const {server,operations}=makeServer({
+  const {server,operations,scheduler}=makeServer({
     dir:join(root,"evidence"),operationsDir:join(root,"operations"),
-    pack,witness,repoSearchRoot:resolve("."),
+    pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}}},
   });
   if(!operations)throw new Error("demonstration operations journal missing");
@@ -92,7 +92,7 @@ export function createDemoServer(){
     rmSync(root,{recursive:true,force:true});
     rmSync(witnessDir,{recursive:true,force:true});
   }
-  return {server,token,close};
+  return {server,token,scheduler,close};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const demo=createDemoServer();
