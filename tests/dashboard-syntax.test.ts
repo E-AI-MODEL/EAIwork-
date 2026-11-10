@@ -70,3 +70,14 @@ test("local codeworker is available only in the controlled local dashboard",()=>
   assert.match(html,/ops\/code\/propose/);
   assert.match(html,/ops\/code\/apply/);
 });
+
+test("local code review keeps history, diff, syntax check and explicit restore",()=>{
+  assert.match(html,/function loadCodeHistory\(/);
+  assert.match(html,/function loadCodeProposal\(/);
+  assert.match(html,/function restoreCodeProposal\(/);
+  assert.match(html,/code-diff-line/);
+  assert.match(html,/code-validation/);
+  assert.match(html,/case 'code-restore':restoreCodeProposal\(\)/);
+  assert.match(html,/ops\/code\/proposals/);
+  assert.match(html,/ops\/code\/proposal\?id=/);
+});
