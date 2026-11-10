@@ -41,6 +41,9 @@ export interface ProductionLineMission {
     checkNames:string[];submittedBy:string;
     reviewDecision:"awaiting-review"|"changes-requested"|"external-verification-needed";
     reviewedBy:string|null;
+    ciVerification:"unverified"|"github-confirmed";
+    ciObservedAt:string|null;
+    ciAttempt:number|null;
   };
 }
 export interface ProductionLineView {
@@ -131,7 +134,9 @@ export function productionLineView(
       const releaseStage:LineStage={id:"release",label:"Opleverdossier",
         status:dossier?"needs-review":"not-verified",
         detail:dossier?
-          "Kandidaat en aangeleverde verwijzingen zijn vastgelegd. CI-resultaten, artefactbytes en licentie zijn nog niet onafhankelijk gecontroleerd.":
+          dossier.ciObservation?
+            "GitHub bevestigt een geslaagde CI-run voor de opgegeven commit. Artefactbytes, licentie en uitkomst zijn nog niet onafhankelijk gecontroleerd.":
+            "Kandidaat en aangeleverde verwijzingen zijn vastgelegd. De CI-run, artefactbytes en licentie zijn nog niet gecontroleerd.":
           "Nog geen opleverdossier met een exacte commit, artefacthash en testverwijzingen.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
@@ -154,6 +159,9 @@ export function productionLineView(
           submittedBy:dossier.submittedBy,
           reviewDecision:dossier.review?.decision??"awaiting-review",
           reviewedBy:dossier.review?.by??null,
+          ciVerification:dossier.ciObservation?"github-confirmed":"unverified",
+          ciObservedAt:dossier.ciObservation?.observedAt??null,
+          ciAttempt:dossier.ciObservation?.attempt??null,
         }}:{}),
       };
     });
