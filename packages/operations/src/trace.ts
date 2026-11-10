@@ -24,7 +24,7 @@ export function buildMissionTrace(state:OpsState,missionId:string){
       actor:{kind:envelope.actor.kind,id:envelope.actor.id},
     };
     if("taskId" in e)row.taskId=e.taskId;
-    if(e.type==="task.started"){
+    if(e.type==="task.started"||e.type==="task.lease.claim"){
       row.runId=e.run.runId;
       traces.get(e.taskId)?.push({
         runId:e.run.runId,workerId:e.run.workerId,workerVersion:e.run.workerVersion,
@@ -32,7 +32,21 @@ export function buildMissionTrace(state:OpsState,missionId:string){
         inputHash:e.run.inputHash,finishedAt:null,elapsedMs:null,outputHash:null,
         errorCode:null,verification:e.run.verification,
         tokens:null,cost:null,status:"running",
+        ...(e.type==="task.lease.claim"?{
+          leaseId:e.leaseId,leaseOwner:e.ownerId,leaseExpiry:e.expiresAt,
+        }:{}),
       });
+    }
+    if(e.type==="task.lease.renew"){
+      row.runId=e.runId;
+      const run=(traces.get(e.taskId)??[]).find(a=>a.runId===e.runId);
+      if(run)run.leaseExpiry=e.expiresAt;
+    }
+    if(e.type==="task.lease.expire"){
+      row.runId=e.runId;row.reason="lease-expired";
+      const run=(traces.get(e.taskId)??[]).find(a=>a.runId===e.runId);
+      if(run){run.status="failed";run.errorCode="worker-unavailable";
+        run.finishedAt=envelope.at;run.interruptionReason="lease-expired";}
     }
     if(e.type==="task.completed"||e.type==="task.failed"){
       row.runId=e.runId;
