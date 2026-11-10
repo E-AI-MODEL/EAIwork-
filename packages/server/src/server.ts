@@ -16,6 +16,7 @@ import {projectLocalQueue} from "../../operations/src/queue.ts";
 import {productionLineView} from "../../operations/src/production-line.ts";
 import {verifyGitHubActionsRun,type GitHubReader} from "../../operations/src/github-actions.ts";
 import {measureArtifactBytes,preflightArtifactUpload,ArtifactInputError} from "../../operations/src/artifact-bytes.ts";
+import {verifyGitHubRunArtifact,checkArtifactSelection} from "../../operations/src/github-artifact.ts";
 import {claimTextJob,heartbeatTextJob,completeTextJob,validateJobReference,
   validateExecutorIdentities,type ExecutorIdentity,type JobReference} from "../../operations/src/executor-channel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
@@ -655,6 +656,49 @@ export function makeServer(cfg: Config) {
             return json(res,200,{observation,seq:entry.seq,publicationAllowed:false});
           }catch{throw new HttpError(409,"CI observation could not be saved")}
         }
+        const verifyGitHubArtifact=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/verify-github-artifact$/.exec(url.pathname);
+        if(req.method==="POST"&&verifyGitHubArtifact){
+          if(actor.kind!=="person")throw new HttpError(403,"a person must request GitHub artifact inspection");
+          requireWritableIntegrity();
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,Math.min(maxBodyBytes,2048)))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||
+             Object.keys(raw).sort().join(",")!=="artifactName,entryPath")
+            throw new HttpError(422,"supply artifact name and archive file path");
+          const {artifactName,entryPath}=raw as Record<string,unknown>;
+          const missionId=verifyGitHubArtifact[1];
+          const before=operations.snapshot().missions[missionId];
+          if(!before)throw new HttpError(404,"unknown mission");
+          const dossier=before.releaseDossier;
+          if(!dossier||dossier.revision!==before.revision||
+             !dossier.ciObservation||dossier.githubArtifactObservation)
+            throw new HttpError(409,"CI must be confirmed before checking one GitHub artifact");
+          try{checkArtifactSelection(dossier.candidate,artifactName,entryPath)}
+          catch{throw new HttpError(422,"invalid artifact or ZIP path for this candidate")}
+          const prior=JSON.stringify(dossier);
+          let observation:Awaited<ReturnType<typeof verifyGitHubRunArtifact>>;
+          try{
+            observation=await verifyGitHubRunArtifact(dossier,
+              artifactName as string,entryPath as string,
+              cfg.githubActionReader??fetch,cfg.githubReadToken);
+          }catch{throw new HttpError(422,"GitHub artifact could not be matched and verified for this run")}
+          const current=operations.snapshot().missions[missionId];
+          if(!current||current.revision!==before.revision||
+             JSON.stringify(current.releaseDossier)!==prior)
+            throw new HttpError(409,"release dossier changed during artifact inspection");
+          try{
+            const entry=operations.append({
+              id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"check",id:"check:github-artifact"},
+              event:{type:"mission.release.github-artifact.observe" as const,
+                missionId,expectedRevision:before.revision,observation},
+            });
+            return json(res,200,{observation,seq:entry.seq,
+              origin:"artifact-uploaded-to-verified-github-run",
+              publicationAllowed:false,buildReproducibilityVerified:false});
+          }catch{throw new HttpError(409,"GitHub artifact observation could not be saved")}
+        }
         const verifyArtifact=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/verify-bytes$/.exec(url.pathname);
         if(req.method==="POST"&&verifyArtifact){
           if(actor.kind!=="person")throw new HttpError(403,"a person must supply the candidate file");
@@ -911,7 +955,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.release.artifact.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.release.artifact.observe","mission.release.github-artifact.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
