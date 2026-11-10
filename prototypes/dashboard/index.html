@@ -137,6 +137,8 @@ function liveProductionLine(){
   }).join('');
   return section('Softwareproductie · actuele uitvoering',
     '<div class="card pad"><p class="muted smalltext">Dit overzicht komt uit het gecontroleerde operationslog. De server bepaalt de status; wijzigingen worden uitsluitend via bestaande beveiligde acties gedaan.</p>'+
+    (s.opsNotice?'<p class="smalltext">'+h(s.opsNotice)+'</p>':'')+
+    (s.liveError?'<p class="contract-error">'+h(s.liveError)+'</p>':'')+
     '<div class="contract-table">'+(content||'<p>Er zijn nog geen opdrachten geregistreerd.</p>')+'</div>'+
     '<p class="muted smalltext">Vrijgave: nog niet beschikbaar. Een ingediende releasekandidaat en menselijke beoordeling geven geen publicatierecht.</p></div>');
 }
