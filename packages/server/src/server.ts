@@ -11,6 +11,7 @@ import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
+import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
@@ -371,6 +372,15 @@ export function makeServer(cfg: Config) {
           if(typeof query!=="string"||!query.trim()||query.length>120)throw new HttpError(422,"invalid search query");
           try{return json(res,200,searchLocalRepository(cfg.repoSearchRoot,query))}
           catch{return json(res,503,{error:"repository search unavailable"})}
+        }
+        const missionTrace=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/trace$/.exec(url.pathname);
+        if(req.method==="GET"&&missionTrace){
+          try{
+            return json(res,200,buildMissionTrace(operations.snapshot(),missionTrace[1]));
+          }catch(e){
+            if(String(e).includes("unknown mission"))throw new HttpError(404,"unknown mission");
+            throw new HttpError(503,"execution trace unavailable");
+          }
         }
         if (req.method === "GET" && url.pathname === "/ops/missions") {
           try {
