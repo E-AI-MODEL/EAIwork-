@@ -1,23 +1,54 @@
 # EAIwork met Ollama testen op je Mac
 
-Zorg dat **Ollama** en **Docker Desktop** openstaan. Je hebt ook Git en Node.js 22.18 of nieuwer nodig. Er moet minstens één Ollama-model op je Mac staan.
+Je hebt **Ollama**, Git en Node.js 22.18 of nieuwer nodig. Open Ollama en zorg dat er minstens één model is geïnstalleerd. Hieronder staan de terminalcommando's, ook voor het installeren van Docker.
 
 ## Kopieer deze terminalcommando's
 
-**1. Haal de testversie op**
+**1. Installeer Docker Desktop via Terminal (eenmalig)**
+
+Controleer eerst of je Homebrew hebt:
+
+```sh
+brew --version
+```
+
+Geeft dit `command not found`? Installeer dan eerst Homebrew:
+
+```sh
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+Volg de aanwijzingen in Terminal, vooral de eventuele stappen om `brew` aan je `PATH` toe te voegen. Open daarna zo nodig Terminal opnieuw.
+
+Installeer Docker Desktop en start de app:
+
+```sh
+brew install --cask docker-desktop
+open -a Docker
+```
+
+Bij de eerste start kan Docker vragen om de voorwaarden te accepteren. Controleer zodra Docker is opgestart of de engine bereikbaar is:
+
+```sh
+docker info
+```
+
+Staat Docker Desktop al op je Mac? Sla de installatie over. `open -a Docker` en `docker info` zijn voldoende.
+
+**2. Download de Docker-testomgeving**
+
+```sh
+docker pull node:22-alpine
+```
+
+**3. Haal EAIwork op**
 
 ```sh
 git clone -b feature/easy-local-ollama-start-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
 ```
 
-**2. Maak Docker klaar**
-
-```sh
-docker pull node:22-alpine
-```
-
-**3. Start EAIwork met een veilig voorbeeldproject**
+**4. Start EAIwork met een veilig voorbeeldproject**
 
 ```sh
 npm run local:ollama -- --example
@@ -38,11 +69,11 @@ Typ het nummer en druk op Enter:
 
 EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven ongewijzigd.
 
-**4. Open je lokale dashboard**
+**5. Open je lokale dashboard**
 
 Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
-**5. Plak deze twee regels in het nieuwe codeplan**
+**6. Plak deze twee regels in het nieuwe codeplan**
 
 ```text
 src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount.
@@ -58,8 +89,11 @@ Bij een mislukte test stopt het plan. De eerdere wijziging wordt niet vanzelf te
 ## Werkt het niet?
 
 - **Geen modellen gevonden:** open Ollama en zorg dat er minstens één model is gedownload. Controleer eventueel met `ollama list`.
-- **Docker niet bereikbaar:** start Docker Desktop en probeer opdracht 2 opnieuw.
-- **Map bestaat al:** gebruik een andere mapnaam in opdracht 1, bijvoorbeeld `~/EAIwork-test2`, en ga daarna naar die map.
+- **Docker niet bereikbaar:** voer `open -a Docker` uit en wacht totdat Docker gestart is. Controleer met `docker info` en probeer daarna stap 2 opnieuw.
+- **`brew: command not found`:** voer eerst de Homebrew-installatie uit stap 1 uit. Volg ook de getoonde instructie om Homebrew aan je `PATH` toe te voegen.
+- **Map bestaat al:** gebruik een andere mapnaam in stap 3, bijvoorbeeld `~/EAIwork-test2`, en ga daarna naar die map.
 - **Dashboard niet zichtbaar:** controleer de URL die Terminal toont.
+
+Docker Desktop is voor persoonlijk gebruik en onderwijs doorgaans gratis volgens de voorwaarden van Docker. Voor beheerde schoolcomputers kan installatie door ICT nodig zijn. Zie [Docker-installatie voor Mac](https://docs.docker.com/desktop/setup/install/mac-install/) en [Homebrew Docker Desktop](https://formulae.brew.sh/cask/docker-desktop).
 
 Een echte proef met jouw Ollama-model moet nog worden uitgevoerd. De GitHub-tests controleren de route met nagebootste modelantwoorden en een aparte echte Docker-test.
