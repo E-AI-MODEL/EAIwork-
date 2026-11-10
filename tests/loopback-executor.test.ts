@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {spawn} from "node:child_process";
 import type {AddressInfo} from "node:net";
 import {createDemoServer} from "../scripts/local-demo.ts";
-import {runExecutorOnce} from "../scripts/local-text-executor.ts";
+import {runExecutorOnce,runExecutorBatch} from "../scripts/local-text-executor.ts";
 import {validateExecutorIdentities} from "../packages/operations/src/executor-channel.ts";
 
 const plan=(id:string)=>({
@@ -205,5 +205,37 @@ test("restart reconciliation preserves explicitly resumable active lease without
     assert.equal(after.automation.starts,1);
     assert.equal(after.tasks[job.taskId].status,"done");
     assert.equal(after.tasks[job.taskId].attempts?.length??0,0);
+  }finally{await h.demo.close()}
+});
+
+test("one bounded local executor finishes dependent steps without manual restarts",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-dependent";
+    const dependent={
+      id,title:"Onafhankelijke worker met afhankelijke stappen",
+      goal:"Gebruik het eerste gecontroleerde resultaat voor de volgende taak",
+      tasks:[
+        {id:"task-clean",title:"Opschonen",taskKind:"text-normalize",dependsOn:[],
+          input:{text:"  Een  twee   drie  "}},
+        {id:"task-count",title:"Tellen",taskKind:"text-metrics",
+          dependsOn:["task-clean"],textFrom:"task-clean"},
+      ],
+    };
+    assert.equal((await h.request("/ops/missions",{plan:dependent})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:2,executionMode:"remote-text"})).status,201);
+    const inactive=h.demo.scheduler.tick();
+    assert.equal(inactive.started,0,"local scheduler must not consume remote consent");
+    const summary=await runExecutorBatch(h.base,h.demo.workerToken,{maxTasks:2});
+    assert.deepEqual(summary,{completed:2,idleChecks:0});
+    const m=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(m.tasks["task-clean"].run.output.text,"Een twee drie");
+    assert.equal(m.tasks["task-count"].run.output.words,3);
+    assert.equal(m.automation.starts,2);
+    assert.equal((await runExecutorOnce(h.base,h.demo.workerToken)).status,"idle");
+    await assert.rejects(runExecutorBatch(h.base,h.demo.workerToken,{maxTasks:9}),
+      /limits must be small/);
+    assert.equal((await h.get("/ops/verify")).status,200);
   }finally{await h.demo.close()}
 });
