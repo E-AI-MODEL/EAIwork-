@@ -45,12 +45,13 @@ test("local menu omits all demo actions and demo-only pages",()=>{
       btn:(txt:string)=>"<button>"+txt+"</button>",
       h:(value:string)=>String(value??""),
       document:{
+        title:"EAIwork | Dashboard productdemonstratie",
         getElementById:(id:string)=>slots[id]??null,
         querySelector:()=>slots.footer
       }
     };
     runInNewContext(declarations+"\n"+routes+"\n"+shell+"\nrenderShell()",context);
-    return slots;
+    return {...slots,title:context.document.title};
   }
   const live=render(true);
   const localHtml=(live.sidebar.innerHTML||"")+(live.topbar.innerHTML||"");
@@ -60,7 +61,9 @@ test("local menu omits all demo actions and demo-only pages",()=>{
   assert.match(localHtml,/Codeworker/);
   assert.match(localHtml,/Niet verbonden/);
   assert.match(live.footer.textContent||"",/lokale werkruimte/);
+  assert.equal(live.title,"EAIwork | Lokale werkruimte");
   const demo=render(false);
+  assert.equal(demo.title,"EAIwork | Dashboard productdemonstratie");
   const demoHtml=(demo.sidebar.innerHTML||"")+(demo.topbar.innerHTML||"");
   assert.match(demoHtml,/data-id="opdrachten"/);
   assert.match(demoHtml,/Herstellen/);
