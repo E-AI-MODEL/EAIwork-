@@ -32,7 +32,7 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/fetchMissionTrace/);
   assert.match(html,/mission-trace-refresh/);
   assert.match(html,/case 'real-mission-open'/);
-  assert.match(html,/s.liveOps\)return liveOverview\(\)/);
+  assert.match(html,/onExecutionServer\(\)\)return s\.liveOps\?liveOverview\(\):localConnectView\(\)/);
   assert.match(html,/s.liveOps\)return liveLogbook\(\)/);
   assert.match(html,/s.liveOps\)return livePlanner\(\)/);
   assert.match(html,/s.liveOps\)return liveWorkers\(\)/);
@@ -52,12 +52,15 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
 });
 
 test("dashboard screen routes all point to existing functions and mobile layout is compact",()=>{
-  const match=html.match(/const views=\{([^}]+)\}/);
+  const match=html.match(/const demoViews=\{([^}]+)\}/);
   assert.ok(match,"screen route map missing");
   for(const entry of match[1].split(",")){
     const name=entry.split(":").at(-1)?.trim()??"";
     assert.match(html,new RegExp("function\\s+"+name+"\\("),"missing renderer: "+entry);
   }
+  assert.match(html,/const liveViews=\{overzicht:liveOverview/);
+  assert.doesNotMatch(html,/const liveViews=\{[^}]*opdrachten:missionView/);
+  assert.doesNotMatch(html,/const liveViews=\{[^}]*instellingen:settings/);
   assert.match(html,/\.app\{display:block;min-height:100vh;min-height:100dvh\}/,
     "mobile dashboard must not use two stretched CSS grid rows");
   assert.match(html,/registratie:registration/,"registration route must call the named function");
