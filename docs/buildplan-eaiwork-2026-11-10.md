@@ -1,5 +1,5 @@
 # EAIwork: bouwplan en uitgevoerde eerste uitbreiding
-Datum: 10 november 2026. Status: in uitvoering, vastgelegd in een concept-PR. Geen productie-release.
+Datum: 10 november 2026. Status: in uitvoering in concept-PR #23. Geen productie-release. De actuele technische stand staat in `docs/mission-execution-v0.1.md`.
 
 ## Waar EAIwork voor bedoeld is
 
@@ -32,7 +32,7 @@ Een worker mag niet zonder afzonderlijke bevoegdheid zijn eigen bewijsstatus ver
 - `Defect`: diagnose, ernst, worker en versie, open/herstel/menselijk besluit, pogingengeschiedenis.
 - `RepairAttempt`: kandidaatversie, diagnose, wijziging, testsuite, resultaat, tijdstip, geslaagd/mislukt.
 - `HITLDecision`: beslissing, motivering, beslisser, tijdstip; geen impliciete uitbreiding van bevoegdheid.
-- Nog te realiseren: `Mission`, `Task`, `WorkerRun`, `TraceSpan`, `SourceRecord`, gescheiden budget- en schedulerrecords.
+- `Mission`, `Task`, werkerrun en een broninhoudvrije missie-trace zijn nu gedeeltelijk geïmplementeerd. Nog te realiseren: fases, algemene artefacten, tool-/modelspans, bronrecords, budget- en schedulerrecords.
 
 ### Herstelbeleid
 
@@ -68,19 +68,24 @@ Geen universeel slagingscijfer voor alle workers. De eerste indicator vergelijkt
 - Dashboard: apart scherm **Workerbibliotheek** met zes groepen, filter en selectie. Een gekozen specialisatie kan als voorlopig contract naar **Contracten en registratie** worden overgenomen. Geen verborgen Worker Builder-uitvoering.
 - Tests: catalogus- en contractsnapshot, rechten, selectiegrenzen en server-API.
 
-**Ontbreekt nog:** uitvoeradapters, echte workerinstantiatie, scheduler, modelbenchmark per taak/cohort, RepoSearch-verbinding en een Worker Builder die werkelijk nieuwe code kan testen. Deze bibliotheek is voorbereid, geen bewijs dat 56 workers operationeel zijn.
+**Deels inmiddels uitgevoerd:** er bestaan lokale uitvoeradapters, een afgebakende RepoSearch-worker en een vaste Worker Builder-compositie. De meeste 56 specialisaties blijven uitsluitend ontwerp. Er is geen algemene Builder voor nieuwe code, modelbenchmarkrouter of duurzame scheduler.
 
-## Uitgevoerde verticale proef: goedgekeurde missies en twee lokale workers
+## Werkende bouwstappen sinds de eerste lokale proef
 
-- \`packages/operations/src/missions.ts\`: plan en afzonderlijke taken, expliciete afhankelijkheden, afwijzing van cycli, begrensde invoer en herberekende voortgang.
-- \`packages/operations/src/execution.ts\`: twee **echt uitgevoerde deterministische** workers, \`text-normalize\` en \`text-metrics\`. Een nieuwe taak wordt pas toegelaten nadat het vorige resultaat beschikbaar is, de worker een geldig contract heeft en ingebouwde tests opnieuw slagen.
-- De bestaande operationele eventopslag bewaart nu ook missies, taakstart, taakresultaat, hashes, worker- en adapteridentiteit en uitvoeringstijd.
-- De server biedt \`/ops/missions\`, \`/ops/missions/:id/step\`, \`/ops/missions/:id/run\`, \`pause\` en \`resume\`, plus een veilige lokale \`/ops/workers/:id/evaluate\`-route.
-- De nieuwe dashboardpagina **Echte uitvoering** is strikt gescheiden van de fictieve taakdemo. Vanuit deze pagina kan een persoon een vast tweetrapsplan goedkeuren, in stappen uitvoeren, pauzeren en hervatten.
-- Bij herstart blijven voltooide taken in het log; nog niet begonnen taken worden niet als afgerond weergegeven. De server weigert directe, door de API-gebruiker verzonnen \`task.started\`-events.
-- Zie \`docs/mission-execution-v0.1.md\` en \`tests/missions-execution.test.ts\`.
+- **Opdracht en voorwaarden:** missieplan met afhankelijke taken, ongewijzigde brontekst en exact verankerde beperkingen. Een menselijke goedkeuring is een afzonderlijk event; verboden blijven blokkeren. Het detecteren van alle verborgen voorwaarden is nog niet bewezen.
+- **Uitvoeren:** `text-normalize`, `text-metrics`, `repo-search` en het samengestelde recept `text-inspect` gebruiken echte, begrensde lokale implementaties. Vier taken per ronde zijn nog **sequentieel**, geen vier gelijktijdige workers.
+- **Brononderzoek:** de RepoSearch-worker doorzoekt een door de serverbeheerder gekozen lokale checkout. Resultaten bevatten bestand, regel, SHA-256 en waar mogelijk commit. Ze zijn kandidaatbronnen, geen automatisch geteste werkwijzen.
+- **Planner:** een optioneel lokaal Ollama-model maakt taakplannen als voorstel. De server keurt niet namens de gebruiker goed, voert geen modelvoorgestelde opdracht rechtstreeks uit en controleert de volledige inhoudelijke juistheid niet.
+- **Worker Builder:** een eerste echte, maar vaste samenstelling van twee bekende lokale bewerkingen. Geen gegenereerde code, download uit repository of onbekende uitvoerbare plugin.
+- **Registry:** versiehistorie, onafhankelijke tests per kandidaatversie, persoonsgebonden vrijgave, quarantaine, rollback en herstelpogingen. Testresultaten mogen niet via de publieke API worden vervalst.
+- **Bewijsinspectie:** het bestaande atoomlog is via beveiligde routes opnieuw zichtbaar in het dashboard. Via bestaande atoom-ID's kunnen uitvoertaken naar bewijs verwijzen zonder zichzelf bewezen te verklaren.
+- **Uitvoeringsgeschiedenis:** `GET /ops/missions/:id/trace` leidt eerdere pogingen, statussen, werkerversies, stopredenen en actorbesluiten af uit het operationslog, zonder ruwe taaktekst terug te geven.
+- **Herstel:** een mens kan een onderbroken lokale taak opnieuw laten starten. Voor externe acties ontbreekt nog een veilige algemene idempotency-afhandeling; die worden niet automatisch herhaald.
+- **Dashboard:** oorspronkelijke demonstratie en verbonden servertaken blijven gescheiden. Bij een live verbinding tonen **Overzicht**, **Echte uitvoering**, **Kwaliteit**, **Bewijs**, **Workerregistratie** en **Logboek** servergegevens in plaats van fictieve prestaties. De demo is niet gekoppeld aan de live API.
 
-**Beperkingen:** maximaal twee echte lokale taaksoorten, geen taalmodelaanroep, geen externe zoekactie, geen parallelle workers en geen langdurige achtergrondjobs. De begrensde \`run\`-route werkt binnen één HTTP-verzoek. Het operationslog moet nog transactioneel, onafhankelijk controleerbaar en herstelbaar worden voordat we productie of lange looptijden claimen.
+**Nog niet gerealiseerd:** langdurige autonome achtergrondloop, volledig automatische betrouwbare taakontleding, werkelijk parallel workerleger, algemene code-Builder, autonome reparaties, webzoeker, externe database/connectoren, kostenmeting en operationeel browsermodel. De gebruiker kan de live uitvoer nog niet op eaimodel.nl zelf starten.
+
+Zie `docs/mission-execution-v0.1.md`, `docs/hergebruik-audit-2026-11-10.md` en de tests in `tests/`.
 
 ## Nog te bouwen, in deze volgorde
 
@@ -92,7 +97,7 @@ Werkelijke server met geconfigureerde `EAI_OPERATIONS_DIR`, beveiligde toegang, 
 
 ### Fase B: echte opdracht- en uitvoeringsregistratie
 
-Maak een getypeerde `Mission`, `Task`, `WorkerRun` en geneste `TraceSpan`. Een trace koppelt opdracht -> fase -> taak -> worker -> model/tool/search -> uitkomst en controle, met latency, tokengebruik en prijs per span (waar beschikbaar), foutreden en artefactbron. Exporteer later eventueel OpenTelemetry. Het dashboard moet wachten, bezig, geslaagd, mislukt en toestemming nodig afzonderlijk tonen.
+Maak een getypeerde `Mission`, `Task`, `WorkerRun` en geneste `TraceSpan`. De huidige trace koppelt missie, taak, gebruikte worker, eerdere pogingen, duur en gebeurtenislog. Voeg hier later afzonderlijke fase-, model-, tool-, zoek- en artefactspans aan toe. Tokengebruik en kosten blijven onbekend zolang ze niet zijn gemeten. Exporteer later eventueel OpenTelemetry. Het dashboard moet wachten, bezig, geslaagd, mislukt en toestemming nodig afzonderlijk tonen.
 
 **Acceptatie:** één echte testrun met minimaal twee taken en één afhankelijkheid is volledig terug te vinden en reproduceerbaar.
 
@@ -133,7 +138,7 @@ Bekijk Langfuse of Opik voor tracing/evaluatie en Agno AgentOS voor de scheiding
 ## Uitgifte en grenzen
 
 - EAIwork PR #23 en website PR #152 blijven concept tot controles en review zijn afgerond.
-- Deze eerste uitbreiding bouwt **geen** volledige automatische planner, websearch, RepoSearch, Worker Builder, modelrouting of permanente workers. Het dashboard toont hun eindontwerp met fictieve voorbeelden.
+- Deze uitbreiding heeft een optionele voorstelplanner, lokale RepoSearch en een vaste Builder-compositie. Ze bouwt **geen** betrouwbare autonome planner, openbare websearch, algemeen codebouwend systeem, gemeten modelrouter, parallelle workers of permanente uitvoeringsdienst. De openbare demo blijft herkenbaar fictief.
 - Het operationslog gebruikt nog geen externe cryptografische witness, contrairement het bestaande atoomlog. Hash + head op hetzelfde opslagmedium is geen bewijs tegen een aanvaller die beide kan wijzigen.
 - De website-HTML is een gepinde demonstratiesnapshot; vóór latere publicatie moet de bron- en doelversie weer exact worden vergeleken.
 - De repositorylicenties waren in het eerdere onderzoek nog placeholders; vaststelling is nodig vóór openbare distributie als volwaardig herbruikbaar product.
