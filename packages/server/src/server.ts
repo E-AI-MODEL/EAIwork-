@@ -9,7 +9,7 @@ import {
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
-import { runMissionStep } from "../../operations/src/execution.ts";
+import { runMissionStep, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
@@ -338,6 +338,32 @@ export function makeServer(cfg: Config) {
             const event={type:"mission.create" as const,plan:(body as {plan:MissionPlan}).plan};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})\/evaluate$/.exec(url.pathname);
+        if(req.method==="POST"&&builtinTest){
+          if(actor.kind!=="person")throw new HttpError(403,"person required to request worker evaluation");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"evaluation takes no arbitrary input");
+          try{
+            const id=builtinTest[1];
+            const record=operations.snapshot().workers[id];
+            if(!record||record.stage!=="candidate")throw new Error("worker is not an eligible candidate");
+            const check=evaluateBuiltin(id,record.contract);
+            const evidenceRef="builtin-fixtures:"+randomUUID();
+            const measurement={
+              id:"measurement-"+randomUUID(),workerId:id,version:record.contract.version,
+              taskKind:check.taskKind,dataset:check.dataset,suiteVersion:check.suiteVersion,
+              cohort:check.cohort,metric:check.metric,numerator:check.numerator,denominator:check.denominator,
+              measuredAt:new Date().toISOString(),evidenceRef,
+            };
+            operations.append({
+              id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"check",id:"check:builtins"},
+              event:{type:"quality.record",measurement},
+            });
+            return json(res,200,{...check,evidenceRef,passed:check.numerator===check.denominator});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
