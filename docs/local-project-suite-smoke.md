@@ -44,8 +44,16 @@ docker pull node:22-alpine
 **3. Haal EAIwork op**
 
 ```sh
-git clone -b feature/easy-local-ollama-start-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+git clone -b feature/local-connection-checks-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
+```
+
+**Heb je EAIwork al eerder opgehaald?** Voer de `git clone`-opdracht niet opnieuw uit. Stop eerst de draaiende EAIwork-server met **Ctrl+C**. Gebruik in plaats van stap 3:
+
+```sh
+cd ~/EAIwork-test
+git fetch origin
+git switch --track origin/feature/local-connection-checks-v01-20261110
 ```
 
 **4. Start EAIwork met een veilig voorbeeldproject**
@@ -72,6 +80,14 @@ EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven o
 **5. Open je lokale dashboard**
 
 Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
+
+**Controleer eerst de drie verbindingen.** Bovenaan Codeworker staat **Verbindingen**, met **Controleer verbindingen opnieuw**. Daar zie je drie afzonderlijke uitkomsten:
+
+- **Dashboard en EAIwork: Bereikbaar.** Het toegangstoken klopt en de lokale server antwoordt.
+- **Ollama: Bereikbaar.** Ollama antwoordt op deze Mac en het gekozen model staat in de lijst. Dit bewijst nog niet dat het model goede code genereert.
+- **Docker: Bereikbaar.** Docker reageert en `node:22-alpine` staat lokaal. Een echte projecttest moet nog slagen.
+
+Staat ergens **Niet bereikbaar**, **Model ontbreekt** of **Testafbeelding ontbreekt**, dan geeft het scherm aan wat je moet doen. Je hoeft hiervoor geen extra sleutel in te voeren. Het toegangstoken maakt zelf geen verbinding met Ollama.
 
 **6. Leg de voorbeeldopdracht vast**
 

@@ -2,7 +2,7 @@
 import {createHash,randomUUID} from "node:crypto";
 import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
-import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
+import {localOllamaHost,discoverLocalOllamaModels} from "../../gateway/src/ollama-provider.ts";
 import {checkCodeSyntax,type CodePreflight} from "./code-preflight.ts";
 import {compareSource} from "./code-diff.ts";
 import {runIsolatedNodeTest,type DockerTestResult,type DockerTestInput} from "./docker-code-test.ts";
@@ -125,6 +125,20 @@ export class LocalCodeWorkspace {
         throw new Error("Codevoorstelmap is onveilig");
     }else mkdirSync(this.storage,{mode:0o700});
     if(process.platform!=="win32")chmodSync(this.storage,0o700);
+  }
+  /** A non-generating reachability check: it does not prove that inference succeeds. */
+  async probeOllama(){
+    try{
+      const installed=await discoverLocalOllamaModels(this.host,3000);
+      if(!installed.includes(this.model))
+        return {status:"model-missing" as const,modelId:this.modelId,
+          detail:"Ollama reageert, maar het ingestelde model is niet beschikbaar."};
+      return {status:"ready" as const,modelId:this.modelId,
+        detail:"Ollama reageert en het gekozen model staat lokaal klaar. Nog geen modelantwoord getest."};
+    }catch{
+      return {status:"unavailable" as const,modelId:this.modelId,
+        detail:"Ollama reageert niet. Controleer of Ollama op deze computer draait."};
+    }
   }
   /** Only the administrator-selected worktree is readable. No arbitrary paths. */
   fileSha256(path:string){

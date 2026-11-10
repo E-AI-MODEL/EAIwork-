@@ -15,6 +15,7 @@ import {proposeComposedWorker} from "../packages/operations/src/builder.ts";
 import type {WorkerContract,OpsEvent,OpsActor} from "../packages/operations/src/registry.ts";
 import type {PlanningModel} from "../packages/operations/src/planner.ts";
 import type {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
+import type {DockerConnectionStatus} from "../packages/operations/src/local-docker-status.ts";
 import type {ProjectTestInput,ProjectTestResult} from "../packages/operations/src/docker-project-suite.ts";
 import type {GitHubReader} from "../packages/operations/src/github-actions.ts";
 
@@ -29,7 +30,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string;codeWorkspace?:LocalCodeWorkspace;projectSuiteRunner?:(input:ProjectTestInput)=>Promise<ProjectTestResult>}={}){
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string;codeWorkspace?:LocalCodeWorkspace;projectSuiteRunner?:(input:ProjectTestInput)=>Promise<ProjectTestResult>;dockerConnectionProbe?:()=>DockerConnectionStatus}={}){
   const profile=options.persistentDir?openLocalProfile(options.persistentDir):null;
   const root=profile?.root??mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=profile?.witnessDir??mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
@@ -47,6 +48,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
     codeWorkspace:options.codeWorkspace,
+    dockerConnectionProbe:options.dockerConnectionProbe,
     projectSuiteRunner:options.projectSuiteRunner,
     githubActionReader:options.githubActionReader,
     githubReadToken:options.githubReadToken,

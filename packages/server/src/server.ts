@@ -25,6 +25,7 @@ import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import type {LocalCodeWorkspace} from "../../operations/src/code-worker.ts";
+import {probeDockerConnection,type DockerConnectionStatus} from "../../operations/src/local-docker-status.ts";
 import {OrderedCodePlans} from "../../operations/src/ordered-code-plans.ts";
 import type {ProjectTestInput,ProjectTestResult} from "../../operations/src/docker-project-suite.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
@@ -74,6 +75,8 @@ export interface Config {
   planningModel?: PlanningModel;
   /** Optional, operator-approved local code worktree. No shell or arbitrary file writes. */
   codeWorkspace?: LocalCodeWorkspace;
+  /** Test-only override for the non-writing Docker availability check. */
+  dockerConnectionProbe?:()=>DockerConnectionStatus;
   /** Test-only injection for deterministic multi-file checks; production uses Docker. */
   projectSuiteRunner?: (input:ProjectTestInput)=>Promise<ProjectTestResult>;
   maxBodyBytes?: number;
@@ -656,6 +659,18 @@ export function makeServer(cfg: Config) {
             return json(res,200,{events,source:"operations-hash-journal",
               note:"Geregistreerde gebeurtenissen, geen inhoudelijke codegoedkeuring."});
           }catch{return json(res,503,{error:"Operationslog is niet beschikbaar"})}
+        }
+        if (req.method === "GET" && url.pathname === "/ops/connections") {
+          const model=cfg.codeWorkspace?
+            await cfg.codeWorkspace.probeOllama():
+            {status:"not-configured" as const,modelId:cfg.planningModel?.id??null,
+             detail:"Geen codewerkmap met een controleerbare Ollama-verbinding ingesteld."};
+          const docker=(cfg.dockerConnectionProbe??probeDockerConnection)();
+          return json(res,200,{
+            server:{status:"ready",detail:"Dashboard is aangemeld bij deze lokale EAIwork-server."},
+            ollama:model,docker,checkedAt:new Date().toISOString(),
+            note:"Ollama-bereikbaarheid bewijst nog geen geslaagde modeluitvoer. Een Docker-controle is nog geen geslaagde projecttest."
+          });
         }
         if (req.method === "GET" && url.pathname === "/ops/code/workspace") {
           return json(res,200,{enabled:!!cfg.codeWorkspace,
