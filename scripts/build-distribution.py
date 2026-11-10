@@ -46,13 +46,17 @@ def write_member(archive, name, content):
 
 def build():
     files = collected()
+    license_bytes = files["LICENSE"]
+    if not (license_bytes.startswith(b"# PolyForm Noncommercial License 1.0.0\\n") and
+            b"Required Notice: Copyright 2026 H. Visser / E-AI-MODEL." in license_bytes):
+        raise ValueError("noncommercial repository license missing or unexpected")
     manifest = {
         "schema": "eaiwork-local-demo-v1",
         "purpose": "local-demo-only",
         "requires": "Node.js >=22.18",
         "start": "npm run demo:dashboard",
         "publicationApproved": False,
-        "licenseReview": "required",
+        "licenseReview": "repo-license-present",
         "files": {name: {"sha256": hashlib.sha256(data).hexdigest(),
                          "bytes": len(data)} for name, data in files.items()},
     }
@@ -82,7 +86,8 @@ def verify(archive_path):
         manifest = json.loads(archive.read(MANIFEST))
         if (manifest.get("schema") != "eaiwork-local-demo-v1" or
                 manifest.get("publicationApproved") is not False or
-                manifest.get("purpose") != "local-demo-only"):
+                manifest.get("purpose") != "local-demo-only" or
+                manifest.get("licenseReview") != "repo-license-present"):
             raise ValueError("wrong distribution manifest")
         records = manifest.get("files")
         if not isinstance(records, dict) or set(records) != set(names) - {MANIFEST}:
