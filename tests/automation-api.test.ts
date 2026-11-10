@@ -24,6 +24,7 @@ test("authorization, manual-run exclusion and bounded automation via HTTP",async
     assert.equal((await call("POST",prefix+"start",{maxStarts:1},"invalid")).status,401);
     assert.equal((await call("POST",prefix+"start",{maxStarts:0})).status,422);
     assert.equal((await call("POST",prefix+"start",{maxStarts:33})).status,422);
+    assert.equal((await call("POST",prefix+"start",{maxStarts:2,resumeAfterRestart:"yes"})).status,422);
     assert.equal((await call("POST",prefix+"start",{maxStarts:1,unsafe:true})).status,422);
     assert.equal((await call("POST","/ops/events",{type:"mission.automation.start",missionId:mission.id,maxStarts:32})).status,403);
     assert.equal((await call("POST",prefix+"start",{maxStarts:1})).status,201);
@@ -73,5 +74,25 @@ test("timer continues approved local steps without repeated browser clicks",asyn
     assert.equal(last.tasks["task-clean"].status,"done");
     assert.equal(last.tasks["task-count"].status,"done");
     assert.equal(last.tasks["task-count"].run.verification,"not-evaluated");
+  }finally{await demo.close()}
+});
+
+test("HTTP accepts explicit restart consent only for the approved local mission queue",async()=>{
+  const demo=createDemoServer({schedulerIntervalMs:0});
+  try{
+    await new Promise<void>(ok=>demo.server.listen(0,"127.0.0.1",ok));
+    const base="http://127.0.0.1:"+((demo.server.address() as AddressInfo).port);
+    const call=(method:string,path:string,payload?:unknown)=>fetch(base+path,{
+      method,headers:{Authorization:"Bearer "+demo.token,...(payload?{"content-type":"application/json"}:{})},
+      ...(payload?{body:JSON.stringify(payload)}:{}),
+    });
+    const id="mission-approved-api-restart";
+    assert.equal((await call("POST","/ops/missions",{plan:{...mission,id}})).status,201);
+    const path="/ops/missions/"+id+"/automation/start";
+    assert.equal((await call("POST",path,{maxStarts:2,resumeAfterRestart:true})).status,201);
+    const payload=await(await call("GET","/ops/missions")).json() as any;
+    assert.equal(payload.missions[id].automation.resumeAfterRestart,true);
+    assert.equal(payload.missions[id].automation.enabled,true);
+    assert.equal(payload.missions[id].automation.starts,0);
   }finally{await demo.close()}
 });
