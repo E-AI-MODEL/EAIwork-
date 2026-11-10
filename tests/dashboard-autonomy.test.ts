@@ -47,5 +47,5 @@ test("automatic execution visibly requires consent and never claims autonomous c
     id:"unsafe",tasks:[{taskKind:"repo-search",effect:"external-write"}]
   }});
   assert.match(unsafe,/Automatisch starten is hier uitgeschakeld/);
-  assert.match(unsafe,/<button disabled>Start automatisch<\/button>/);
+  assert.match(unsafe,/<button[^>]*disabled[^>]*>Start automatisch<\/button>/);
 });
