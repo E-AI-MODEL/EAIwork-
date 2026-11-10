@@ -591,14 +591,20 @@ function compactDashboard(live){
 }
 function liveOverview(){
   const missions=Object.values(s.liveOps?.missions||{});
-  if(missions.length)return compactDashboard(true);
+  const currentCodePlan=codePlans.find(p=>p.state==='active'||p.state==='blocked')||codePlans[0]||null;
+  const codePanel=section('Codeworker',currentCodePlan?
+    '<div class="card pad"><b>'+h(currentCodePlan.title)+'</b><p class="smalltext">'+
+    h(currentCodePlan.state==='done'?'Afgerond':currentCodePlan.state==='blocked'?'Geblokkeerd':currentCodePlan.state==='stopped'?'Gestopt':'In behandeling')+
+    ' · '+currentCodePlan.steps.filter(x=>x.status==='done').length+'/'+currentCodePlan.steps.length+' bestanden afgerond</p>'+btn('Open Codeworker','nav','primary','data-id="code"')+'</div>':
+    '<div class="card pad">Nog geen lokale codeplannen. '+btn('Open Codeworker','nav','small','data-id="code"')+'</div>');
+  if(missions.length)return compactDashboard(true)+'<div class="mt">'+codePanel+'</div>';
   const workers=Object.values(s.liveOps?.workers||{});
   const history=s.liveOps?.history||[];
   const measures=s.liveOps?.measurements||[];
   const defects=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
-  const kpis=[['Opdrachten',0,'Nog geen werkplan','uitvoering'],
+  const kpis=[['Taakplannen',missions.length,'In de lokale registratie','uitvoering'],
+    ['Codeplannen',codePlans.length,'In de lokale codewerkmap','code'],
     ['Workers',workers.length,'Geregistreerde contracten','workers'],
-    ['Metingen',measures.length,'Werkelijk opgeslagen','kwaliteit'],
     ['Besluiten',defects.length,'Openstaande beoordelingen','hitl']];
   return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / lokaal</span>'+
     '<h1>Werkoverzicht</h1><p>Gegevens uit jouw lokale EAIwork-server.</p></div>'+
@@ -612,8 +618,8 @@ function liveOverview(){
       '<button class="dash-kpi" data-action="nav" data-id="'+route+'"><span>'+h(label)+'</span>'+
       '<strong>'+h(value)+'</strong><small>'+h(note)+'</small></button>').join('')+'</div>'+
     '<div class="dash-columns"><div class="dash-main-column">'+
-    dashControlsCard('Je eerste opdracht',
-      '<div class="dash-empty">Er staat nog geen goedgekeurd werkplan in deze lokale registratie.</div>'+
+    dashControlsCard('Taakuitvoering',
+      '<div class="dash-empty">Er staat nog geen taakplan in deze lokale registratie. De codeplannen staan bij Codeworker.</div>'+
       '<div class="mt">'+btn('Start met Codeworker','nav','','data-id="code"')+
       btn('Nieuwe taak','nav','','data-id="uitvoering"')+'</div>','','')+
     '</div><div class="dash-side-column">'+
@@ -621,7 +627,9 @@ function liveOverview(){
       history.slice(-5).reverse().map(row=>'<div class="dash-activity"><div><b>'+
       h(row.event?.type||'Gebeurtenis')+'</b><small>'+h(row.at||'')+'</small></div></div>').join(''):
       '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>',
-      'Logboek','logboek')+'</div></div>';
+      'Logboek','logboek')+'</div></div>'+
+    '<div class="mt">'+codePanel+'</div>';
+
 }
 function localConnectView(){
   return header('Lokale werkruimte','Dit is de echte EAIwork-omgeving. Er worden geen demo-opdrachten of fictieve metingen getoond.')+
