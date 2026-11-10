@@ -14,6 +14,8 @@ jobs:
         with: { node-version: 22 }
       - name: Unit, server and gateway tests
         run: node --test "tests/*.test.ts"
+      - name: Operations growth diagnostic (non-gating timings)
+        run: node benchmarks/operations-growth.ts --counts=100,250,500
       - name: Conformance vectors (asymmetry guard, determinism)
         run: npm run conformance
       - name: Packs must lint clean
