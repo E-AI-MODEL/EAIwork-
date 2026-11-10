@@ -67,3 +67,26 @@ Open de lokale werkruimte en kies **Meer > Codeworker**. Geef één **bestaand r
 - De syntaxisuitslag bewijst niet dat de code correct werkt. Tests, terminalcommando's en publicatie worden niet gestart. De gewone missieplanner en operationsstatus blijven gescheiden van deze eerste handmatig beoordeelde bestandswijziging.
 
 Deze eerste codeworker is nog geen algemene autonome softwareontwikkelaar. Er is geen OS-sandbox, geen automatische git-commit en geen testexecutor. Gebruik voor de proef uitsluitend een afzonderlijke werkmap met niet-vertrouwelijke broncode.
+
+## JavaScript-test in Docker (aparte proef)
+
+Voor deze functie moet Docker lokaal beschikbaar zijn. Start Docker Desktop (macOS) of de Docker-daemon (Linux) en download een keer de testafbeelding:
+
+```sh
+docker pull node:22-alpine
+```
+
+EAIwork downloadt de Docker-afbeelding niet tijdens een codeaanvraag. Het programma controleert welke versie lokaal staat en bewaart de exacte afbeelding-ID bij de uitslag. Windows is voor deze eerste testroute nog niet gecontroleerd.
+
+Gebruik de Codeworker met een gewone `.js`-bron en een apart, al bestaand `.test.js`-bestand. Het testbestand moet zelfstandig kunnen werken met de voorgestelde bron en de standaardmodules van Node.js. Bijvoorbeeld `src/counter.js` en `tests/counter.test.js`. EAIwork kopieert uitsluitend de voorgestelde vervangende bron en dit testbestand naar een tijdelijke map. Het originele project wordt niet in Docker gemount.
+
+In het dashboard:
+
+1. Geef het bronbestand en desgewenst het testbestand op bij het maken van het voorstel.
+2. Gebruik **Test in Docker**. De test draait alleen binnen de container, met uitgeschakeld netwerk, een alleen-lezen kopie, een niet-bevoorrechte gebruiker en grenzen voor CPU, geheugen, processen en looptijd.
+3. Lees de testuitslag. EAIwork bewaart de SHA-256 van het voorstel, de SHA-256 van het gebruikte testbestand en de Docker-afbeelding-ID.
+4. Klik **Controleer voorstel opnieuw**. De knop om het bestand toe te passen wordt pas beschikbaar nadat de bron en het voorstel nog overeenkomen, en de opgegeven test is geslaagd. Ook daarna is jouw expliciete toestemming nodig.
+
+Een mislukte of niet-uitgevoerde Docker-test blokkeert het toepassen **wanneer een testbestand is opgegeven**. Zonder testbestand is er geen automatische runtime-test; de bestaande syntaxis- en menselijke controles blijven bestaan. Een geslaagde test zegt uitsluitend iets over die meegeleverde test, niet over alle functionaliteit of veiligheid.
+
+Er worden geen scripts uit `package.json` gestart, geen dependencies geïnstalleerd en geen opdrachten van het model als shellcommando uitgevoerd. De eerste versie is beperkt tot JavaScript met Node.js `node:test`. Docker zelf blijft een krachtige lokale dienst; dit is nog geen algemeen bewezen beveiligingsomgeving voor willekeurige vijandige code.
