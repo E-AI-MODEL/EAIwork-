@@ -45,7 +45,15 @@ export function buildMissionTrace(state:OpsState,missionId:string){
         }else{run.errorCode=e.errorCode;run.status="failed";}
       }
     }
-    if(e.type==="task.retry")row.reason=e.reason;
+    if(e.type==="task.retry"){
+      row.reason=e.reason;
+      const attempts=traces.get(e.taskId)??[];
+      const recent=attempts.at(-1);
+      if(recent && recent.status==="running"){
+        recent.status="interrupted";
+        recent.interruptionReason=e.reason;
+      }
+    }
     if(e.type==="mission.gate.resolve")row.constraintId=e.constraintId;
     eventRecords.push(row);
   }
