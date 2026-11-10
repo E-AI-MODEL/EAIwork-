@@ -10,7 +10,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "dist" / "eaiwork-local-demo.zip"
 FIXED = (2026, 1, 1, 0, 0, 0)
 INCLUDE = ("package.json", "LICENSE", "README.md", "scripts/local-demo.ts",
-           "scripts/local-text-executor.ts", "scripts/local-ollama.ts")
+           "scripts/local-text-executor.ts", "scripts/local-ollama.ts",
+           "scripts/local-profile.ts")
 DIRECTORIES = ("packages", "packs", "prototypes/dashboard")
 MAX_FILES = 400
 MAX_FILE_SIZE = 2 * 1024 * 1024
