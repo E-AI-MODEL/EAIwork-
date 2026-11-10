@@ -50,7 +50,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
       [workerToken]:{ownerId:"executor-local-demo",
         taskKinds:["text-normalize","text-metrics","text-inspect","reference-extract"]},
       [otherWorkerToken]:{ownerId:"executor-other-demo",
-        taskKinds:["text-normalize","text-metrics"]},
+        taskKinds:["text-normalize","text-metrics","text-inspect","reference-extract"]},
     },
   });
   if(!operations)throw new Error("demonstration operations journal missing");
