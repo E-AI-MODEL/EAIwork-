@@ -35,12 +35,15 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     pair.publicKey.export({format:"pem",type:"spki"}).toString(),
   );
   const token=randomBytes(32).toString("hex");
+  const workerToken=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
   const {server,operations,scheduler}=makeServer({
     dir:join(root,"evidence"),operationsDir:join(root,"operations"),
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
     tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}}},
+    executorTokens:{[workerToken]:{ownerId:"executor-local-demo",
+      taskKinds:["text-normalize","text-metrics"]}},
   });
   if(!operations)throw new Error("demonstration operations journal missing");
   const emit=(event:OpsEvent,actor:OpsActor=person)=>operations.append({
@@ -104,7 +107,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     rmSync(root,{recursive:true,force:true});
     rmSync(witnessDir,{recursive:true,force:true});
   }
-  return {server,token,scheduler,close};
+  return {server,token,workerToken,scheduler,close};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const demo=createDemoServer();
@@ -114,6 +117,9 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
     process.stdout.write("\nEAIwork lokale proef (alleen deze computer)\n"+
       "Dashboard: http://127.0.0.1:"+port+"/dashboard\n"+
       "Toegangstoken: "+demo.token+"\n"+
+      "Losse tekstworker (alleen lokale proef): EAI_EXECUTOR_TOKEN="+demo.workerToken+"\n"+
+      "Start apart: EAI_EXECUTOR_URL=http://127.0.0.1:"+port+
+        " EAI_EXECUTOR_TOKEN=<token> node scripts/local-text-executor.ts\n"+
       "Open Contracten en registratie en verbind met dit tijdelijke token.\n"+
       "Er zijn vier opdrachten en vier geteste lokale workers.\n"+
       "Stop met Ctrl+C. Tijdelijke gegevens worden verwijderd.\n\n");
