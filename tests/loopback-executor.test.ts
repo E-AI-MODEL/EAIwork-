@@ -110,7 +110,7 @@ test("separate operating-system worker process completes a claimed job",async()=
       {maxStarts:2,executionMode:"remote-text"})).status,201);
     const execute=()=>new Promise<number>((resolve,reject)=>{
       const child=spawn(process.execPath,["scripts/local-text-executor.ts"],{
-        cwd:process.cwd(),env:{...process.env,EAI_EXECUTOR_URL:h.base,
+        cwd:process.cwd(),env:{EAI_EXECUTOR_URL:h.base,
           EAI_EXECUTOR_TOKEN:h.demo.workerToken},
         stdio:["ignore","pipe","pipe"],
       });
@@ -237,5 +237,65 @@ test("one bounded local executor finishes dependent steps without manual restart
     await assert.rejects(runExecutorBatch(h.base,h.demo.workerToken,{maxTasks:9}),
       /limits must be small/);
     assert.equal((await h.get("/ops/verify")).status,200);
+  }finally{await h.demo.close()}
+});
+
+
+test("one standalone worker process can finish two dependent jobs within an explicit bound",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-child-chain";
+    const dependent={
+      id,title:"Tekst met afhankelijke vervolgtaak",
+      goal:"Een los proces verwerkt twee goedgekeurde stappen",
+      tasks:[
+        {id:"task-clean",title:"Opschonen",taskKind:"text-normalize",dependsOn:[],
+          input:{text:"  Dit   werkt  "}},
+        {id:"task-count",title:"Tellen",taskKind:"text-metrics",dependsOn:["task-clean"],
+          textFrom:"task-clean"},
+      ],
+    };
+    assert.equal((await h.request("/ops/missions",{plan:dependent})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:2,executionMode:"remote-text"})).status,201);
+    const exit=await new Promise<number>((resolve,reject)=>{
+      const child=spawn(process.execPath,["scripts/local-text-executor.ts","--max-tasks=2"],{
+        cwd:process.cwd(),env:{EAI_EXECUTOR_URL:h.base,
+          EAI_EXECUTOR_TOKEN:h.demo.workerToken},
+        stdio:["ignore","pipe","pipe"],
+      });
+      let output="";
+      child.stdout.on("data",(chunk:Buffer)=>{output+=chunk.toString("utf8")});
+      child.stderr.on("data",()=>{});
+      child.once("error",reject);
+      child.once("close",(code)=>{
+        assert.ok(output.includes("2 teksttaak/taken afgerond"));
+        assert.equal(output.includes(h.demo.workerToken),false);
+        resolve(code??1);
+      });
+    });
+    assert.equal(exit,0);
+    const result=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(result.tasks["task-clean"].status,"done");
+    assert.equal(result.tasks["task-count"].status,"done");
+    assert.equal(result.tasks["task-count"].run.output.words,2);
+    assert.equal(result.automation.starts,2);
+  }finally{await h.demo.close()}
+});
+test("remote-text consent refuses a mission requiring repository or external workers",async()=>{
+  const h=await harness();
+  try{
+    const id="mission-executor-unsafe-kind";
+    const unsafe={
+      id,title:"Niet toegestane adapter",goal:"Blokkeer speciale workers",
+      tasks:[{id:"task-unsafe",title:"Repositoryzoekactie",taskKind:"repo-search",
+        dependsOn:[],input:{text:"worker"}}],
+    };
+    assert.equal((await h.request("/ops/missions",{plan:unsafe})).status,201);
+    assert.equal((await h.request("/ops/missions/"+id+"/automation/start",
+      {maxStarts:2,executionMode:"remote-text"})).status,422);
+    const state=(await(await h.get("/ops/missions")).json() as any).missions[id];
+    assert.equal(state.automation,undefined);
+    assert.equal((await h.request("/executor/v1/claim",{},h.demo.workerToken)).status,204);
   }finally{await h.demo.close()}
 });
