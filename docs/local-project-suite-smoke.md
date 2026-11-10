@@ -44,7 +44,7 @@ docker pull node:22-alpine
 **3. Haal EAIwork op**
 
 ```sh
-git clone -b feature/separate-persisted-demo-fixtures-v01-20261111 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+git clone -b feature/first-product-proof-v01-20261111 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
 ```
 
@@ -53,7 +53,7 @@ cd ~/EAIwork-test
 ```sh
 cd ~/EAIwork-test
 git fetch origin
-git switch --track origin/feature/separate-persisted-demo-fixtures-v01-20261111
+git switch --track origin/feature/first-product-proof-v01-20261111
 ```
 
 **4. Start EAIwork met een veilig voorbeeldproject**
@@ -90,6 +90,8 @@ Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebr
 - **Docker: Bereikbaar.** Docker reageert en `node:22-alpine` staat lokaal. Een echte projecttest moet nog slagen.
 
 Staat ergens **Niet bereikbaar**, **Model ontbreekt** of **Testafbeelding ontbreekt**, dan geeft het scherm aan wat je moet doen. Je hoeft hiervoor geen extra sleutel in te voeren. Het toegangstoken maakt zelf geen verbinding met Ollama.
+
+**Wat is het voorbeeldproject?** Het is een kleine test met een bedrag en een factuur. We gebruiken die twee samenhangende bestanden om EAIwork te beproeven. Het is niet het product dat EAIwork uiteindelijk moet bouwen.
 
 **6. Leg de voorbeeldopdracht vast**
 
