@@ -60,6 +60,16 @@ Geen universeel slagingscijfer voor alle workers. De eerste indicator vergelijkt
 - `tests/operations*.test.ts` en `tests/dashboard-syntax.test.ts`: contract- en toegangscontroles, herstel en opslagintegriteit, API en UI-syntax.
 - Websitebranch `E-AI-MODEL/website` [PR #152]: een traceerbare demo-snapshot als bron onder `content/eaiwork-dashboard/index.html`, door de generator gepubliceerd naar `/tools/eaiwork/`. Tests zijn aan de websiteworkflow toegevoegd.
 
+## Uitbreiding workerbibliotheek en selectie (eerste bouwstap uitgevoerd)
+
+- `packages/operations/src/catalog.ts`: **56 voorgestelde specialisaties**, verdeeld over plannen, zoeken, analyseren, uitvoeren, controleren en samenvoegen. De catalogus bewaart taaksoorten, benodigde hulpmiddelen en een voorlopig modeladvies. Alle entries zijn **design-only**, zonder fake uitvoerings- of prestatiemeting.
+- `packages/operations/src/selector.ts`: kiest alleen een toegelaten worker met precies passende taaksoort, een gekoppelde runtime-adapter, beschikbare capabilities, serverrechten en geschikt modeltype. Er volgt uitsluitend een voorstel; geen modelcall en geen toekenning van rechten. Een open defect, quarantaine of ontbrekende adapter blokkeert selectie.
+- `GET /ops/catalog`: geauthenticeerde, alleen-lezen inventaris met de werkelijke registratie naast de voorgestelde bibliotheek. Een onbekend aantal actieve instanties blijft expliciet onbekend.
+- Dashboard: apart scherm **Workerbibliotheek** met zes groepen, filter en selectie. Een gekozen specialisatie kan als voorlopig contract naar **Contracten en registratie** worden overgenomen. Geen verborgen Worker Builder-uitvoering.
+- Tests: catalogus- en contractsnapshot, rechten, selectiegrenzen en server-API.
+
+**Ontbreekt nog:** uitvoeradapters, echte workerinstantiatie, scheduler, modelbenchmark per taak/cohort, RepoSearch-verbinding en een Worker Builder die werkelijk nieuwe code kan testen. Deze bibliotheek is voorbereid, geen bewijs dat 56 workers operationeel zijn.
+
 ## Nog te bouwen, in deze volgorde
 
 ### Fase A: contracten en registratie afmaken (eerste verticale proef)
