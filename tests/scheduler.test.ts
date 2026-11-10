@@ -177,7 +177,7 @@ test("explicit restart consent preserves a bounded queue of not-yet-started loca
     scheduler.close();
   }finally{ctx.cleanup()}
 });
-test("a restart never retries a possibly executed in-flight task, even with explicit consent",()=>{
+test("restart requeues a known pure interrupted calculation without double spending",()=>{
   const ctx=setup();
   try{
     ctx.admit("text-normalize");
@@ -190,20 +190,48 @@ test("a restart never retries a possibly executed in-flight task, even with expl
       adapterId:"text-normalize",inputHash:"a".repeat(64),
       startedAt:new Date().toISOString(),verification:"not-evaluated",
     }},runner);
+    assert.throws(()=>ctx.append({type:"task.recover",missionId:id,taskId:"task-clean",
+      runId:"run-interrupted"},runner),/trusted scheduler/);
     ctx.reopen();
     const scheduler=new LocalMissionScheduler(ctx.store,0);
     let m=ctx.store.snapshot().missions[id];
-    assert.equal(m.automation?.enabled,false);
-    assert.equal(m.automation?.stoppedReason,"needs-review");
+    assert.equal(m.automation?.enabled,true);
     assert.equal(m.automation?.starts,1);
-    assert.equal(m.tasks["task-clean"].status,"running");
-    assert.equal(scheduler.tick().started,0);
-    assert.equal(m.tasks["task-clean"].attempts?.length??0,0);
-    ctx.append({type:"task.retry",missionId:id,taskId:"task-clean",
-      reason:"Human checked that the local operation can safely be repeated"});
-    m=ctx.store.snapshot().missions[id];
     assert.equal(m.tasks["task-clean"].status,"queued");
     assert.equal(m.tasks["task-clean"].attempts?.[0].runId,"run-interrupted");
+    assert.equal(m.tasks["task-clean"].attempts?.[0].recovery?.reason,"process-restart");
+    assert.throws(()=>ctx.append({type:"task.recover",missionId:id,taskId:"task-clean",
+      runId:"run-interrupted"},schedulerActor),/no matching in-flight task/);
+    assert.deepEqual(scheduler.tick().stopped,[{missionId:id,reason:"complete"}]);
+    m=ctx.store.snapshot().missions[id];
+    assert.equal(m.automation?.starts,2);
+    assert.equal(m.tasks["task-clean"].status,"done");
+    assert.notEqual(m.tasks["task-clean"].run?.runId,"run-interrupted");
+    assert.equal(m.tasks["task-clean"].attempts?.length,1);
+    assert.equal(ctx.store.verify().ok,true);
+    scheduler.close();
+  }finally{ctx.cleanup()}
+});
+test("a spent budget never automatically retries an interrupted task",()=>{
+  const ctx=setup();
+  try{
+    ctx.admit("text-normalize");
+    const id="mission-no-restart-budget";
+    ctx.append({type:"mission.create",plan:{...ctx.plan(id),tasks:[ctx.plan(id).tasks[0]]}});
+    ctx.append({type:"mission.automation.start",missionId:id,maxStarts:1,resumeAfterRestart:true});
+    ctx.append({type:"task.started",missionId:id,taskId:"task-clean",run:{
+      runId:"run-started",workerId:"text-normalize",workerVersion:"1.0.0",
+      adapterId:"text-normalize",inputHash:"b".repeat(64),
+      startedAt:new Date().toISOString(),verification:"not-evaluated",
+    }},runner);
+    ctx.reopen();
+    const scheduler=new LocalMissionScheduler(ctx.store,0);
+    const m=ctx.store.snapshot().missions[id];
+    assert.equal(m.automation?.enabled,false);
+    assert.equal(m.automation?.starts,1);
+    assert.equal(m.automation?.stoppedReason,"needs-review");
+    assert.equal(m.tasks["task-clean"].status,"running");
+    assert.equal(m.tasks["task-clean"].attempts?.length??0,0);
     assert.equal(scheduler.tick().started,0);
     scheduler.close();
   }finally{ctx.cleanup()}
