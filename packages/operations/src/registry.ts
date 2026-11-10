@@ -65,6 +65,10 @@ export interface Defect {
 }
 export type OpsEvent =
   | MissionEvent
+  | { type: "code.activity"; proposalId:string; action:"proposed"|"tested"|"applied"|"restored";
+      path:string; sourceSha256:string; replacementSha256:string;
+      result:"review-required"|"passed"|"failed"|"unavailable"|"applied"|"restored";
+      modelId:string; testSha256?:string }
   | { type: "worker.register"; contract: WorkerContract }
   | { type: "worker.release"; id: string; version?: string; evidenceRef: string }
   | { type: "worker.activate-version"; id: string; version: string; rationale: string }
@@ -118,7 +122,8 @@ function transitionOps(
   ].includes(e.type);
   const defectEvent=["defect.open","repair.record","human.decide"].includes(e.type);
   const qualityEvent=e.type==="quality.record";
-  const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent;
+  const codeEvent=e.type==="code.activity";
+  const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent||codeEvent;
   // A mission event can only change one mission; copy the dictionary and that
   // one record, not every unrelated mission and all its task results.
   const copyAffectedMission=():OpsState["missions"]=>{
@@ -139,6 +144,54 @@ function transitionOps(
   if (e.type === "mission.create" || e.type === "mission.extend" || e.type === "mission.release.submit" || e.type === "mission.release.review" || e.type === "mission.release.ci.observe" || e.type === "mission.release.artifact.observe" || e.type === "mission.release.github-artifact.observe" || e.type === "mission.pause" || e.type === "mission.resume" ||
       e.type === "task.started" || e.type === "task.lease.claim" || e.type === "task.lease.renew" || e.type === "task.lease.expire" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
     applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
+  } else if(e.type==="code.activity"){
+    // This journal records server-observed transitions. It is NOT an
+    // authorization to modify files and carries no source-code contents.
+    if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(e.proposalId)||
+       !["proposed","tested","applied","restored"].includes(e.action)||
+       typeof e.path!=="string"||e.path.length>240||!e.path.trim()||
+       e.path.includes("..")||e.path.startsWith("/")||
+       !/^[0-9a-f]{64}$/.test(e.sourceSha256)||
+       !/^[0-9a-f]{64}$/.test(e.replacementSha256))
+      fail("invalid code activity identity or hashes");
+    meaningful(e.modelId,"code model ID",160);
+    if(e.testSha256!==undefined&&!/^[0-9a-f]{64}$/.test(e.testSha256))
+      fail("invalid code test fingerprint");
+    const actionResults:Record<string,string[]> = {
+      proposed:["review-required"],tested:["passed","failed","unavailable"],
+      applied:["applied"],restored:["restored"]
+    };
+    if(!actionResults[e.action]?.includes(e.result))fail("invalid code action result");
+    const previous=current.history.filter(row=>
+      row.event.type==="code.activity"&&row.event.proposalId===e.proposalId);
+    if(e.action==="proposed"){
+      requireHuman(envelope.actor);
+      if(previous.length)fail("code proposal already recorded");
+      if(e.testSha256!==undefined)fail("test fingerprint not allowed in proposal");
+    }else{
+      const first=previous[0]?.event;
+      if(!first||first.type!=="code.activity"||first.action!=="proposed")
+        fail("code activity requires recorded proposal");
+      if(first.path!==e.path||first.sourceSha256!==e.sourceSha256||
+         first.replacementSha256!==e.replacementSha256||
+         first.modelId!==e.modelId)fail("code activity source mismatch");
+      const last=previous.at(-1)!.event;
+      if(last.type!=="code.activity")fail("invalid code history");
+      if(e.action==="tested"){
+        if(envelope.actor.kind!=="check")fail("code test outcome requires trusted checker");
+        if(!["proposed","tested"].includes(last.action)||!e.testSha256)
+          fail("code test requires pending proposal and test fingerprint");
+      }else if(e.action==="applied"){
+        requireHuman(envelope.actor);
+        if(!["proposed","tested"].includes(last.action))
+          fail("code apply requires pending proposal");
+        if(e.testSha256!==undefined)fail("apply must not invent test evidence");
+      }else if(e.action==="restored"){
+        requireHuman(envelope.actor);
+        if(last.action!=="applied")fail("code restoration requires applied proposal");
+        if(e.testSha256!==undefined)fail("restore must not invent test evidence");
+      }
+    }
   } else if (e.type === "worker.register") {
     requireHuman(envelope.actor);
     const c = e.contract;
