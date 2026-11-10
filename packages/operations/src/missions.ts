@@ -262,7 +262,10 @@ export function validateMissionExtension(mission:MissionRecord,plan:MissionPlan,
         fail("existing instruction constraints must cover appended tasks");
     }
 }
-export function applyMissionEvent(missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,at:string):void {
+export function applyMissionEvent(
+  missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,
+  at:string,verifiedJournalReplay=false,
+):void {
   if(e.type==="mission.create"){
     if(actor.kind!=="person")fail("a person must approve a mission");
     validateMissionPlan(e.plan);
@@ -531,7 +534,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.type==="task.lease.claim"){
       if(mission.automation?.enabled &&
          (mission.automation.executionMode!=="remote-text"||
-          !mission.automation.executorIds?.includes(e.ownerId)))
+          (!mission.automation.executorIds?.includes(e.ownerId) &&
+           !(verifiedJournalReplay && mission.automation.executorIds?.length===0))))
         fail("leased subprocesses require approval for this executor");
       if(typeof e.leaseId!=="string"||!ID.test(e.leaseId)||
          typeof e.ownerId!=="string"||!ID.test(e.ownerId))
