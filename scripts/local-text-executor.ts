@@ -50,14 +50,41 @@ export async function runExecutorOnce(baseUrl:string,token:string):Promise<Execu
     throw new Error("invalid coordinator completion acknowledgement");
   return {status:"completed",missionId:job.missionId,taskId:job.taskId,runId:job.runId};
 }
+/**
+ * Bounded polling for dependent work. This process always exits after
+ * at most eight tasks or a small, configured number of empty polls.
+ */
+export async function runExecutorBatch(
+  baseUrl:string,token:string,
+  options:{maxTasks:number;maxIdleChecks?:number;idleDelayMs?:number},
+):Promise<{completed:number;idleChecks:number}>{
+  const {maxTasks,maxIdleChecks=0,idleDelayMs=250}=options;
+  if(!Number.isInteger(maxTasks)||maxTasks<1||maxTasks>8||
+     !Number.isInteger(maxIdleChecks)||maxIdleChecks<0||maxIdleChecks>5||
+     !Number.isInteger(idleDelayMs)||idleDelayMs<100||idleDelayMs>2000)
+    throw new Error("executor batch limits must be small and explicit");
+  let completed=0,idleChecks=0;
+  while(completed<maxTasks){
+    const result=await runExecutorOnce(baseUrl,token);
+    if(result.status==="completed"){completed++;continue}
+    if(idleChecks>=maxIdleChecks)break;
+    idleChecks++;
+    await new Promise<void>(resolve=>setTimeout(resolve,idleDelayMs));
+  }
+  return {completed,idleChecks};
+}
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const url=process.env.EAI_EXECUTOR_URL??"http://127.0.0.1:8788";
   const token=process.env.EAI_EXECUTOR_TOKEN??"";
   try{
-    const result=await runExecutorOnce(url,token);
-    process.stdout.write(result.status==="idle"?
-      "Geen toegestane teksttaak in de wachtrij.\n":
-      "Teksttaak "+result.taskId+" afgerond.\n");
+    const flags=process.argv.slice(2);
+    if(flags.length>1||flags.some(x=>!x.startsWith("--max-tasks=")))
+      throw new Error("unsupported executor argument");
+    const maxTasks=flags.length?Number(flags[0].slice("--max-tasks=".length)):1;
+    const summary=await runExecutorBatch(url,token,{maxTasks});
+    process.stdout.write(summary.completed?
+      summary.completed+" teksttaak/taken afgerond.\n":
+      "Geen toegestane teksttaak in de wachtrij.\n");
   }catch{
     // Do not echo token, text input or server response bodies.
     process.stderr.write("Tekstworker kon de taak niet veilig afronden.\n");
