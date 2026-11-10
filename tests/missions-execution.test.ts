@@ -91,6 +91,22 @@ test("two real deterministic workers execute dependent tasks through authorized 
     assert.equal(second.progress.status,"complete");
     const third=await(await request("POST","/ops/missions/mission-brief/step",person,{})).json() as any;
     assert.equal(third.started.length,0);
+    const secondPlan={...mission,id:"mission-loop",title:"Gecontroleerde loop"};
+    assert.equal((await request("POST","/ops/missions",person,{plan:secondPlan})).status,201);
+    assert.equal((await request("POST","/ops/missions/mission-loop/pause",system,{})).status,403);
+    assert.equal((await request("POST","/ops/missions/mission-loop/pause",person,{})).status,200);
+    assert.equal((await request("POST","/ops/missions/mission-loop/step",person,{})).status,422);
+    const paused=await(await request("POST","/ops/missions/mission-loop/run",person,{})).json() as any;
+    assert.equal(paused.stopReason,"review-required");
+    assert.equal(paused.batches.length,0);
+    assert.equal((await request("POST","/ops/missions/mission-loop/resume",person,{})).status,200);
+    const loop=await(await request("POST","/ops/missions/mission-loop/run",person,{})).json() as any;
+    assert.equal(loop.stopReason,"complete");
+    assert.equal(loop.batches.length,2);
+    assert.equal(loop.progress.done,2);
+    const repeated=await(await request("POST","/ops/missions/mission-loop/run",person,{})).json() as any;
+    assert.equal(repeated.stopReason,"complete");
+    assert.equal(repeated.batches.length,0);
     const before=await(await request("GET","/ops/missions",person)).json() as any;
     const m=before.missions["mission-brief"];
     assert.equal(m.tasks["task-clean"].run.output.text,"Hallo wereld\nNu");
@@ -106,6 +122,7 @@ test("two real deterministic workers execute dependent tasks through authorized 
     const resumed=await(await request("GET","/ops/missions",person)).json() as any;
     assert.equal(resumed.missions["mission-brief"].progress.status,"complete");
     assert.equal(resumed.missions["mission-brief"].tasks["task-count"].run.output.words,3);
+    assert.equal(resumed.missions["mission-loop"].progress.done,2);
   }finally{
     if(running.server.listening)await close();
     rmSync(root,{recursive:true,force:true});rmSync(witnessDir,{recursive:true,force:true});
