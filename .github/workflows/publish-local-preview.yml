@@ -1,0 +1,76 @@
+name: Publish EAIwork local preview
+
+on:
+  push:
+    branches:
+      - feature/artifact-real-run-smoke-v01-20261110
+    paths:
+      - '.github/workflows/publish-local-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Check source and exact version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "E-AI-MODEL/EAIwork-"
+          test "$GITHUB_REF_NAME" = "feature/artifact-real-run-smoke-v01-20261110"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          ! gh release view v0.2.0-preview.1 >/dev/null 2>&1
+          grep -q '^# PolyForm Noncommercial License 1.0.0' LICENSE
+          grep -q '^Required Notice: Copyright 2026 H. Visser / E-AI-MODEL' LICENSE
+      - name: Run full tests
+        run: npm test
+      - name: Build and verify local preview
+        run: |
+          set -euo pipefail
+          python3 scripts/build-distribution.py build
+          python3 scripts/build-distribution.py verify dist/eaiwork-local-demo.zip
+          cd dist
+          sha256sum eaiwork-local-demo.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Test dashboard from extracted release candidate
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/eaiwork-preview-test
+          python3 -m zipfile -e dist/eaiwork-local-demo.zip /tmp/eaiwork-preview-test
+          cd /tmp/eaiwork-preview-test
+          node --input-type=module -e 'import {createDemoServer} from "./scripts/local-demo.ts"; const demo=createDemoServer({schedulerIntervalMs:0}); await new Promise(resolve=>demo.server.listen(0,"127.0.0.1",resolve)); const {port}=demo.server.address(); const response=await fetch("http://127.0.0.1:"+port+"/dashboard"); if(response.status!==200)process.exitCode=1; await demo.close()'
+      - name: Publish only the reviewed preview package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v0.2.0-preview.1 \
+            dist/eaiwork-local-demo.zip \
+            dist/SHA256SUMS \
+            LICENSE \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "EAIwork v0.2.0 preview: lokaal dashboard" \
+            --notes "Vroege lokale demonstratie, geen productieplatform. Node.js 22.18+ nodig. Download de ZIP, pak uit en start met npm run demo:dashboard. De server draait uitsluitend lokaal op 127.0.0.1 en voorbeelddata worden bij normaal afsluiten gewist. De licentie is PolyForm Noncommercial 1.0.0. Deze release bevat geen automatische publicatie of online uitvoeringsserver."
+      - name: Verify published files after download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir /tmp/eaiwork-published
+          gh release download v0.2.0-preview.1 --repo "$GITHUB_REPOSITORY" --dir /tmp/eaiwork-published
+          cd /tmp/eaiwork-published
+          sha256sum -c SHA256SUMS
+          cmp LICENSE "$GITHUB_WORKSPACE/LICENSE"
+          python3 "$GITHUB_WORKSPACE/scripts/build-distribution.py" verify eaiwork-local-demo.zip

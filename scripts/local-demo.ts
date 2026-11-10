@@ -26,7 +26,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;maxArtifactBytes?:number}={}){
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number}={}){
   const root=mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
   const pair=generateKeyPairSync("ed25519");
@@ -44,6 +44,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
     githubActionReader:options.githubActionReader,
+    githubReadToken:options.githubReadToken,
     maxArtifactBytes:options.maxArtifactBytes,
     tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}},
       [reviewerToken]:{actor:{kind:"person",id:"person:release-reviewer"},

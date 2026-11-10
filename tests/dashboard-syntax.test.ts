@@ -12,7 +12,10 @@ test("dashboard is valid self-contained JavaScript with full product navigation"
   }
 });
 test("dashboard labels demo measurements and uses same-origin operations API",()=>{
-  assert.match(html,/Voorbeeldopdrachten/);
+  assert.match(html,/Demonstratie/);
+  assert.match(html,/dash-donut/);
+  assert.match(html,/dash-stages/);
+  assert.match(html,/dash-bargraph/);
   assert.match(html,/Workerbibliotheek/);
   assert.match(html,/fetch\('\/ops\/catalog'/);
   assert.match(html,/fictiev/);
@@ -46,4 +49,16 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/evidenceState,evidenceDetail/);
   assert.doesNotMatch(html,/localStorage\.setItem\(/);
   assert.doesNotMatch(html,/fetch\(['"]https?:\/\//);
+});
+
+test("dashboard screen routes all point to existing functions and mobile layout is compact",()=>{
+  const match=html.match(/const views=\{([^}]+)\}/);
+  assert.ok(match,"screen route map missing");
+  for(const entry of match[1].split(",")){
+    const name=entry.split(":").at(-1)?.trim()??"";
+    assert.match(html,new RegExp("function\\s+"+name+"\\("),"missing renderer: "+entry);
+  }
+  assert.match(html,/\.app\{display:block;min-height:100vh;min-height:100dvh\}/,
+    "mobile dashboard must not use two stretched CSS grid rows");
+  assert.match(html,/registratie:registration/,"registration route must call the named function");
 });
