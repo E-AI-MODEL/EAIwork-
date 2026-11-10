@@ -69,6 +69,6 @@ test("local codeworker is available only in the controlled local dashboard",()=>
   assert.match(html,/case 'code-apply':approveCodeProposal\(\)/);
   assert.match(html,/ops\/code\/propose/);
   assert.match(html,/ops\/code\/apply/);
-  assert.match(html,/ops\\/code\\/check/);
-  assert.match(html,/codeInspection\\?\\.canApply/);
+  assert.match(html,/ops\/code\/check/);
+  assert.match(html,/codeInspection\?\.canApply/);
 });
