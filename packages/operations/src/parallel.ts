@@ -152,25 +152,31 @@ export async function runParallelPureText(
     actor:{kind:"system",id:"system:mission-runner"},event,
   });
   const pending:Array<{
-    taskId:string;runId:string;kind:string;version:string;
+    taskId:string;runId:string;leaseId:string;kind:string;version:string;
     startedMs:number;execution:Promise<ChildOutput>;
   }>=[];
   let claimFailure:unknown=null;
   try{
     for(const item of selected){
       const runId="run-"+randomUUID();
+      const leaseId="lease-"+randomUUID();
+      const startedAt=new Date().toISOString();
+      // The expiry outlives the bounded child deadline by a safety margin.
+      // Every result is fenced by this durable lease, not merely its run ID.
+      const expiresAt=new Date(Date.parse(startedAt)+timeoutMs+5000).toISOString();
       try{
-        emit({type:"task.started",missionId,taskId:item.taskId,run:{
+        emit({type:"task.lease.claim",missionId,taskId:item.taskId,
+          leaseId,ownerId:"local-subprocess",expiresAt,run:{
           runId,workerId:item.kind,workerVersion:item.version,
           adapterId:item.kind,inputHash:digest(item.input),
-          startedAt:new Date().toISOString(),verification:"not-evaluated",
+          startedAt,verification:"not-evaluated",
         }});
       }catch(e){claimFailure=e;break}
       report.claimed.push(item.taskId);
       const startedMs=performance.now();
       // Start immediately after each durable claim. There is no await here:
       // independent child processes can genuinely overlap.
-      pending.push({taskId:item.taskId,runId,kind:item.kind,version:item.version,
+      pending.push({taskId:item.taskId,runId,leaseId,kind:item.kind,version:item.version,
         startedMs,execution:inChild(item.kind,item.input,timeoutMs)});
     }
     const outcomes=await Promise.all(pending.map(item=>item.execution));
@@ -188,16 +194,25 @@ export async function runParallelPureText(
         current.workers[item.kind]?.contract.version===item.version;
       const finishedAt=new Date().toISOString();
       const elapsedMs=Math.round(performance.now()-item.startedMs);
+      const expiresAt=attempt.run?.lease?.expiresAt;
+      // A late subprocess is never allowed to record a backdated result.
+      // Expire the durable claim instead, leaving any retry to a person.
+      if(expiresAt&&Date.parse(finishedAt)>Date.parse(expiresAt)){
+        emit({type:"task.lease.expire",missionId,taskId:item.taskId,
+          runId:item.runId,leaseId:item.leaseId});
+        report.failed.push(item.taskId);
+        continue;
+      }
       if(!outcome.ok||!admitted){
         emit({type:"task.failed",missionId,taskId:item.taskId,runId:item.runId,
-          finishedAt,elapsedMs,
+          leaseId:item.leaseId,finishedAt,elapsedMs,
           errorCode:!admitted?"worker-unavailable":outcome.errorCode??"adapter-error"});
         report.failed.push(item.taskId);
         continue;
       }
       const output=outcome.output!;
       emit({type:"task.completed",missionId,taskId:item.taskId,runId:item.runId,
-        finishedAt,elapsedMs,output,outputHash:digest(output)});
+        leaseId:item.leaseId,finishedAt,elapsedMs,output,outputHash:digest(output)});
       report.completed.push(item.taskId);
     }
     if(claimFailure)throw claimFailure;

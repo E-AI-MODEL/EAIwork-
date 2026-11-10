@@ -9,6 +9,7 @@ import type {OpsStore} from "./store.ts";
 import type {OpsEvent} from "./registry.ts";
 import {missionProgress,type MissionRecord,type SchedulerStopReason} from "./missions.ts";
 import {runMissionStep} from "./execution.ts";
+import {expireLocalLeases} from "./leases.ts";
 
 export interface SchedulerTick {
   inspected:number;
@@ -81,6 +82,9 @@ export class LocalMissionScheduler {
     this.ticking=true;
     const report:SchedulerTick={inspected:0,started:0,stopped:[]};
     try{
+      // Lease expiry is a durable terminal transition. This never schedules
+      // a retry and does not use a model or any external write action.
+      expireLocalLeases(this.store);
       const missionIds=Object.entries(this.store.snapshot().missions)
         .filter(([,m])=>m.automation?.enabled).map(([id])=>id);
       for(const id of missionIds){

@@ -11,6 +11,8 @@ import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
+import {expireLocalLeases} from "../../operations/src/leases.ts";
+import {projectLocalQueue} from "../../operations/src/queue.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
@@ -189,8 +191,12 @@ export function makeServer(cfg: Config) {
   try { operations = cfg.operationsDir ? new OpsStore(cfg.operationsDir) : null; }
   catch (e) { store.close(); throw e; }
   let scheduler:LocalMissionScheduler|null=null;
-  try{scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null}
-  catch(e){operations?.close();store.close();throw e}
+  try{
+    // Expired child leases become recorded failures, not automatic retries.
+    // Do this before the scheduler inspects the persisted missions.
+    if(operations)expireLocalLeases(operations);
+    scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null;
+  }catch(e){operations?.close();store.close();throw e}
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
     scheduler?.close();operations?.close();store.close();
@@ -328,6 +334,10 @@ export function makeServer(cfg: Config) {
         if (req.method === "GET" && url.pathname === "/ops/state") {
           try { return json(res, 200, operations.snapshot()); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/queue") {
+          try{return json(res,200,projectLocalQueue(operations.snapshot()))}
+          catch{return json(res,503,{error:"local queue unavailable"})}
         }
         if (req.method === "GET" && url.pathname === "/ops/catalog") {
           try { return json(res, 200, catalogOverview(operations.snapshot())); }
@@ -688,7 +698,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {

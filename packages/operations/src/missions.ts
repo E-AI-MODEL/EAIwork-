@@ -58,6 +58,8 @@ export interface TaskRun {
   outputHash?:string;
   errorCode?:"adapter-error"|"output-invalid"|"worker-unavailable";
   verification:"not-evaluated";
+  /** Durable lease record for the limited local subprocess queue. */
+  lease?:{id:string;ownerId:string;expiresAt:string;renewals:number};
   retryReview?:{by:string;reason:string;at:string};
   /** A stopped local calculation, not an external action, may be recovered. */
   recovery?:{by:string;reason:"process-restart";at:string};
@@ -102,8 +104,11 @@ export type MissionEvent =
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
   | {type:"task.recover";missionId:string;taskId:string;runId:string}
   | {type:"task.started";missionId:string;taskId:string;run:Pick<TaskRun,"runId"|"workerId"|"workerVersion"|"adapterId"|"inputHash"|"startedAt"|"verification">}
-  | {type:"task.completed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;output:Record<string,unknown>;outputHash:string}
-  | {type:"task.failed";missionId:string;taskId:string;runId:string;finishedAt:string;elapsedMs:number;errorCode:"adapter-error"|"output-invalid"|"worker-unavailable"};
+  | {type:"task.lease.claim";missionId:string;taskId:string;run:Pick<TaskRun,"runId"|"workerId"|"workerVersion"|"adapterId"|"inputHash"|"startedAt"|"verification">;leaseId:string;ownerId:string;expiresAt:string}
+  | {type:"task.lease.renew";missionId:string;taskId:string;runId:string;leaseId:string;ownerId:string;expiresAt:string}
+  | {type:"task.lease.expire";missionId:string;taskId:string;runId:string;leaseId:string}
+  | {type:"task.completed";missionId:string;taskId:string;runId:string;leaseId?:string;finishedAt:string;elapsedMs:number;output:Record<string,unknown>;outputHash:string}
+  | {type:"task.failed";missionId:string;taskId:string;runId:string;leaseId?:string;finishedAt:string;elapsedMs:number;errorCode:"adapter-error"|"output-invalid"|"worker-unavailable"};
 const ID=/^[a-z][a-z0-9-]{2,63}$/;
 const fail=(message:string):never=>{throw new Error(message)};
 const bounded=(value:unknown,name:string,max=500)=>{
@@ -360,10 +365,41 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     task.run=undefined;
     return;
   }
+  if(e.type==="task.lease.renew"||e.type==="task.lease.expire"){
+    if(actor.kind!=="system"||actor.id!=="system:mission-runner")
+      fail("lease transitions require the trusted server runner");
+    const task=mission.tasks[e.taskId];
+    const lease=task?.run?.lease;
+    if(!task||task.status!=="running"||!lease||task.run?.runId!==e.runId||
+       lease.id!==e.leaseId)fail("stale task lease");
+    const eventTime=Date.parse(at);
+    if(!Number.isFinite(eventTime))fail("invalid lease event time");
+    if(e.type==="task.lease.renew"){
+      if(typeof e.ownerId!=="string"||e.ownerId!==lease.ownerId)
+        fail("lease owner mismatch");
+      const expiry=Date.parse(e.expiresAt);
+      if(!Number.isFinite(expiry)||expiry<=eventTime||
+         expiry<=Date.parse(lease.expiresAt)||expiry-eventTime>30000||
+         eventTime>=Date.parse(lease.expiresAt)||lease.renewals>=20)
+        fail("lease renewal denied");
+      lease.expiresAt=e.expiresAt;
+      lease.renewals++;
+    }else{
+      if(eventTime<Date.parse(lease.expiresAt))
+        fail("lease has not expired");
+      // An expiry cannot silently authorize another start. The human
+      // reviewer must use the existing bounded local task.retry path.
+      task.status="failed";
+      task.run.errorCode="worker-unavailable";
+      task.run.finishedAt=at;
+      task.run.elapsedMs=Math.max(0,eventTime-Date.parse(task.run.startedAt));
+    }
+    return;
+  }
   if(actor.kind!=="system"||actor.id!=="system:mission-runner")fail("task transitions belong to server runner");
   if(typeof e.taskId!=="string")fail("missing task");
   const task=mission.tasks[e.taskId];if(!task)fail("unknown task");
-  if(e.type==="task.started"){
+  if(e.type==="task.started"||e.type==="task.lease.claim"){
     if(mission.paused)fail("mission paused");
     if(task.status!=="queued")fail("task already started");
     if(task.spec.dependsOn.some(d=>mission.tasks[d].status!=="done"))fail("unfinished dependencies");
@@ -379,15 +415,41 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(Object.values(mission.tasks).some(other=>
        other.run?.runId===r.runId || other.attempts?.some(previous=>previous.runId===r.runId)))
       fail("duplicate task run id");
+    let lease:TaskRun["lease"]|undefined;
+    if(e.type==="task.lease.claim"){
+      if(mission.automation?.enabled)fail("leased subprocesses require manual dispatch");
+      if(typeof e.leaseId!=="string"||!ID.test(e.leaseId)||
+         typeof e.ownerId!=="string"||!ID.test(e.ownerId))
+        fail("invalid lease identity");
+      if((task.spec.effect!==undefined&&task.spec.effect!=="local")||
+         !["text-normalize","text-metrics"].includes(task.spec.taskKind)||
+         r.workerId!==task.spec.taskKind||r.adapterId!==task.spec.taskKind)
+        fail("lease restricted to fixed side-effect-free text workers");
+      const started=Date.parse(r.startedAt),expires=Date.parse(e.expiresAt);
+      if(!Number.isFinite(started)||!Number.isFinite(expires)||
+         expires<=started||expires-started>30000)
+        fail("lease duration must be at most 30 seconds");
+      lease={id:e.leaseId,ownerId:e.ownerId,expiresAt:e.expiresAt,renewals:0};
+    }
     if(mission.automation?.enabled){
       if(mission.automation.starts>=mission.automation.maxStarts)
         fail("automatic task budget exhausted");
       mission.automation.starts+=1;
     }
-    task.status="running";task.run=structuredClone(r) as TaskRun;
+    task.status="running";task.run={...structuredClone(r),...(lease?{lease}:{})} as TaskRun;
     return;
   }
   if(task.status!=="running"||!task.run||task.run.runId!==e.runId)fail("stale task result");
+  if(task.run.lease){
+    if(e.leaseId!==task.run.lease.id)
+      fail("stale task lease");
+    const finished=Date.parse(e.finishedAt),committed=Date.parse(at);
+    const expires=Date.parse(task.run.lease.expiresAt);
+    if(!Number.isFinite(finished)||!Number.isFinite(committed)||
+       finished>expires||committed>expires||
+       finished>committed||committed-finished>5000)
+      fail("task lease expired before completion");
+  }else if(e.leaseId!==undefined)fail("unexpected lease token");
   if(typeof e.finishedAt!=="string"||!Number.isFinite(e.elapsedMs)||e.elapsedMs<0)fail("invalid task timing");
   if(e.type==="task.completed"){
     if(!plain(e.output)||JSON.stringify(e.output).length>16384||
