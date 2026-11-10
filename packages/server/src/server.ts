@@ -12,6 +12,7 @@ import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
+import {projectLocalQueue} from "../../operations/src/queue.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
@@ -333,6 +334,10 @@ export function makeServer(cfg: Config) {
         if (req.method === "GET" && url.pathname === "/ops/state") {
           try { return json(res, 200, operations.snapshot()); }
           catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/queue") {
+          try{return json(res,200,projectLocalQueue(operations.snapshot()))}
+          catch{return json(res,503,{error:"local queue unavailable"})}
         }
         if (req.method === "GET" && url.pathname === "/ops/catalog") {
           try { return json(res, 200, catalogOverview(operations.snapshot())); }
