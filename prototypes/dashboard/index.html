@@ -652,6 +652,11 @@ function liveOverview(){
   const needsReview=pending.length+plans.filter(p=>p.state==='blocked').length+
     missions.filter(m=>liveMissionProgress(m).blockedByConstraints>0).length+
     plans.filter(p=>p.steps.some(step=>step.active&&step.status==='review')).length;
+  const autoMissions=missions.filter(m=>m.automation?.enabled);
+  const canAutoStart=missions.filter(m=>!m.automation?.enabled&&
+    m.plan.tasks.every(t=>(!t.effect||t.effect==='local')&&
+      ['text-normalize','text-metrics','text-inspect'].includes(t.taskKind))&&
+    Object.values(m.tasks||{}).some(t=>t.status!=='done'));
   const done=plans.filter(p=>p.state==='done').length+
     missions.filter(m=>{const p=liveMissionProgress(m);return p.total>0&&p.done===p.total}).length;
   const planCards=plans.map(p=>{
@@ -668,7 +673,8 @@ function liveOverview(){
     const p=liveMissionProgress(m);
     return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
       '<b>'+h(m.plan.title)+'</b>'+badge(p.done===p.total&&p.total>0?'done':p.failed?'blocked':'active')+'</div>'+
-      '<p class="smalltext">'+p.done+'/'+p.total+' stappen afgerond · '+h(p.status)+'</p>'+
+      '<p class="smalltext">'+p.done+'/'+p.total+' stappen afgerond · '+
+        h(m.automation?.enabled?'Werkt zelfstandig':p.status)+'</p>'+
       btn('Open opdracht','nav','small','data-id="uitvoering"')+'</div>';
   });
   const statuses=[
@@ -685,8 +691,19 @@ function liveOverview(){
     btn('Nieuwe teksttaak','nav','','data-id="uitvoering"')+'</div></div>'+
     '<div class="card pad" style="margin-bottom:14px"><div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
       '<div>'+connection+'</div>'+btn('Controleer verbindingen','nav','small','data-id="code"')+'</div></div>'+
+    '<div class="card pad" style="margin-bottom:14px"><div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">'+
+      '<div><b>Zelfstandig werken</b><p class="smalltext">'+
+        h(autoMissions.length?autoMissions.length+' teksttaak'+(autoMissions.length===1?'':'en')+
+          ' wordt automatisch uitgevoerd binnen jouw afspraken.':
+          canAutoStart.length?'Je kunt '+canAutoStart.length+' geschikte teksttaak'+
+            (canAutoStart.length===1?'':'en')+' automatisch laten doorgaan.':
+          'Nog geen automatische teksttaak actief.')+
+        '</p><p class="muted smalltext">Codevoorstellen en tests lopen nu stap voor stap. Code wordt nooit zonder jouw akkoord toegepast.</p></div>'+
+      btn(autoMissions.length?'Bekijk automatische uitvoering':'Automatisch werken instellen','nav',
+        'small','data-id="uitvoering"')+'</div></div>'+
     '<div class="dash-kpis">'+[
       ['Lopende opdrachten',unfinished.length+missionsRunning.length,'Ga verder waar je was','code'],
+      ['Automatisch bezig',autoMissions.length,'Lokale teksttaken','uitvoering'],
       ['Jouw aandacht',needsReview,'Wacht op een controle of besluit','code'],
       ['Afgerond',done,'Opgeslagen werk','uitvoering']
     ].map(([label,count,desc,route])=>
