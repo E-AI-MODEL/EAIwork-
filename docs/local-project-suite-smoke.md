@@ -44,7 +44,7 @@ docker pull node:22-alpine
 **3. Haal EAIwork op**
 
 ```sh
-git clone -b feature/live-dashboard-without-demo-data-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+git clone -b feature/separate-persisted-demo-fixtures-v01-20261111 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
 ```
 
@@ -53,7 +53,7 @@ cd ~/EAIwork-test
 ```sh
 cd ~/EAIwork-test
 git fetch origin
-git switch --track origin/feature/live-dashboard-without-demo-data-v01-20261110
+git switch --track origin/feature/separate-persisted-demo-fixtures-v01-20261111
 ```
 
 **4. Start EAIwork met een veilig voorbeeldproject**
@@ -93,13 +93,18 @@ Staat ergens **Niet bereikbaar**, **Model ontbreekt** of **Testafbeelding ontbre
 
 **6. Leg de voorbeeldopdracht vast**
 
-De naam **Proef met twee bestanden** en de twee opdrachtregels staan in de voorbeeldmodus al ingevuld. Je hoeft niets te plakken. Klik **Leg volgorde vast**.
+De naam **Proef met twee bestanden** en de twee opdrachtregels staan al ingevuld. Je hoeft niets te plakken. Klik op **Bewaar stappen**.
 
-Je ziet nu bovenaan het scherm je opgeslagen plan met `src/amount.js` als eerste bestand. Klik op **Maak voorstel voor dit bestand**. Ollama maakt een voorstel. Verderop onder **Controleer het voorstel** staan de code en de verschillen.
+Je ziet je opdracht met `src/amount.js` als eerste stap. Klik **Laat voorstel maken**. Ollama stelt een wijziging voor. Onder **Beoordeel voorstel** lees je in gewone taal wat er verandert. De exacte code staat achter **Bekijk de exacte wijziging**.
 
-Klik daarna bovenaan op **Test alle bestanden vóór toepassing**. Pas vanaf die knop gebruikt EAIwork Docker. Controleer de uitslag. Bij `passed` kun je de wijziging aanvinken en **Pas deze stap toe** kiezen. Klik vervolgens op **Test alle bestanden na toepassing**. Na een geslaagde test kun je naar `src/invoice.js`.
+Klik **Test voorstel**. Pas hier gebruikt EAIwork Docker. Na een geslaagde test verschijnt de eenvoudige keuze:
 
-**Niets te zien na Leg volgorde vast?** Controleer of bovenaan **Proef met twee bestanden** staat met twee echte opdrachtregels. Grijze voorbeeldtekst in een leeg veld telt niet als invoer. De functie **Los bestandsvoorstel** verder naar beneden hoort niet bij deze proef.
+- **Ja, pas wijziging toe:** EAIwork past alleen dit bestand aan. Klik daarna op **Test wijziging**. Pas na een geslaagde test komt de volgende stap beschikbaar.
+- **Nee, stop opdracht:** EAIwork stopt het plan. Er wordt geen nieuw bestand aangepast. Eerdere goedgekeurde wijzigingen blijven staan.
+
+Je hoeft geen technisch vinkje te zetten of een tweede bevestigingsvenster te openen. EAIwork controleert op de achtergrond of de test, het voorstel en de oorspronkelijke code nog bij elkaar horen.
+
+**Zie je niets na Bewaar stappen?** Controleer of er echt twee regels in het invoerveld staan. De functie voor één los bestand heb je voor deze proef niet nodig.
 
 **Docker controleren:** open een tweede Terminal-venster terwijl EAIwork draait:
 

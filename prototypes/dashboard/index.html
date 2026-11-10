@@ -220,6 +220,10 @@
 .code-diff-line>code{display:block;padding:1px 8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .code-diff-added{background:#eaf5ed}.code-diff-removed{background:#fcebea}.code-diff-same{background:#fff}
 .code-diff>p{padding:10px;font-size:10px;color:var(--muted)}
+.approval-choice{border-color:#cedbd2;background:#fcfefc;padding:18px}
+.approval-choice>b{font-size:14px;display:block}
+.approval-choice .row .btn{min-height:42px;min-width:170px;flex:1 1 190px;font-size:12px}
+@media(max-width:600px){.approval-choice .row{flex-direction:column;align-items:stretch}.approval-choice .row .btn{width:100%;flex:auto}}
 </style>
 </head>
 <body>
@@ -589,47 +593,156 @@ function compactDashboard(live){
   'De metingen komen uit de lokale registratie. Afgeronde taken zijn niet automatisch inhoudelijk goedgekeurd.':
   'Voorbeeldgegevens. Geen echte workers actief en geen achtergrondopdrachten. Verbind de lokale server om echte registraties te zien.')+'</p>';
 }
+function workerPurpose(w){
+  const kinds=w?.contract?.taskKinds||[];
+  const ordinary={
+    'text-normalize':'Maakt tekst netjes en leesbaar',
+    'text-metrics':'Telt woorden en tekens',
+    'repo-search':'Zoekt informatie in je eigen project',
+    'text-inspect':'Controleert tekst en geeft meetwaarden'
+  };
+  const known=kinds.map(kind=>ordinary[kind]).filter(Boolean);
+  if(known.length)return known.join(' en ');
+  const specialization=w?.contract?.specialization||'';
+  return specialization&&!/demonstration|demo|fixture/i.test(specialization)?
+    specialization:'Taak is nog niet beschreven';
+}
+function workerDisplayName(w){
+  const plain={
+    'text-normalize':'Tekst opschonen',
+    'text-metrics':'Tekst meten',
+    'repo-search':'Project doorzoeken',
+    'text-inspector':'Tekst controleren'
+  };
+  return plain[w?.contract?.id]||w?.contract?.name||'Naam ontbreekt';
+}
+function workerStageText(stage){
+  return ({ready:'Klaar voor gebruik',candidate:'Wacht op toelating',
+    quarantined:'Tijdelijk gestopt',disabled:'Uitgeschakeld',
+    superseded:'Oudere versie'})[stage]||'Status onbekend';
+}
+function workerLastTask(workerId){
+  for(const mission of Object.values(s.liveOps?.missions||{}).reverse()){
+    for(const rec of Object.values(mission.tasks||{}).reverse()){
+      if(rec.run?.workerId===workerId)return {
+        title:mission.plan?.title||'Opdracht',
+        task:rec.spec?.title||'Taak',
+        status:rec.status
+      };
+    }
+  }
+  return null;
+}
+function readableCodeStep(step){
+  return step?.status==='waiting'?'Laat een voorstel maken':
+    step?.status==='review'?'Bekijk het voorstel en test het':
+    step?.status==='needs-post-test'||step?.status==='needs-project-test'?
+      'Test de aangebrachte wijziging':
+    step?.status==='blocked'?'Controleer de mislukte stap':
+    'De opdracht is afgerond';
+}
 function liveOverview(){
   const missions=Object.values(s.liveOps?.missions||{});
-  const currentCodePlan=codePlans.find(p=>p.state==='active'||p.state==='blocked')||codePlans[0]||null;
-  const codePanel=section('Codeworker',currentCodePlan?
-    '<div class="card pad"><b>'+h(currentCodePlan.title)+'</b><p class="smalltext">'+
-    h(currentCodePlan.state==='done'?'Afgerond':currentCodePlan.state==='blocked'?'Geblokkeerd':currentCodePlan.state==='stopped'?'Gestopt':'In behandeling')+
-    ' · '+currentCodePlan.steps.filter(x=>x.status==='done').length+'/'+currentCodePlan.steps.length+' bestanden afgerond</p>'+btn('Open Codeworker','nav','primary','data-id="code"')+'</div>':
-    '<div class="card pad">Nog geen lokale codeplannen. '+btn('Open Codeworker','nav','small','data-id="code"')+'</div>');
-  if(missions.length)return compactDashboard(true)+'<div class="mt">'+codePanel+'</div>';
   const workers=Object.values(s.liveOps?.workers||{});
-  const history=s.liveOps?.history||[];
-  const measures=s.liveOps?.measurements||[];
-  const defects=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
-  const kpis=[['Taakplannen',missions.length,'In de lokale registratie','uitvoering'],
-    ['Codeplannen',codePlans.length,'In de lokale codewerkmap','code'],
-    ['Workers',workers.length,'Geregistreerde contracten','workers'],
-    ['Besluiten',defects.length,'Openstaande beoordelingen','hitl']];
-  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / lokaal</span>'+
-    '<h1>Werkoverzicht</h1><p>Gegevens uit jouw lokale EAIwork-server.</p></div>'+
-    '<div class="dash-head-actions">'+btn('Ververs','ops-connect','primary')+
-    btn('Naar Codeworker','nav','','data-id="code"')+'</div></div>'+
-    '<div class="dash-model-status"><span class="dash-model-dot '+(codeConnections?.ollama?.status==='ready'?'ready':'')+'"></span>'+
-    '<b>'+h(codeConnections?.ollama?.status==='ready'?'Ollama bereikbaar':'Ollama nog niet bevestigd')+'</b>'+
-    '<span>'+h(codeWorkspaceStatus?.modelId||localPlannerStatus?.modelId||'Geen model geselecteerd')+'</span>'+
-    '<small>Bekijk de verbinding met Ollama en Docker bij Codeworker.</small></div>'+
-    '<div class="dash-kpis">'+kpis.map(([label,value,note,route])=>
+  const plans=codePlans||[];
+  const pending=Object.values(s.liveOps?.defects||{}).filter(d=>d.state==='human-required');
+  const unfinished=plans.filter(p=>p.state==='active'||p.state==='blocked');
+  const current=unfinished[0]||null;
+  const next=current?.steps?.find(step=>step.active)||null;
+  const missionsRunning=missions.filter(m=>{
+    const p=liveMissionProgress(m);
+    return p.done<p.total;
+  });
+  const needsReview=pending.length+plans.filter(p=>p.state==='blocked').length+
+    missions.filter(m=>liveMissionProgress(m).blockedByConstraints>0).length+
+    plans.filter(p=>p.steps.some(step=>step.active&&step.status==='review')).length;
+  const autoMissions=missions.filter(m=>m.automation?.enabled);
+  const canAutoStart=missions.filter(m=>!m.automation?.enabled&&
+    (m.plan?.tasks?.length??0)>0&&m.plan.tasks.every(t=>
+      (!t.effect||t.effect==='local')&&
+      ['text-normalize','text-metrics','text-inspect'].includes(t.taskKind))&&
+    Object.values(m.tasks||{}).some(t=>t.status!=='done'));
+  const done=plans.filter(p=>p.state==='done').length+
+    missions.filter(m=>{const p=liveMissionProgress(m);return p.total>0&&p.done===p.total}).length;
+  const planCards=plans.map(p=>{
+    const active=p.steps?.find(step=>step.active);
+    const status=p.state==='done'?'Afgerond':p.state==='blocked'?'Hulp nodig':
+      p.state==='stopped'?'Gestopt':'Bezig';
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(p.title)+'</b>'+badge(p.state==='done'?'done':p.state==='blocked'?'blocked':'active')+'</div>'+
+      '<p class="smalltext">'+h(p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length)+
+      ' stappen afgerond'+(active?' · '+h(readableCodeStep(active)):'')+'</p>'+
+      btn('Open opdracht','nav','small','data-id="code"')+'</div>';
+  });
+  const missionCards=missions.map(m=>{
+    const p=liveMissionProgress(m);
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(m.plan.title)+'</b>'+badge(p.done===p.total&&p.total>0?'done':p.failed?'blocked':'active')+'</div>'+
+      '<p class="smalltext">'+p.done+'/'+p.total+' stappen afgerond · '+
+        h(m.automation?.enabled?'Werkt zelfstandig':p.status)+'</p>'+
+      btn('Open opdracht','nav','small','data-id="uitvoering"')+'</div>';
+  });
+  const statuses=[
+    ['EAIwork',!!s.liveOps],
+    ['Ollama',codeConnections?.ollama?.status==='ready'],
+    ['Docker',codeConnections?.docker?.status==='ready']
+  ];
+  const connection=statuses.map(([name,ready])=>'<span class="smalltext" style="white-space:nowrap">'+
+    '<span class="indicator '+(ready?'green':'amber')+'" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>'+
+    h(name)+(ready?' verbonden':' nog niet bevestigd')+'</span>').join(' <span style="padding:0 7px">·</span> ');
+  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / mijn werk</span>'+
+    '<h1>Waar wil je mee verder?</h1><p>Je opdrachten, wie eraan werkt en wat nog jouw aandacht vraagt.</p></div>'+
+    '<div class="dash-head-actions">'+btn('Nieuwe codeopdracht','nav','primary','data-id="code"')+
+    btn('Nieuwe teksttaak','nav','','data-id="uitvoering"')+'</div></div>'+
+    '<div class="card pad" style="margin-bottom:14px"><div class="row" style="align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">'+
+      '<div>'+connection+'</div>'+btn('Controleer verbindingen','nav','small','data-id="code"')+'</div></div>'+
+    '<div class="card pad" style="margin-bottom:14px"><div class="row" style="justify-content:space-between;gap:12px;flex-wrap:wrap">'+
+      '<div><b>Zelfstandig werken</b><p class="smalltext">'+
+        h(autoMissions.length?autoMissions.length+' teksttaak'+(autoMissions.length===1?'':'en')+
+          ' wordt automatisch uitgevoerd binnen jouw afspraken.':
+          canAutoStart.length?'Je kunt '+canAutoStart.length+' geschikte teksttaak'+
+            (canAutoStart.length===1?'':'en')+' automatisch laten doorgaan.':
+          'Nog geen automatische teksttaak actief.')+
+        '</p><p class="muted smalltext">Codevoorstellen en tests lopen nu stap voor stap. Code wordt nooit zonder jouw akkoord toegepast.</p></div>'+
+      btn(autoMissions.length?'Bekijk automatische uitvoering':'Automatisch werken instellen','nav',
+        'small','data-id="uitvoering"')+'</div></div>'+
+    '<div class="dash-kpis">'+[
+      ['Lopende opdrachten',unfinished.length+missionsRunning.length,'Ga verder waar je was','code'],
+      ['Automatisch bezig',autoMissions.length,'Lokale teksttaken','uitvoering'],
+      ['Jouw aandacht',needsReview,'Wacht op een controle of besluit','code'],
+      ['Afgerond',done,'Opgeslagen werk','uitvoering']
+    ].map(([label,count,desc,route])=>
       '<button class="dash-kpi" data-action="nav" data-id="'+route+'"><span>'+h(label)+'</span>'+
-      '<strong>'+h(value)+'</strong><small>'+h(note)+'</small></button>').join('')+'</div>'+
+      '<strong>'+h(count)+'</strong><small>'+h(desc)+'</small></button>').join('')+'</div>'+
+    (current?'<div class="card pad" style="margin:14px 0"><b>Volgende stap</b>'+
+      '<p style="margin:8px 0 3px"><strong>'+h(current.title)+'</strong></p>'+
+      '<p>'+h(current.state==='blocked'?'Deze opdracht is gestopt. Bekijk wat er misging.':
+        next?readableCodeStep(next):'Bekijk de voortgang van je opdracht.')+'</p>'+
+      btn('Verder met deze opdracht','nav','primary','data-id="code"')+'</div>':
+      '<div class="card pad" style="margin:14px 0"><b>Je kunt beginnen</b>'+
+      '<p>Er staat geen codeopdracht te wachten. Geef op wat je wilt veranderen.</p>'+
+      btn('Open opdrachten','nav','primary','data-id="code"')+'</div>')+
     '<div class="dash-columns"><div class="dash-main-column">'+
-    dashControlsCard('Taakuitvoering',
-      '<div class="dash-empty">Er staat nog geen taakplan in deze lokale registratie. De codeplannen staan bij Codeworker.</div>'+
-      '<div class="mt">'+btn('Start met Codeworker','nav','','data-id="code"')+
-      btn('Nieuwe taak','nav','','data-id="uitvoering"')+'</div>','','')+
-    '</div><div class="dash-side-column">'+
-    dashControlsCard('Laatste gebeurtenissen',history.length?
-      history.slice(-5).reverse().map(row=>'<div class="dash-activity"><div><b>'+
-      h(row.event?.type||'Gebeurtenis')+'</b><small>'+h(row.at||'')+'</small></div></div>').join(''):
-      '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>',
-      'Logboek','logboek')+'</div></div>'+
-    '<div class="mt">'+codePanel+'</div>';
-
+      section('Mijn opdrachten','<div class="card pad">'+
+        (planCards.length+missionCards.length?
+          planCards.concat(missionCards).join(''):
+          '<p class="muted smalltext">Nog geen opdrachten. Maak hierboven je eerste opdracht.</p>')+
+        '</div>')+
+      '</div><div class="dash-side-column">'+
+      section('Wie doet het werk?','<div class="card pad">'+
+        (workers.length?workers.slice(0,5).map(w=>{
+          const last=workerLastTask(w.contract.id);
+          return '<div class="code-history-row"><b>'+h(workerDisplayName(w))+'</b>'+
+            '<p class="smalltext">'+h(workerPurpose(w))+'</p>'+
+            '<small>'+h(last?'Laatst gebruikt voor: '+last.task:'Nog niet ingezet')+
+            ' · '+h(workerStageText(w.stage))+'</small></div>';
+        }).join(''):'<p class="muted smalltext">Er zijn nog geen workers toegevoegd. Je kunt wel met een lokale codeopdracht beginnen.</p>')+
+        '<div class="mt">'+btn('Bekijk workers','nav','small','data-id="workers"')+'</div></div>')+
+      (pending.length?section('Jouw akkoord nodig','<div class="card pad"><p>'+
+        h(pending.length)+' probleem'+(pending.length===1?'':'en')+
+        ' wacht'+(pending.length===1?'':'en')+' op jouw beoordeling.</p>'+
+        btn('Bekijk beslissingen','nav','primary','data-id="hitl"')+'</div>'):'')+
+      '</div></div>';
 }
 function localConnectView(){
   return header('Lokale werkruimte','Dit is de echte EAIwork-omgeving. Er worden geen demo-opdrachten of fictieve metingen getoond.')+
@@ -702,41 +815,60 @@ function livePlanner(){
 }
 function liveWorkers(){
   const all=Object.values(s.liveOps?.workers||{});
-  const found=all.filter(w=>(w.contract.name+' '+w.contract.id+' '+w.contract.specialization)
+  const found=all.filter(w=>(w.contract.name+' '+workerPurpose(w))
     .toLowerCase().includes(s.workerSearch.toLowerCase()));
-  const selected=all.find(w=>w.contract.id===s.selectedOpsWorker)||found[0]||all[0];
-  const metrics=(s.liveOps?.measurements||[]).filter(m=>selected&&m.workerId===selected.contract.id&&
-    m.version===selected.contract.version);
+  const selected=all.find(w=>w.contract.id===s.selectedOpsWorker)||found[0]||null;
+  const metrics=(s.liveOps?.measurements||[]).filter(m=>selected&&
+    m.workerId===selected.contract.id&&m.version===selected.contract.version);
   const versions=selected?s.liveOps?.workerVersions?.[selected.contract.id]||{}:{};
   const defects=Object.values(s.liveOps?.defects||{}).filter(d=>selected&&
     d.workerId===selected.contract.id&&d.version===selected.contract.version);
-  return header('Workerleger','Echte contracten en meetgegevens. Een geregistreerde worker is niet automatisch actief.',
-    btn('Workerbibliotheek','nav-library')+btn('Contracten beheren','nav-registration','primary'))+
-    '<div class="toolbar"><input id="workerSearch" class="field filter" placeholder="Zoek geregistreerde workers" value="'+h(s.workerSearch)+'" aria-label="Zoek workers">'+
-    '<span class="pill">'+all.length+' geregistreerd</span><span class="pill">'+all.filter(w=>w.stage==='ready').length+' beschikbaar</span></div>'+
-    '<div class="detail-split"><div class="worker-grid">'+
-    (found.map(w=>'<button class="worker-card '+(w===selected?'selected':'')+
+  const last=selected?workerLastTask(selected.contract.id):null;
+  const cards=found.length?found.map(w=>{
+    const task=workerLastTask(w.contract.id);
+    return '<button class="worker-card '+(w===selected?'selected':'')+
       '" data-action="ops-worker-open" data-id="'+h(w.contract.id)+'">'+
-      '<div class="row"><span class="worker-name">'+h(w.contract.name)+'</span>'+badge(w.stage)+'</div>'+
-      '<p class="worker-sub">'+h(w.contract.specialization)+'</p><small>v'+h(w.contract.version)+
-      ' · '+h(w.contract.taskKinds.join(', '))+'</small></button>').join('')||'<div class="empty">Geen workers gevonden.</div>')+
-    '</div><div class="detail-sidebar">'+(selected?section('Contract en metingen',
-      '<div class="card pad"><div class="row"><b>'+h(selected.contract.name)+'</b>'+badge(selected.stage)+'</div>'+
-      [['Worker-ID',selected.contract.id],['Versie',selected.contract.version],
-        ['Taaksoorten',selected.contract.taskKinds.join(', ')],['Model',selected.contract.modelPolicy.preferred],
-        ['Hulpmiddelen',selected.contract.tools.join(', ')||'Geen'],
-        ['Gevraagde rechten',selected.contract.requestedPermissions.join(', ')||'Geen'],
-        ['Testsuite',selected.contract.testSuite],['Versies',Object.keys(versions).join(', ')||'Geen'],
-        ['Vrijgave',selected.releaseEvidence||'Nog niet vrijgegeven'],
+      '<div class="row" style="justify-content:space-between;gap:10px"><b>'+h(workerDisplayName(w))+'</b>'+
+      '<span class="smalltext">'+h(workerStageText(w.stage))+'</span></div>'+
+      '<p class="worker-sub">'+h(workerPurpose(w))+'</p>'+
+      '<small>'+h(task?'Laatst gebruikt: '+task.task:'Nog niet ingezet')+'</small></button>';
+  }).join(''):'<div class="card pad">Geen workers gevonden.</div>';
+  const info=selected?'<div class="card pad">'+
+      '<b>'+h(workerDisplayName(selected))+'</b>'+
+      '<p class="muted smalltext">'+h(workerStageText(selected.stage))+'</p>'+
+      '<div class="mt"><b>Wat doet deze worker?</b><p>'+h(workerPurpose(selected))+'</p></div>'+
+      '<div class="mt"><b>Waar werkt hij aan?</b><p>'+h(last?
+        last.status==='running'?'Nu bezig met: '+last.task+' ('+last.title+')':
+        'Laatst gebruikt voor: '+last.task+' ('+last.title+')':
+        'Nog niet gebruikt voor een opdracht.')+'</p></div>'+
+      (defects.length?'<p class="contract-error">'+h(defects.length)+
+        ' probleem'+(defects.length===1?' vraagt':' vragen')+' aandacht.</p>':'')+
+      '<details class="mt"><summary>Technische gegevens en tests</summary>'+
+      '<div class="mt">'+[
+        ['ID',selected.contract.id],
+        ['Versie',selected.contract.version],
+        ['Kan werken aan',selected.contract.taskKinds.join(', ')||'Nog niet ingesteld'],
+        ['Techniek',selected.contract.modelPolicy?.preferred||'Onbekend'],
+        ['Toegestane hulpmiddelen',selected.contract.tools.join(', ')||'Geen'],
+        ['Rechten',selected.contract.requestedPermissions.join(', ')||'Geen'],
+        ['Testset',selected.contract.testSuite],
+        ['Andere versies',Object.keys(versions).join(', ')||'Geen']
       ].map(([k,v])=>'<div class="contract-line"><span>'+h(k)+'</span><span>'+h(v)+'</span></div>').join('')+
-      '<div class="mt"><b>Metingen van deze versie</b><p class="muted smalltext">'+
+      '<div class="mt"><b>Testresultaten</b><p class="smalltext">'+
       (metrics.length?metrics.slice(-5).map(m=>h(m.metric)+' '+m.numerator+'/'+m.denominator+
-        ' · '+h(m.dataset)+' · '+h(m.cohort)).join('<br>'):'Geen metingen geregistreerd.')+'</p></div>'+
-      '<div class="mt"><b>Problemen</b><p class="muted smalltext">'+
-      (defects.length?defects.map(d=>h(d.reason)+' · '+h(d.state)+' · '+d.attempts.length+'/3').join('<br>'):
-        'Geen problemen geregistreerd.')+'</p></div>'+
-      btn('Contracten en registratie','nav-registration','primary')+'</div>'):
-      '<div class="card pad">Geen worker geregistreerd.</div>')+'</div></div>';
+        ' · '+h(m.dataset)).join(' · '):'Er zijn nog geen testresultaten opgeslagen.')+
+      '</p></div></div></details>'+
+      '<div class="mt">'+btn('Instellingen en toestemming','nav-registration','small')+'</div></div>':
+      '<div class="card pad">Kies een worker om te zien wat hij doet.</div>';
+  return header('Workers','Bekijk wat iedere worker doet, wanneer hij is gebruikt en of hij mag starten.',
+    btn('Workers beheren','nav-registration','small'))+
+    '<div class="toolbar"><input id="workerSearch" class="field filter" placeholder="Zoek op naam of taak" value="'+h(s.workerSearch)+'" aria-label="Zoek workers">'+
+    '<span class="pill">'+all.length+' toegevoegd</span></div>'+
+    (all.length?'<div class="detail-split"><div class="worker-grid">'+cards+
+      '</div><div class="detail-sidebar">'+section('Deze worker',info)+'</div></div>':
+      '<div class="card pad"><b>Je hebt nog geen workers toegevoegd.</b>'+
+      '<p>Een worker krijgt een duidelijke taak. EAIwork laat zien wat hij doet en of hij mag starten.</p>'+
+      btn('Bekijk beschikbare functies','nav','primary','data-id="bibliotheek"')+'</div>');
 }
 function liveHumanQueue(){
   const missions=Object.values(s.liveOps?.missions||{});
@@ -1339,21 +1471,21 @@ function automationPanel(m){
       'paused':'Gepauzeerd','user-stopped':'Gestopt door gebruiker'}[a.stoppedReason]||a.stoppedReason):
     'Nog niet ingeschakeld';
   const id=h(m.plan.id);
-  return section('Automatische uitvoering · lokale proef',
+  return section('Automatisch verdergaan',
     '<div class="card pad"><div class="row"><b>'+h(status)+'</b>'+badge(active?'running':'paused')+'</div>'+
-    '<p class="muted smalltext">Laat de server zelf de volgende uitvoerbare teksttaak starten. De server bewaart iedere taakstart en stopt bij het ingestelde maximum, ontbrekende workers, fouten of onopgeloste voorwaarden. Externe acties, RepoSearch en taalmodellen zijn uitgesloten.</p>'+
+    '<p class="muted smalltext">EAIwork kan deze teksttaken zelf achter elkaar uitvoeren. Jij geeft toestemming voor een maximaal aantal stappen. Bij fouten of ontbrekende toestemming stopt het werk.</p>'+
     (a?'<div class="contract-line"><span>Starten toegestaan door</span><span>'+h(a.approvedBy)+'</span></div>'+
       '<div class="contract-line"><span>Gestarte taken in deze toestemming</span><b>'+h(a.starts)+' / '+h(a.maxStarts)+'</b></div>'+
       (a.stoppedAt?'<div class="contract-line"><span>Gestopt</span><span>'+h(a.stoppedAt)+'</span></div>':''):'')+
-    (active?'<div class="mt">'+btn('Stop automatische uitvoering','automation-stop','small','data-id="'+id+'"')+'</div>'+
+    (active?'<div class="mt">'+btn('Stop automatisch werken','automation-stop','small','data-id="'+id+'"')+'</div>'+
       '<p class="muted smalltext">De status wordt automatisch ververst zolang de uitvoering loopt.</p>':
-      '<div class="mt"><label for="automaticLimit" class="field-label">Maximaal aantal taakstarts (1 tot 32)</label>'+
+      '<div class="mt"><label for="automaticLimit" class="field-label">Hoeveel stappen mag EAIwork zelf starten? (1 tot 32)</label>'+
       '<input id="automaticLimit" class="field" type="number" min="1" max="32" step="1" value="4" style="width:110px">'+
-      '<label class="smalltext" style="display:block;margin-top:10px"><input type="checkbox" id="automaticConsent"> Ik geef toestemming om uitsluitend de lokale teksttaken van deze opdracht automatisch te starten.</label>'+
-      '<div class="mt">'+btn('Start binnen deze grenzen','automation-start','primary','data-id="'+id+'" '+(!canStart?'disabled':''))+'</div></div>')+
+      '<label class="smalltext" style="display:block;margin-top:10px"><input type="checkbox" id="automaticConsent"> EAIwork mag alleen de teksttaken van deze opdracht automatisch uitvoeren.</label>'+
+      '<div class="mt">'+btn('Start automatisch','automation-start','primary','data-id="'+id+'" '+(!canStart?'disabled':''))+'</div></div>')+
     (!localOnly?'<p class="contract-error">Deze opdracht bevat taken buiten de toegestane lokale tekstbewerkingen. Automatisch starten is hier uitgeschakeld.</p>':'')+
     (runningOrFailed?'<p class="contract-error">Een eerdere taak is onderbroken of mislukt. Beoordeel die poging voordat je opnieuw toestemming geeft.</p>':'')+
-    '<p class="muted smalltext">Dit is nog geen zelfstandige AI-workerpool. De server voert telkens één korte lokale taak uit, in een afgeschermd proces.</p></div>');
+    '<p class="muted smalltext">Dit werkt nu alleen voor korte lokale teksttaken. Nieuwe codewijzigingen en publicatie vragen nog jouw goedkeuring.</p></div>');
 }
 async function controlAutomation(id,action){
   try{
@@ -1410,59 +1542,95 @@ function updateAutomationPolling(){
 }
 
 function realMissions(){
-  if(!onExecutionServer())return header('Echte uitvoering','Deze openbare versie demonstreert het werkproces. Hij start geen workers en bewaart geen opdrachten.')+
-    section('Alleen op de EAIwork-server','<div class="card pad"><p>Start de afgeschermde EAIwork-server en open daar <code>/dashboard</code>. Contracten, tests en opdrachten komen dan uit de eigen serveromgeving. Er worden hier geen toegangstokens gevraagd.</p></div>');
-  if(!s.liveOps)return header('Echte uitvoering','Voer twee kleine taken uit met lokale, geteste workers.')+
-    section('Verbind de beveiligde server','<div class="card pad"><p>Verbind eerst via Contracten en registratie. De server gebruikt alleen ingebouwde tekstbewerkingen. Er wordt geen externe AI of zoekmachine aangeroepen.</p>'+btn('Naar registratie','nav-registration','primary')+'</div>');
-  const all=Object.values(s.liveOps.missions||{}),selected=all.find(m=>m.plan.id===s.selectedRealMission)||all[0];
-  const activeWorkerCount=new Set(all.flatMap(m=>Object.values(m.tasks||{}))
-    .filter(t=>t.status==='running').map(t=>t.run?.workerId).filter(Boolean)).size;
+  if(!onExecutionServer())return header('Opdrachten','Dit deel werkt alleen op je eigen EAIwork-server.')+
+    section('Alleen lokaal','<div class="card pad">Open het dashboard op je eigen computer om opdrachten uit te voeren.</div>');
+  if(!s.liveOps)return localConnectView();
+  const all=Object.values(s.liveOps.missions||{});
+  const selected=all.find(m=>m.plan.id===s.selectedRealMission)||all[0];
+  const workerRecords=Object.values(s.liveOps.workers||{});
+  const textWorkers=['text-normalize','text-metrics'].every(kind=>
+    workerRecords.some(w=>w.stage==='ready'&&w.contract.taskKinds.includes(kind)));
   const tasks=selected?selected.plan.tasks.map(t=>{
-    const rec=selected.tasks[t.id];
-    return '<div class="status-row"><span class="indicator '+(rec.status==='done'?'green':rec.status==='failed'?'red':'amber')+'"></span><div><h3>'+h(t.title)+'</h3>'+
-      '<p>'+h(t.id)+' · '+h(t.taskKind)+' · '+h(rec.status)+(t.dependsOn.length?' · wacht op '+h(t.dependsOn.join(', ')):'')+'</p>'+
-      ((t.evidenceAtomIds||[]).length?
-        '<p class="smalltext">Gekoppelde uitspraken: '+t.evidenceAtomIds.map(atom=>
-          '<button class="btn small" data-action="evidence-open" data-id="'+h(atom)+'">'+h(atom)+'</button>').join(' ')+'</p>':'')+
-      (rec.run?'<p class="smalltext">Worker: '+h(rec.run.workerId)+' v'+h(rec.run.workerVersion)+' · '+h(rec.run.verification)+' · '+h(rec.run.elapsedMs??'—')+' ms</p>':'')+
-      (rec.run?.output?'<pre class="contract-code">'+h(JSON.stringify(rec.run.output,null,2))+'</pre>':'')+
-      (rec.run?.errorCode?'<p class="contract-error">'+h(rec.run.errorCode)+'</p>':'')+
-      ((rec.attempts||[]).length?
-        '<div class="contract-code"><b>Vorige pogingen</b>'+
-        rec.attempts.map(run=>'<p class="smalltext">'+h(run.runId)+' · '+h(run.adapterId)+
-          ' · '+h(run.startedAt)+' · beoordeling: '+h(run.retryReview?.by||'niet geregistreerd')+
-          ' · '+h(run.retryReview?.reason||'geen reden vastgelegd')+'</p>').join('')+'</div>':'')+
-
+    const rec=selected.tasks[t.id]||{status:'queued'};
+    const name=rec.run?.workerId;
+    const record=name?s.liveOps.workers?.[name]:null;
+    const assigned=record?workerDisplayName(record):(name||'Nog niet uitgevoerd');
+    const state=rec.status==='done'?'Afgerond':rec.status==='running'?'Bezig':
+      rec.status==='failed'?'Er ging iets mis':'Wacht op vorige stap of start';
+    return '<div class="code-history-row"><div class="row" style="justify-content:space-between;gap:10px">'+
+      '<b>'+h(t.title)+'</b>'+badge(rec.status==='done'?'done':rec.status==='failed'?'blocked':'queued')+
+      '</div><p class="smalltext">'+h(state)+'</p>'+
+      '<p class="smalltext">Uitgevoerd door: '+h(assigned)+'</p>'+
+      (rec.run?.errorCode?'<p class="contract-error">Deze stap is mislukt. Bekijk het resultaat en controleer de oorzaak.</p>':'')+
+      (rec.run?.output||rec.run?.errorCode||rec.attempts?.length?
+        '<details><summary>Bekijk het resultaat en de details</summary>'+
+          (rec.run?.output?'<pre class="contract-code" style="white-space:pre-wrap">'+
+            h(JSON.stringify(rec.run.output,null,2))+'</pre>':'')+
+          (rec.run?.errorCode?'<p class="contract-error">'+h(rec.run.errorCode)+'</p>':'')+
+          (rec.attempts?.length?'<p class="smalltext">'+
+            rec.attempts.map(a=>h(a.runId)+' · '+h(a.retryReview?.reason||'Geen uitleg opgeslagen')).join(' · ')+'</p>':'')+
+          '<small>Taak-ID: '+h(t.id)+' · soort: '+h(t.taskKind)+'</small></details>':'')+
       (['running','failed'].includes(rec.status)&&(!t.effect||t.effect==='local')?
-        '<div class="mt"><label class="field-label" for="retry-'+h(selected.plan.id)+'-'+h(t.id)+'">Motivering voor opnieuw starten</label>'+
-        '<input class="field" id="retry-'+h(selected.plan.id)+'-'+h(t.id)+'" maxlength="600" style="width:100%" placeholder="Controleer eerst of de vorige poging geen externe actie uitvoerde">'+
-        btn('Gecontroleerd opnieuw starten','real-task-retry','small','data-id="'+h(t.id)+'" data-mission="'+h(selected.plan.id)+'"')+'</div>':'')+'</div></div>';
+        '<div class="mt"><label class="field-label" for="retry-'+h(selected.plan.id)+'-'+h(t.id)+
+        '">Waarom wil je deze stap opnieuw uitvoeren?</label>'+
+        '<input class="field" id="retry-'+h(selected.plan.id)+'-'+h(t.id)+
+        '" maxlength="600" style="width:100%" placeholder="Vertel wat je eerst hebt gecontroleerd">'+
+        btn('Probeer deze stap opnieuw','real-task-retry','small',
+          'data-id="'+h(t.id)+'" data-mission="'+h(selected.plan.id)+'"')+'</div>':'')+
+      '</div>';
   }).join(''):'';
   const p=selected?liveMissionProgress(selected):null;
-  return header('Echte uitvoering','De server voert afgebakende taken uit. Dit is nog geen automatische AI-planner of langdurige autonome loop.',btn('Workers toelaten','nav-registration'))+
-    '<div class="grid cols-4 mb"><div class="card metric"><div class="caption">Opdrachten</div><strong>'+all.length+'</strong><small>In het serverlog</small></div>'+
-    '<div class="card metric"><div class="caption">Geregistreerde workers</div><strong>'+Object.keys(s.liveOps.workers||{}).length+'</strong><small>Niet allemaal actief</small></div>'+
-    '<div class="card metric"><div class="caption">Toegelaten workers</div><strong>'+Object.values(s.liveOps.workers||{}).filter(w=>w.stage==='ready').length+'</strong><small>Alleen met een contract</small></div>'+
-    '<div class="card metric"><div class="caption">Actieve workers</div><strong>'+activeWorkerCount+'</strong><small>Volgens de actieve taken; geen blijvende agents</small></div></div>'+
-    '<div class="grid cols-2"><div>'+section('Nieuw goedgekeurd taakplan','<div class="card pad"><p class="muted smalltext">Deze proef maakt een plan met twee afhankelijke stappen: tekst opschonen en vervolgens woorden tellen. De persoon keurt het plan goed. Gebruik alleen niet-vertrouwelijke voorbeeldtekst.</p>'+
-      '<form id="realMissionForm" class="form-stack"><div><label for="realMissionTitle" class="field-label">Opdrachtnaam</label><input class="field" id="realMissionTitle" maxlength="100" required placeholder="Naam van je taak" style="width:100%"></div>'+
-      '<div><label for="realMissionText" class="field-label">Tekst voor lokale verwerking</label><textarea id="realMissionText" required maxlength="2000" placeholder="Vul de tekst in die je lokaal wilt laten verwerken" style="width:100%"></textarea></div>'+
-      '<div><label for="realEvidenceAtom" class="field-label">Bewijsverwijzing (optioneel)</label>'+
-      '<input class="field" id="realEvidenceAtom" maxlength="128" placeholder="Bijvoorbeeld een atoom-ID uit Bewijs en herkomst" style="width:100%">'+
-      '<p class="muted smalltext">Deze verwijzing telt niet als bewijs van juistheid. De server controleert of de verwijzing bestaat en voor alle auditgebruikers leesbaar is.</p></div>'+
-      '<p class="muted smalltext">Werkplan: text-normalize → text-metrics. Geen zelfgekozen code of externe verwerking.</p>'+
-      '<button class="btn primary" type="submit">Plan goedkeuren en registreren</button></form></div>')+'</div>'+
-    '<div>'+section('Bestaande opdrachten','<div class="contract-table">'+(all.length?all.map(m=>{
-      const g=liveMissionProgress(m);
-      return '<button class="contract-entry '+(m===selected?'selected':'')+'" data-action="real-mission-select" data-id="'+h(m.plan.id)+'"><strong>'+h(m.plan.title)+'</strong><small>'+g.done+'/'+g.total+' afgerond · '+g.status+'</small></button>';
-    }).join(''):'<p class="muted">Nog geen echte opdrachten op deze server.</p>')+'</div>')+'</div></div>'+
-    (selected?'<div class="mt">'+section('Uitvoering · '+h(selected.plan.title),'<div class="card pad"><div class="row"><b>'+h(p.status)+'</b><span>'+p.done+'/'+p.total+' taken afgerond</span></div>'+
-       '<div class="mt row">'+btn('Voer volgende stap uit','real-mission-step','primary', 'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
-       btn('Voer beschikbare stappen uit','real-mission-loop','small','data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
-       btn(selected.paused?'Hervat opdracht':'Pauzeer opdracht',selected.paused?'real-mission-resume':'real-mission-pause','small','data-id="'+h(selected.plan.id)+'"')+'</div>'+
-       '<div class="notice mt">Voor deze stap is een ingeschreven, geteste en toegelaten lokale worker vereist. Een afgeronde technische taak is nog geen inhoudelijk gecontroleerde conclusie.</div></div>'+
-       '<div class="status-list">'+tasks+'</div>'+missionGates(selected))+'</div>'+automationPanel(selected)+missionTracePanel(selected):'')+
-    plannerProposalPanel()+
+  const selectedControls=selected?
+    '<div class="card pad"><div class="row" style="justify-content:space-between;gap:12px">'+
+    '<b>'+h(selected.plan.title)+'</b><b>'+p.done+'/'+p.total+' stappen klaar</b></div>'+
+    '<p class="smalltext">'+h(p.status)+'</p>'+
+    '<div class="mt row" style="gap:8px;flex-wrap:wrap">'+
+      btn('Start volgende stap','real-mission-step','primary',
+        'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
+      btn('Ga verder met beschikbare stappen','real-mission-loop','small',
+        'data-id="'+h(selected.plan.id)+'" '+(!p.ready||selected.paused||selected.automation?.enabled?'disabled':''))+
+      btn(selected.paused?'Hervat':'Pauzeer',selected.paused?'real-mission-resume':'real-mission-pause',
+        'small','data-id="'+h(selected.plan.id)+'"')+'</div>'+
+    (!p.ready&&p.done<p.total?
+      '<p class="muted smalltext">Er kan nu geen stap starten. Controleer de vorige stap, de toegelaten workers of eventuele toestemming.</p>':'')+
+    '<div class="mt">'+tasks+'</div></div>':'<div class="card pad">Kies of maak een opdracht.</div>';
+  const list=all.map(m=>{
+    const progress=liveMissionProgress(m);
+    return '<button class="contract-entry '+(m===selected?'selected':'')+
+      '" data-action="real-mission-select" data-id="'+h(m.plan.id)+'">'+
+      '<b>'+h(m.plan.title)+'</b><small>'+progress.done+'/'+progress.total+
+      ' stappen klaar · '+h(progress.status)+'</small></button>';
+  }).join('');
+  const jobForm='<div class="card pad"><p class="smalltext">'+
+    'Laat EAIwork tekst opschonen en daarna woorden tellen. Andere soorten opdrachten zijn nog niet via dit formulier beschikbaar.</p>'+
+    (!textWorkers?'<p class="muted smalltext">Voor uitvoering zijn workers nodig die tekst kunnen opschonen en tellen. Je kunt wel alvast een taak vastleggen.</p>':'')+
+    '<form id="realMissionForm" class="form-stack">'+
+    '<label for="realMissionTitle" class="field-label">Naam van de taak</label>'+
+    '<input class="field" id="realMissionTitle" maxlength="100" required style="width:100%" placeholder="Bijvoorbeeld: tekst van website controleren">'+
+    '<label for="realMissionText" class="field-label">Welke tekst wil je laten verwerken?</label>'+
+    '<textarea id="realMissionText" required maxlength="2000" style="width:100%" placeholder="Plak hier je tekst"></textarea>'+
+    '<details><summary>Extra gegevens (optioneel)</summary>'+
+      '<label for="realEvidenceAtom" class="field-label">Verwijzing naar opgeslagen informatie</label>'+
+      '<input class="field" id="realEvidenceAtom" maxlength="128" style="width:100%" placeholder="ID van opgeslagen informatie">'+
+      '<p class="smalltext">EAIwork controleert of de verwijzing bestaat. Dat zegt nog niets over de inhoud.</p></details>'+
+    '<button class="btn primary" type="submit">Maak teksttaak</button></form></div>';
+  return header('Opdrachten','Volg de stappen, zie wie het werk heeft gedaan en bepaal wanneer je verdergaat.')+
+    '<div class="dash-columns"><div class="dash-main-column">'+
+      section('Je opdrachten','<div class="card pad">'+
+        (list||'<p class="muted smalltext">Nog geen opdrachten. Maak hieronder je eerste teksttaak.</p>')+
+        '</div>')+
+      (selected?'<div class="mt">'+automationPanel(selected)+'</div>'+
+        '<div class="mt">'+section('Wat gebeurt er nu?',selectedControls)+'</div>':'')+
+      '</div><div class="dash-side-column">'+
+      section('Nieuwe teksttaak',jobForm)+
+      '<div class="mt">'+section('Een project laten aanpassen','<div class="card pad">'+
+        '<p>Wil je bestanden in een project laten wijzigen? Gebruik daarvoor Codeworker.</p>'+
+        btn('Open Codeworker','nav','small','data-id="code"')+'</div>')+'</div>'+
+      '</div></div>'+
+    (selected&&(selected.plan.constraints||[]).length?'<div class="mt">'+missionGates(selected)+'</div>':'')+
+    '<details class="card pad mt"><summary>Meer mogelijkheden en technische details</summary>'+
+      (selected?missionTracePanel(selected):'')+
+      plannerProposalPanel()+'</details>'+
     (s.liveRunNote?'<div class="notice mt">'+h(s.liveRunNote)+'</div>':'')+
     (s.liveError?'<p role="alert" class="contract-error">'+h(s.liveError)+'</p>':'');
 }
@@ -1476,39 +1644,47 @@ function orderedPlanPanel(){
     'src/invoice.js | tests/invoice.test.js | Voeg een export function totalWithShipping(shipping = 0) toe. Behoud de export total.'
   ].join(String.fromCharCode(10));
   return '<div class="card pad" id="ordered-plan-card">'+
-    '<p class="muted smalltext">Wijzig twee tot acht bestaande JavaScript-bestanden in een vaste volgorde. Elk bestand krijgt een voorstel. Bij nieuwe plannen testen we alle gekozen bestanden samen, vóór en na het toepassen. Een mislukte test blokkeert de volgende wijziging.</p>'+
+    '<p class="muted smalltext">Geef aan wat je wilt veranderen. EAIwork werkt de stappen één voor één af. Jij bekijkt ieder voorstel voordat er iets wordt aangepast.</p>'+
     (codePlans.length?'<div class="code-history-head"><b>Bestaande plannen</b>'+btn('Ververs','code-plan-refresh','small')+'</div>'+
       codePlans.map(p=>'<button class="code-history-row" data-action="code-plan-open" data-id="'+h(p.id)+'"><b>'+
         h(p.title)+'</b><span>'+h(p.state==='active'?'Actief':p.state==='done'?'Afgerond':p.state==='blocked'?'Geblokkeerd':'Gestopt')+'</span>'+
-        '<small>'+p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length+' bestanden gecontroleerd</small></button>').join(''):'')+
+        '<small>'+p.steps.filter(x=>x.status==='done').length+'/'+p.steps.length+' stappen afgerond</small></button>').join(''):'')+
     (active?'<div class="contract-entry"><div class="row"><b>'+h(active.title)+'</b>'+badge(active.state)+'</div>'+
       '<div class="status-list">'+steps.map((step,i)=>
         '<div class="code-history-row" style="display:flex;justify-content:space-between;gap:12px"><span><b>'+
-        (i+1)+'. '+h(step.path)+'</b><small> Test: '+h(step.testPath)+'</small></span>'+
+        (i+1)+'. '+h(step.instruction.slice(0,130))+'</b><details><summary>Welke bestanden?</summary><small>'+h(step.path)+' · test: '+h(step.testPath)+'</small></details></span>'+
         '<span>'+h(step.status==='done'?'Getest en afgerond':step.status==='review'?'Voorstel beoordelen':
-          step.status==='needs-post-test'?'Test toegepaste code':step.status==='needs-project-test'?'Test alle bestanden samen':step.status==='blocked'?'Geblokkeerd':'In de wachtrij')+
+          step.status==='needs-post-test'?'Wijziging testen':step.status==='needs-project-test'?'Wijziging testen':step.status==='blocked'?'Hulp nodig':'Nog niet gestart')+
         '</span></div>').join('')+'</div>'+
       (active.state==='blocked'?'<p class="contract-error">Een stap is mislukt of een bestand is gewijzigd. Volgende bestanden blijven ongewijzigd. Controleer de gegevens voordat je stopt of herstelt.</p>':'')+
       (active.state==='done'?'<p class="smalltext">Alle bestandsstappen zijn getest. '+(active.suitePolicy==='project-node-v1'?'Ook de gezamenlijke test is na iedere wijziging geslaagd.':'Alleen de opgegeven losse tests zijn uitgevoerd.')+'</p>':'')+
       (active.state==='active'&&current?
-        '<div class="mt"><p><b>Volgende stap: '+h(current.path)+'</b></p>'+
+        '<div class="mt"><p><b>Wat moet er nu gebeuren?</b></p>'+
         '<p class="smalltext">'+h(current.instruction)+'</p>'+
-        (current.status==='waiting'?btn('Maak voorstel voor dit bestand','code-plan-propose','primary'):
+        (current.status==='waiting'?btn('Laat voorstel maken','code-plan-propose','primary'):
           current.status==='review'?
             (active.suitePolicy==='project-node-v1'?
-              btn('Test alle bestanden vóór toepassing','code-plan-project-pre','small')+
-              '<p class="smalltext">Gezamenlijke test vóór toepassing: '+h(current.projectPreStatus||'nog niet uitgevoerd')+'</p>':
-              btn('Test voorstel in Docker','code-plan-test-pre','small'))+
-            '<label class="smalltext"><input type="checkbox" id="codePlanAccept"> Ik heb het voorstel, de verschillen en de testresultaten gecontroleerd.</label>'+
-            btn('Pas deze stap toe','code-plan-apply','primary',
-              (active.suitePolicy==='project-node-v1'?
-                !(current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
-                  codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed'):
-                !codeInspection?.canApply)?'disabled':''):
-          current.status==='needs-post-test'?btn('Test toegepaste code','code-plan-test-post','primary'):
-          current.status==='needs-project-test'?btn('Test alle bestanden na toepassing','code-plan-project-post','primary'):'')+
+              btn('Test voorstel','code-plan-project-pre','small')+
+              '<p class="smalltext">Test: '+h(current.projectPreStatus==='passed'?'Geslaagd':current.projectPreStatus==='failed'?'Mislukt':'Nog niet uitgevoerd')+'</p>':
+              btn('Test voorstel','code-plan-test-pre','small')+
+              '<p class="smalltext">Test: '+h(current.testStatus==='passed'?'Geslaagd':current.testStatus==='failed'?'Mislukt':'Nog niet uitgevoerd')+'</p>')+
+            ((active.suitePolicy==='project-node-v1'?
+              current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
+                codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
+              codeInspection?.canApply)&&codeDraft?.id===current.proposalId?
+              '<div class="card pad mt approval-choice" role="group" aria-label="Beslis over deze wijziging">'+
+                '<b>Mag EAIwork deze wijziging uitvoeren?</b>'+
+                '<p class="smalltext">De test is geslaagd. EAIwork past alleen dit bestand aan. Daarna volgt nog een test.</p>'+
+                '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
+                  btn('Ja, pas wijziging toe','code-plan-apply','primary')+
+                  btn('Nee, stop opdracht','code-plan-stop','small')+'</div>'+
+                '<p class="muted smalltext">Bij nee worden geen nieuwe bestanden aangepast. Eerdere wijzigingen blijven staan.</p>'+
+              '</div>':
+              '<p class="muted smalltext">Eerst moet de test slagen. Daarna kun je ja of nee kiezen.</p>'):
+          current.status==='needs-post-test'?btn('Test wijziging','code-plan-test-post','primary'):
+          current.status==='needs-project-test'?btn('Test wijziging','code-plan-project-post','primary'):'')+
         '</div>':'')+
-      (active.state!=='done'&&active.state!=='stopped'?'<div class="mt">'+btn('Stop dit plan','code-plan-stop','small')+'</div>':'')+
+      (active.state!=='done'&&active.state!=='stopped'&&current?.status!=='review'?'<div class="mt">'+btn('Stop opdracht','code-plan-stop','small')+'</div>':'')+
       '</div>':'')+
     (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?
       '<form id="orderedCodeForm" class="form-stack mt">'+
@@ -1516,11 +1692,11 @@ function orderedPlanPanel(){
         '<p class="smalltext">Vul hieronder je eigen bron- en testbestanden in. De grijze tekst is alleen een voorbeeld.</p>')+
       '<label class="field-label" for="orderedTitle">Naam van de opdracht</label>'+
       '<input id="orderedTitle" maxlength="120" required style="width:100%" value="'+(exampleMode?'Proef met twee bestanden':'')+'" placeholder="Geef de opdracht een naam">'+
-      '<label class="field-label" for="orderedSteps">Eén stap per regel: bron | test | opdracht</label>'+
+      '<label class="field-label" for="orderedSteps">Wat moet per bestand gebeuren?</label>'+ 
       '<textarea id="orderedSteps" required style="width:100%;min-height:110px" placeholder="src/voorbeeld.js | tests/voorbeeld.test.js | Beschrijf de wijziging">'+
       (exampleMode?h(exampleRows):'')+'</textarea>'+
-      '<p class="muted smalltext">Docker wordt pas gebruikt bij Test alle bestanden vóór toepassing. Het vastleggen van de volgorde verandert geen code.</p>'+
-      '<button class="btn primary" type="submit">Leg volgorde vast</button></form>':'')+
+      '<p class="muted smalltext">EAIwork verandert niets totdat jij een voorstel goedkeurt. Het testen gebeurt lokaal.</p>'+ 
+      '<button class="btn primary" type="submit">Bewaar stappen</button></form>':'')+
     '</div>';
 }
 function connectionsPanel(){
@@ -1589,7 +1765,7 @@ function codeWorkbench(){
       (line.kind==='added'?'+':line.kind==='removed'?'−':' ')+'</span><code>'+h(line.text)+'</code></div>').join('')+
     (comparison.truncated?'<p>Niet alle regels zijn getoond. Bekijk ook de volledige code.</p>':'')+'</div>':
     '<p class="muted smalltext">Oorspronkelijke inhoud voor dit oudere voorstel niet opgeslagen.</p>';
-  return header('Codeworker','Lokale voorstellen en gecontroleerde wijzigingen. Geen terminalcommando’s of automatische publicatie.')+
+  return header('Codeworker','EAIwork maakt voorstellen en test je code. Jij beslist welke wijziging echt wordt toegepast.')+
     section('Verbindingen',connectionsPanel())+
     section('Opdracht over meerdere bestanden',orderedPlanPanel())+
     (codeError?'<p class="contract-error" role="alert">'+h(codeError)+'</p>':'')+
@@ -1604,39 +1780,46 @@ function codeWorkbench(){
       '<input id="codeTestPath" maxlength="240" placeholder="tests/counter.test.js" style="width:100%">'+
       '<p class="muted smalltext">Docker moet lokaal draaien en de afbeelding node:22-alpine moet vooraf zijn gedownload. Het project blijft ongewijzigd.</p>'+
       '<div class="mt"><button class="btn primary" type="submit">Maak codevoorstel</button></div></form></details>'):'')+
-    section('Onderbroken acties',recovery)+
-    section('Voorstelgeschiedenis',history)+
-    section('Operationslog van de codeworker',trace)+
-    (draft?section('Controleer het voorstel','<div class="card pad">'+
-      '<p><b>'+h(draft.path)+'</b> · '+h(draft.modelId)+'</p>'+
-      '<p>'+h(draft.explanation)+'</p>'+
-      '<p class="muted smalltext">Originele SHA-256: '+h(draft.sourceSha256)+
-      '<br>Voorgestelde SHA-256: '+h(draft.replacementSha256)+'</p>'+
+    (draft?section('Beoordeel voorstel','<div class="card pad">'+
+      '<b>Wat stelt EAIwork voor?</b><p>'+h(draft.explanation||'Er is geen toelichting beschikbaar.')+'</p>'+
+      '<p class="smalltext">Bestand: '+h(draft.path)+(comparison?' · '+h(comparison.added)+' regels erbij, '+h(comparison.removed)+' weg':'')+'</p>'+
       (draft.sourceChanged?'<p class="contract-error">Bronbestand gewijzigd. Controleer het project voordat je verdergaat.</p>':'')+
+      '<details class="mt"><summary>Bekijk de exacte wijziging</summary>'+
       difference+
       '<details><summary>Volledige voorgestelde code</summary><pre class="contract-code" style="max-height:360px;overflow:auto;white-space:pre-wrap">'+h(draft.replacement)+'</pre></details>'+
+      '<p class="muted smalltext">Controlewaarden: '+h(draft.sourceSha256)+' · '+h(draft.replacementSha256)+'</p></details>'+
       '<div class="smalltext" role="status"><b>Syntaxis:</b> '+h(draft.preflight?.status==='passed'?'Geen syntaxisfout gevonden':draft.preflight?.status==='failed'?'Syntaxisfout, toepassen geblokkeerd':'Niet automatisch gecontroleerd')+
       ' · '+h(draft.preflight?.checker||'Onbekend')+'<p>'+h(draft.preflight?.detail||'Geen inspectie beschikbaar')+'</p></div>'+
       '<div class="mt">'+btn('Controleer voorstel opnieuw','code-check','small')+
       (draft.testPath?' '+btn('Test in Docker','code-test','small'):'')+'</div>'+
-      (draft.testPath?'<p class="smalltext"><b>Docker-test:</b> '+h(draft.testReport?.status||'Nog niet uitgevoerd')+
+      (draft.testPath?'<p class="smalltext"><b>Test:</b> '+h(draft.testReport?.status==='passed'?'Geslaagd':draft.testReport?.status==='failed'?'Mislukt':'Nog niet uitgevoerd')+
          ' · '+h(draft.testPath)+'</p>'+
-         (draft.testReport?.output?'<pre class="contract-code" style="max-height:180px;overflow:auto;white-space:pre-wrap">'+h(draft.testReport.output)+'</pre>':''):'')+
+         (draft.testReport?.output?'<details><summary>Bekijk de testuitvoer</summary><pre class="contract-code" style="max-height:180px;overflow:auto;white-space:pre-wrap">'+h(draft.testReport.output)+'</pre></details>':''):'')+
       (codeInspection?'<p class="smalltext" role="status">'+h(codePlans.some(p=>p.state==='active'&&p.suitePolicy==='project-node-v1')?
         'Controleer de verschillen en de gezamenlijke test hierboven vóór goedkeuring.':
         codeInspection.canApply?'Bron ongewijzigd; je kunt het voorstel beoordelen en toepassen.':
         'Toepassen geblokkeerd: bron of voorstel is veranderd, of syntaxiscontrole mislukt.')+
         (draft.testReport?.testsExecuted?' De opgegeven Docker-test is afzonderlijk uitgevoerd.':' Er zijn geen tests uitgevoerd.')+'</p>':'')+
-      '<b>Door het model voorgestelde tests, niet uitgevoerd</b><p class="smalltext">'+h(draft.checks.join(' · ')||'Geen')+'</p>'+
+      '<details><summary>Extra testideeën van het model</summary><p class="smalltext">Deze tests zijn niet automatisch uitgevoerd: '+h(draft.checks.join(' · ')||'Geen')+'</p></details>'+
       (draft.status==='requires-human-review'&&codePlans.some(p=>p.state==='active'||p.state==='blocked')?
         '<p class="smalltext">Dit voorstel hoort bij het lopende plan. Gebruik bovenaan de knoppen van de geplande stap.</p>':
         draft.status==='requires-human-review'?
-        '<label class="smalltext"><input type="checkbox" id="codeAccept"> Ik heb het volledige voorstel gecontroleerd en wil alleen dit bestand aanpassen.</label>'+
-        '<div class="mt"><button class="btn primary" data-action="code-apply" '+
-        (codeInspection?.canApply?'':'disabled')+'>Pas dit ene bestand toe</button></div>':
+        '<div class="card pad mt approval-choice" role="group" aria-label="Beslis over dit voorstel">'+
+        '<b>Wil je dit bestand aanpassen?</b>'+
+        '<p class="smalltext">Je kiest alleen voor dit bestand. Er wordt niets gepubliceerd.</p>'+
+        '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
+        '<button class="btn primary" data-action="code-apply" '+
+          (codeInspection?.canApply?'':'disabled')+'>Ja, pas wijziging toe</button>'+
+        btn('Nee, niet uitvoeren','code-dismiss','small')+'</div>'+
+        (!codeInspection?.canApply?'<p class="muted smalltext">Ja is beschikbaar nadat de controle en de test zijn geslaagd.</p>':'')+
+        '</div>':
         draft.canRestore?'<div class="mt">'+btn('Herstel vorige versie','code-restore','')+'</div>':
         '<p class="muted smalltext">Voor dit voorstel is geen wijzigingsactie beschikbaar.</p>')+
-      '<p class="muted smalltext">De oude inhoud krijgt een lokale back-up. Bij een gewijzigd bronbestand wordt de aanvraag geweigerd. Alleen een opgegeven JavaScript-test wordt in Docker gedraaid. Een geslaagde test is geen algemene kwaliteitsgarantie.</p></div>'):'');
+      '<p class="muted smalltext">De vorige versie wordt lokaal bewaard. Een geslaagde test garandeert niet dat alle code goed werkt.</p></div>'):'')+
+    '<details class="card pad mt"><summary>Geschiedenis en technische informatie</summary>'+
+      section('Onderbroken acties',recovery)+
+      section('Voorstelgeschiedenis',history)+
+      section('Technische gebeurtenissen',trace)+'</details>';
 }
 async function loadCodeActivity(){
   if(!onExecutionServer()||!opsToken||!codeWorkspaceStatus?.enabled){codeAuditEvents=[];return}
@@ -1714,14 +1897,14 @@ async function runOrderedCodeAction(action){
     const step=plan.steps.find(x=>x.active);
     let body={planId:plan.id};
     if(action==='stop'){
-      if(!window.confirm('Dit plan stoppen? Er worden geen bestanden automatisch teruggedraaid.'))return;
+      // The "Nee, stop opdracht" button already states the consequence.
       body={...body,approve:true};
     }else if(action!=='propose'){
       if(!step?.proposalId)throw new Error('Geen voorstel voor de huidige stap');
       body={...body,proposalId:step.proposalId};
       if(action==='apply'){
-        if(!document.getElementById('codePlanAccept')?.checked)
-          throw new Error('Controleer eerst het voorstel en bevestig je keuze.');
+        // The visible "Ja" button is the explicit human approval.
+        // The server still checks the selected proposal ID, exact bytes and tests.
         const verified=plan.suitePolicy==='project-node-v1'?
           step.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
           codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
@@ -1738,7 +1921,7 @@ async function runOrderedCodeAction(action){
       action==='test-post'?(result.report?.status==='passed'?'Losse test geslaagd. Je kunt verdergaan.':'Test niet geslaagd. Het plan is geblokkeerd.'):
       action==='test-project-pre'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. Controleer het voorstel.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
       action==='test-project-post'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. De volgende stap is beschikbaar.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
-      'Plan gestopt. Eerder toegepaste bestanden blijven staan.';
+      'Opdracht gestopt. Er worden geen nieuwe bestanden gewijzigd. Eerder toegepaste wijzigingen blijven staan.';
     await loadCodeHistory();
     const updated=codePlans.find(p=>p.id===plan.id);
     const current=updated?.steps?.find(x=>x.active);
@@ -1812,10 +1995,8 @@ async function checkCodeProposal(){
 async function approveCodeProposal(){
   if(!codeInspection?.canApply){codeError='Controleer het voorstel opnieuw voordat je het toepast.';render();return;}
   if(!codeDraft)return;
-  if(!document.getElementById('codeAccept')?.checked){
-    codeError='Controleer de vervangende code en bevestig je keuze.';render();return;
-  }
-  if(!window.confirm('Dit vervangt het geselecteerde bronbestand. Er worden geen tests gestart. Doorgaan?'))return;
+  // The visible "Ja" button is the user's explicit approval for one inspected version.
+  // The server still validates the exact proposal ID, hash and test report.
   try{
     const result=await postOps('/ops/code/apply',{
       proposalId:codeDraft.id,expectedSha256:codeDraft.replacementSha256,approve:true
@@ -1823,6 +2004,11 @@ async function approveCodeProposal(){
     codeNotice='Wijziging toegepast op '+result.path+'. Back-up: '+result.backupRef+'. Voer zelf de tests uit.';
     codeError='';await loadCodeHistory();await loadCodeProposal(result.proposalId);
   }catch(error){codeError=String(error.message||error)}
+  render();
+}
+function dismissCodeProposal(){
+  codeDraft=null;codeInspection=null;codeError='';
+  codeNotice='Nee gekozen. Er is niets aangepast. Je kunt het voorstel later terugvinden bij Geschiedenis.';
   render();
 }
 async function restoreCodeProposal(){
@@ -1977,7 +2163,7 @@ function cycle(){if(onExecutionServer())return;if(s.paused){emit('planning','Sim
 function repair(){if(onExecutionServer())return;const w=worker('W-06');if(!w){return}if(w.repairs>=s.settings.limit){notify('Het herstelbudget is bereikt. Kies een vervolgstap bij HITL.');s.route='hitl';return}w.repairs++;const d=s.hitl.find(x=>x.id==='H-01');d.tries=w.repairs;emit('reparatie',`Herstelpoging ${w.repairs} onvoldoende`,`${w.name}: broninterpretatie blijft onder de kwaliteitsgrens`);if(w.repairs>=s.settings.limit){w.status='geblokkeerd';d.status='open';d.detail='Drie afzonderlijke herstelpogingen zijn onvoldoende gebleken. De worker is geblokkeerd. Kies een alternatieve worker, een nieuwe worker, een menselijke beoordeling of pauzeer de opdracht.';emit('HITL','Menselijke keuze verplicht',`${w.name} is na drie mislukte reparaties geblokkeerd`);s.route='hitl'}else{s.route='kwaliteit'} }
 function notify(message){s.modal=null;window.alert(message)}
 function exportState(){if(onExecutionServer())return;const {liveOps,liveCatalog,liveError,liveRunNote,opsNotice,evidenceState,evidenceDetail,evidenceError,repoSearchResult,repoSearchError,plannerDraft,plannerError,builderProposal,builderError,liveTrace,liveTraceId,liveTraceError,liveTraceFetchedAt,...demoState}=s;const data={kind:'EAIwork dashboard demo',version:'0.1',source:'synthetic, manually authored sample',exportedAt:new Date().toISOString(),state:{...demoState,modal:null}};const b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(b);const a=document.createElement('a');a.href=url;a.download='eaiwork-dashboard-demo-state.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const a=b.dataset.action,id=b.dataset.id;if(a==='closeoverlay'&&e.target!==b)return;switch(a){case 'nav':if(onExecutionServer()&&!liveNav.some(r=>r[0]===id))return;if(s.route!==id){s.route=id;window.scrollTo({top:0,behavior:'instant'});}break;case 'nav-workers':s.route='workers';break;case 'nav-builder':s.route='builder';break;case 'nav-library':s.route='bibliotheek';break;case 'nav-live':s.route='uitvoering';break;case 'real-mission-open':s.selectedRealMission=id;s.route='uitvoering';break;case 'production-line-open':s.selectedRealMission=id;s.route=['uitvoering','hitl','registratie','planner','bewijs'].includes(b.dataset.target)?b.dataset.target:'uitvoering';break;case 'release-submit':submitReleaseDossier(id,Number(b.dataset.revision));return;case 'release-review':reviewReleaseDossier(id,Number(b.dataset.revision));return;case 'release-check-ci':checkReleaseCi(id);return;case 'release-check-bytes':checkReleaseBytes(id,Number(b.dataset.revision),b.dataset.name);return;case 'release-check-github-artifact':checkReleaseGitHubArtifact(id);return;case 'ops-worker-open':s.selectedOpsWorker=id;break;case 'nav-hitl':s.route='hitl';break;case 'nav-logbook':s.route='logboek';break;case 'nav-registration':s.route='registratie';break;case 'catalog-select':s.selectedCatalog=id;break;case 'real-mission-select':s.selectedRealMission=id;s.liveTrace=null;s.liveTraceId=null;s.liveTraceError='';break;case 'mission-trace-refresh':fetchMissionTrace(id);return;case 'real-mission-step':runRealMission(id);return;case 'automation-start':controlAutomation(id,'start');return;case 'automation-stop':controlAutomation(id,'stop');return;case 'real-task-retry':retryRealTask(b.dataset.mission,id);return;case 'real-mission-loop':controlRealMission(id,'run');return;case 'mission-gate-resolve':resolveMissionGate(b.dataset.mission,id);return;case 'approve-plan':approvePlanProposal();return;case 'code-connections-refresh':checkConnections();return;case 'code-plan-propose':runOrderedCodeAction('propose');return;case 'code-plan-test-pre':runOrderedCodeAction('test-pre');return;case 'code-plan-project-pre':runOrderedCodeAction('test-project-pre');return;case 'code-plan-project-post':runOrderedCodeAction('test-project-post');return;case 'code-plan-apply':runOrderedCodeAction('apply');return;case 'code-plan-test-post':runOrderedCodeAction('test-post');return;case 'code-plan-stop':runOrderedCodeAction('stop');return;case 'code-plan-refresh':loadCodePlans().then(render);return;case 'code-plan-open':selectedCodePlan=id;loadCodePlans().then(render);return;case 'code-test':runCodeTests();return;case 'code-check':checkCodeProposal();return;case 'code-apply':approveCodeProposal();return;case 'code-restore':restoreCodeProposal();return;case 'code-open':codeNotice='';loadCodeProposal(id);return;case 'code-refresh':loadCodeHistory().then(render);return;case 'code-recover':recoverCodeAction(id);return;case 'builder-register':registerBuilderCandidate();return;case 'real-mission-pause':controlRealMission(id,'pause');return;case 'real-mission-resume':controlRealMission(id,'resume');return;case 'builtin-register':registerBuiltin(id);return;case 'builtin-test':testBuiltin(id,b.dataset.version);return;case 'builtin-release':releaseBuiltin(id,b.dataset.version);return;case 'builtin-rollback':rollbackBuiltin(id,b.dataset.version);return;case 'blueprint-contract':s.preselectedBlueprint=(onExecutionServer()?(s.liveCatalog?.workers??[]):catalogSeed).find(x=>x.id===id)||null;s.route='registratie';break;case 'mission':case 'selectmission':s.selectedMission=id;s.route=a==='mission'?'opdrachten':s.route;break;case 'task':s.selectedTask=id;s.selectedMission=task(id).mission;s.route='planner';break;case 'worker':case 'workerDetail':s.selectedWorker=id;s.route='workers';break;case 'workerQuality':s.selectedWorker=id;s.route='kwaliteit';break;case 'ops-select-worker':s.selectedOpsWorker=id;break;case 'ops-disconnect':s.liveOps=null;localPlannerStatus=null;codeConnections=null;codeWorkspaceStatus=null;codeDraft=null;codeAuditEvents=[];codeRecovery=[];codeHistory=[];codePlans=[];selectedCodePlan=null;codeInspection=null;codeError='';s.liveCatalog=null;s.productionLine=null;s.productionLineError='';opsToken='';s.liveError='';s.evidenceState=null;s.evidenceDetail=null;s.repoSearchResult=null;s.plannerDraft=null;s.builderProposal=null;s.liveTrace=null;s.liveTraceId=null;s.liveTraceError='';break;case 'evidence-open':s.evidenceAtom=id;s.route='bewijs';refreshEvidence();return;case 'evidence-refresh':refreshEvidence();return;case 'evidence-select':selectEvidenceAtom(id);return;case 'ops-connect':connectOps();return;case 'browser-check':runBrowserProbe();return;case 'cycle':cycle();break;case 'cycle5':for(let i=0;i<5;i++)cycle();break;case 'pause':s.paused=!s.paused;break;case 'reset':if(window.confirm('Alle wijzigingen in de demonstratie terugzetten?')){s=init();opsToken='';localPlannerStatus=null;}break;case 'newmission':s.modal='newmission';break;case 'closemodal':s.modal=null;break;case 'closeoverlay':if(e.target===b)s.modal=null;break;case 'export':exportState();break;case 'repair':repair();break;case 'repo-search':s.buildResults={name:'RepoSearch',summary:'Voorbeeldzoekactie: broncode, tests, versies en licenties zouden hier worden gecontroleerd. Er is geen echte repositoryzoekactie uitgevoerd.'};s.route='builder';break;case 'toggleRepair':s.settings.autoRepair=!s.settings.autoRepair;break;case 'decide':{const d=s.hitl.find(x=>x.id===id);if(d){d.status='besloten';d.decision=b.dataset.value;emit('HITL',`Besluit: ${d.decision}`,d.title);if(d.kind==='repair'){if(d.decision==='Andere worker'){const w=worker('W-06');w.status='geblokkeerd';for(const t of s.tasks.filter(x=>x.worker==='W-06'&&['blocked','review'].includes(x.state))){t.worker='W-15';t.state='queued'}emit('planning','Alternatieve worker ingepland','Demonstratie: werk herverdeeld naar Methodology Reviewer')}else if(d.decision==='Pauzeren'){mission(d.mission).status='gepauzeerd';emit('planning','Opdracht gepauzeerd',d.mission)}}}break;}default:return}render()});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-action]');if(!b)return;const a=b.dataset.action,id=b.dataset.id;if(a==='closeoverlay'&&e.target!==b)return;switch(a){case 'nav':if(onExecutionServer()&&!liveNav.some(r=>r[0]===id))return;if(s.route!==id){s.route=id;window.scrollTo({top:0,behavior:'instant'});}break;case 'nav-workers':s.route='workers';break;case 'nav-builder':s.route='builder';break;case 'nav-library':s.route='bibliotheek';break;case 'nav-live':s.route='uitvoering';break;case 'real-mission-open':s.selectedRealMission=id;s.route='uitvoering';break;case 'production-line-open':s.selectedRealMission=id;s.route=['uitvoering','hitl','registratie','planner','bewijs'].includes(b.dataset.target)?b.dataset.target:'uitvoering';break;case 'release-submit':submitReleaseDossier(id,Number(b.dataset.revision));return;case 'release-review':reviewReleaseDossier(id,Number(b.dataset.revision));return;case 'release-check-ci':checkReleaseCi(id);return;case 'release-check-bytes':checkReleaseBytes(id,Number(b.dataset.revision),b.dataset.name);return;case 'release-check-github-artifact':checkReleaseGitHubArtifact(id);return;case 'ops-worker-open':s.selectedOpsWorker=id;break;case 'nav-hitl':s.route='hitl';break;case 'nav-logbook':s.route='logboek';break;case 'nav-registration':s.route='registratie';break;case 'catalog-select':s.selectedCatalog=id;break;case 'real-mission-select':s.selectedRealMission=id;s.liveTrace=null;s.liveTraceId=null;s.liveTraceError='';break;case 'mission-trace-refresh':fetchMissionTrace(id);return;case 'real-mission-step':runRealMission(id);return;case 'automation-start':controlAutomation(id,'start');return;case 'automation-stop':controlAutomation(id,'stop');return;case 'real-task-retry':retryRealTask(b.dataset.mission,id);return;case 'real-mission-loop':controlRealMission(id,'run');return;case 'mission-gate-resolve':resolveMissionGate(b.dataset.mission,id);return;case 'approve-plan':approvePlanProposal();return;case 'code-connections-refresh':checkConnections();return;case 'code-plan-propose':runOrderedCodeAction('propose');return;case 'code-plan-test-pre':runOrderedCodeAction('test-pre');return;case 'code-plan-project-pre':runOrderedCodeAction('test-project-pre');return;case 'code-plan-project-post':runOrderedCodeAction('test-project-post');return;case 'code-plan-apply':runOrderedCodeAction('apply');return;case 'code-plan-test-post':runOrderedCodeAction('test-post');return;case 'code-plan-stop':runOrderedCodeAction('stop');return;case 'code-plan-refresh':loadCodePlans().then(render);return;case 'code-plan-open':selectedCodePlan=id;loadCodePlans().then(render);return;case 'code-test':runCodeTests();return;case 'code-check':checkCodeProposal();return;case 'code-apply':approveCodeProposal();return;case 'code-dismiss':dismissCodeProposal();return;case 'code-restore':restoreCodeProposal();return;case 'code-open':codeNotice='';loadCodeProposal(id);return;case 'code-refresh':loadCodeHistory().then(render);return;case 'code-recover':recoverCodeAction(id);return;case 'builder-register':registerBuilderCandidate();return;case 'real-mission-pause':controlRealMission(id,'pause');return;case 'real-mission-resume':controlRealMission(id,'resume');return;case 'builtin-register':registerBuiltin(id);return;case 'builtin-test':testBuiltin(id,b.dataset.version);return;case 'builtin-release':releaseBuiltin(id,b.dataset.version);return;case 'builtin-rollback':rollbackBuiltin(id,b.dataset.version);return;case 'blueprint-contract':s.preselectedBlueprint=(onExecutionServer()?(s.liveCatalog?.workers??[]):catalogSeed).find(x=>x.id===id)||null;s.route='registratie';break;case 'mission':case 'selectmission':s.selectedMission=id;s.route=a==='mission'?'opdrachten':s.route;break;case 'task':s.selectedTask=id;s.selectedMission=task(id).mission;s.route='planner';break;case 'worker':case 'workerDetail':s.selectedWorker=id;s.route='workers';break;case 'workerQuality':s.selectedWorker=id;s.route='kwaliteit';break;case 'ops-select-worker':s.selectedOpsWorker=id;break;case 'ops-disconnect':s.liveOps=null;localPlannerStatus=null;codeConnections=null;codeWorkspaceStatus=null;codeDraft=null;codeAuditEvents=[];codeRecovery=[];codeHistory=[];codePlans=[];selectedCodePlan=null;codeInspection=null;codeError='';s.liveCatalog=null;s.productionLine=null;s.productionLineError='';opsToken='';s.liveError='';s.evidenceState=null;s.evidenceDetail=null;s.repoSearchResult=null;s.plannerDraft=null;s.builderProposal=null;s.liveTrace=null;s.liveTraceId=null;s.liveTraceError='';break;case 'evidence-open':s.evidenceAtom=id;s.route='bewijs';refreshEvidence();return;case 'evidence-refresh':refreshEvidence();return;case 'evidence-select':selectEvidenceAtom(id);return;case 'ops-connect':connectOps();return;case 'browser-check':runBrowserProbe();return;case 'cycle':cycle();break;case 'cycle5':for(let i=0;i<5;i++)cycle();break;case 'pause':s.paused=!s.paused;break;case 'reset':if(window.confirm('Alle wijzigingen in de demonstratie terugzetten?')){s=init();opsToken='';localPlannerStatus=null;}break;case 'newmission':s.modal='newmission';break;case 'closemodal':s.modal=null;break;case 'closeoverlay':if(e.target===b)s.modal=null;break;case 'export':exportState();break;case 'repair':repair();break;case 'repo-search':s.buildResults={name:'RepoSearch',summary:'Voorbeeldzoekactie: broncode, tests, versies en licenties zouden hier worden gecontroleerd. Er is geen echte repositoryzoekactie uitgevoerd.'};s.route='builder';break;case 'toggleRepair':s.settings.autoRepair=!s.settings.autoRepair;break;case 'decide':{const d=s.hitl.find(x=>x.id===id);if(d){d.status='besloten';d.decision=b.dataset.value;emit('HITL',`Besluit: ${d.decision}`,d.title);if(d.kind==='repair'){if(d.decision==='Andere worker'){const w=worker('W-06');w.status='geblokkeerd';for(const t of s.tasks.filter(x=>x.worker==='W-06'&&['blocked','review'].includes(x.state))){t.worker='W-15';t.state='queued'}emit('planning','Alternatieve worker ingepland','Demonstratie: werk herverdeeld naar Methodology Reviewer')}else if(d.decision==='Pauzeren'){mission(d.mission).status='gepauzeerd';emit('planning','Opdracht gepauzeerd',d.mission)}}}break;}default:return}render()});
 document.addEventListener('change',e=>{if(e.target.id==='missionSelect'){s.selectedMission=e.target.value;render()}if(e.target.id==='realPlannerMission'){s.selectedRealMission=e.target.value;render()}if(e.target.id==='workerFilter'){s.workerFilter=e.target.value;render()}if(e.target.id==='catalogGroup'){s.catalogGroup=e.target.value;s.selectedCatalog='';render()}if(e.target.id==='logFilter'){s.logFilter=e.target.value;render()}});
 document.addEventListener('input',e=>{if(e.target.id==='catalogSearch'){s.catalogSearch=e.target.value;render();const a=document.getElementById('catalogSearch');if(a){a.focus();a.setSelectionRange(s.catalogSearch.length,s.catalogSearch.length)}}if(e.target.id==='workerSearch'){s.workerSearch=e.target.value;const f=document.activeElement;render();const a=document.getElementById('workerSearch');if(a){a.focus();a.setSelectionRange(s.workerSearch.length,s.workerSearch.length)}}if(e.target.id==='parallel'){s.settings.parallel=Number(e.target.value);render()}if(e.target.id==='budget'){s.settings.budget=Number(e.target.value);render()}});
 document.addEventListener('submit',e=>{if(onExecutionServer())return;if(e.target.id==='newMissionForm'){e.preventDefault();const title=document.getElementById('newTitle').value.trim(),description=document.getElementById('newDesc').value.trim();if(!title||!description)return;const id='M-'+String(s.missions.length+1).padStart(3,'0');s.missions.push({id,title,description,status:'actief',owner:'Demo gebruiker',created:'Nieuw',budget:0});const ts=[['Opdracht en randvoorwaarden beschrijven','W-01',0,[]],['Bronnen zoeken','W-04',1,[0]],['Gegevens analyseren','W-07',2,[1]],['Conceptresultaat maken','W-13',3,[2]],['Resultaat controleren','W-10',4,[3]]];const ids=ts.map((_,i)=>'T-'+id.slice(2)+'-'+(i+1));ts.forEach(([title,w,phase,deps],i)=>s.tasks.push({id:ids[i],mission:id,phase,title,worker:w,state:'queued',depends:deps.map(v=>ids[v]),size:'middel'}));s.selectedMission=id;s.modal=null;s.route='opdrachten';emit('planning','Demo-opdracht aangemaakt',title);render()}if(e.target.id==='builderForm'){e.preventDefault();const name=document.getElementById('buildName').value.trim(),goal=document.getElementById('buildGoal').value.trim(),size=document.getElementById('buildSize').value,group=document.getElementById('buildGroup').value;if(!name||!goal)return;const id='W-'+String(s.workers.length+1).padStart(2,'0');s.workers.push({id,name,role:goal,group,size:size==='Automatisch bepalen'?'Middel':size,model:size==='Automatisch bepalen'?'Nog vast te stellen':size,tools:'Nog te selecteren',permissions:'Alleen testomgeving',success:0,baseline:0,drift:0,status:'proef',repairs:0,total:0,ver:'0.1.0',skills:['Nieuwe specialisatie','Niet gevalideerd']});s.selectedWorker=id;s.buildResults={name,summary:'Nieuw concept in de Worker Registry. Nog geen echte implementatie, benchmarks of geslaagde tests.'};emit('builder','Demo-workercontract toegevoegd',name);render()}});

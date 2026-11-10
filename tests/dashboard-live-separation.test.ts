@@ -146,6 +146,9 @@ test("local home shows actual code plans even without mission records",()=>{
     codeConnections:{ollama:{status:"ready"}},
     codeWorkspaceStatus:{modelId:"ollama:gemma2:latest"},
     localPlannerStatus:null,
+    badge:()=>"<span>Status</span>",
+    readableCodeStep:()=>"Laat een voorstel maken",
+    liveMissionProgress:()=>({done:0,total:1,failed:0,ready:1,blockedByConstraints:0,status:"Wacht"}),
     h:(value:unknown)=>String(value??""),
     btn:(label:string)=>"<button>"+label+"</button>",
     section:(title:string,body:string)=>"<section>"+title+body+"</section>",
@@ -154,13 +157,14 @@ test("local home shows actual code plans even without mission records",()=>{
   };
   const render=runInNewContext(src+String.fromCharCode(10)+"liveOverview",context);
   const empty=render();
-  assert.match(empty,/Codeplannen/);
+  assert.match(empty,/Mijn opdrachten/);
+  assert.match(empty,/Zelfstandig werken/);
   assert.match(empty,/Proef met twee bestanden/);
-  assert.ok(empty.includes("1/2 bestanden afgerond"));
-  assert.match(empty,/ollama:gemma2:latest/);
+  assert.ok(empty.includes("1/2 stappen afgerond"));
+  assert.match(empty,/Ollama verbonden/);
   assert.doesNotMatch(empty,/Fictieve worker|Scientific Reviewer wijkt/);
-  context.s.liveOps.missions={one:{plan:{id:"one"},tasks:{}}};
+  context.s.liveOps.missions={one:{plan:{id:"one",title:"Teksttaak A"},tasks:{}}};
   const full=render();
-  assert.match(full,/Werkelijke taken/);
+  assert.match(full,/Teksttaak A/);
   assert.match(full,/Proef met twee bestanden/);
 });

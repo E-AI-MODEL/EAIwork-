@@ -128,6 +128,7 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
   const demo=createDemoServer({
     planningModel:localOllamaPlanningModel({model,host,timeoutMs}),
     persistentDir:profileDir,codeWorkspace,
+    seedDemoData:false,localLiveView:true,
   });
   try{
     await new Promise<void>((done,reject)=>{

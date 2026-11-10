@@ -114,8 +114,10 @@ test("real loopback EAIwork server uses stub Ollama only for human-reviewed plan
     const run=await req("/ops/missions/"+proposal.plan.id+"/run","POST",{});
     assert.equal(run.status,200);
     const after=await(await req("/ops/missions")).json() as any;
-    assert.equal(after.missions[proposal.plan.id].tasks["task-clean"].status,"done");
-    assert.equal(after.missions[proposal.plan.id].tasks["task-clean"].run.verification,"not-evaluated");
+    assert.equal(after.missions[proposal.plan.id].tasks["task-clean"].status,"queued",
+      "a fresh local launcher must not pretend it has ready workers");
+    assert.deepEqual(Object.keys((await(await req("/ops/state")).json() as any).workers),[],
+      "Ollama start no fake workers");
     assert.equal((await req("/ops/verify")).status,200);
   }finally{
     if(demo){
