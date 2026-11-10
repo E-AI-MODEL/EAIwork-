@@ -145,7 +145,7 @@ export function validateReleaseCandidate(candidate:ReleaseCandidate):void {
       "commitSha","licenseRef","repository"].sort().join(","))
     fail("invalid release candidate fields");
   if(typeof candidate.repository!=="string"||
-     !/^[A-Za-z0-9_.-]{1,80}\\/[A-Za-z0-9_.-]{1,100}$/.test(candidate.repository))
+     !/^[A-Za-z0-9_.-]{1,80}\/[A-Za-z0-9_.-]{1,100}$/.test(candidate.repository))
     fail("invalid release repository");
   const hash=/^[a-f0-9]{40}$/i;
   if(typeof candidate.commitSha!=="string"||!hash.test(candidate.commitSha)||
@@ -156,18 +156,18 @@ export function validateReleaseCandidate(candidate:ReleaseCandidate):void {
     fail("invalid artifact SHA256");
   if(typeof candidate.artifactPath!=="string"||
      candidate.artifactPath.length>240||
-     !/^[A-Za-z0-9_.-]+(?:\\/[A-Za-z0-9_.-]+)*$/.test(candidate.artifactPath)||
+     !/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(candidate.artifactPath)||
      candidate.artifactPath.split("/").some(x=>x==="."||x===".."))
     fail("invalid artifact path");
   if(typeof candidate.ciRunUrl!=="string"||
-     !/^https:\\/\\/github\\.com\\/[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+\\/actions\\/runs\\/[1-9][0-9]*$/.test(candidate.ciRunUrl)||
+     !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/[1-9][0-9]*$/.test(candidate.ciRunUrl)||
      !candidate.ciRunUrl.startsWith("https://github.com/"+candidate.repository+"/"))
     fail("CI run must reference the candidate repository");
   bounded(candidate.licenseRef,"license reference",240);
   if(!Array.isArray(candidate.checkNames)||candidate.checkNames.length<1||
      candidate.checkNames.length>16||new Set(candidate.checkNames).size!==candidate.checkNames.length||
      candidate.checkNames.some(x=>typeof x!=="string"||!x.trim()||x.length>100||
-       /[\\r\\n\\0]/.test(x)))
+       /[\r\n\0]/.test(x)))
     fail("invalid release check names");
 }
 export function validateMissionPlan(plan:MissionPlan):void {
