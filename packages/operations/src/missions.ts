@@ -75,6 +75,8 @@ export interface MissionAutomation {
   enabled:boolean;
   /** Explicit opt-in to continue queued, side-effect-free work after restart. */
   resumeAfterRestart?:boolean;
+  /** Remote text mode still uses the same human-approved start budget. */
+  executionMode?:"local-scheduler"|"remote-text";
   maxStarts:number;
   starts:number;
   approvedBy:string;
@@ -98,7 +100,7 @@ export type MissionEvent =
   | {type:"mission.pause";missionId:string}
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
   | {type:"mission.resume";missionId:string}
-  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean}
+  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
@@ -279,15 +281,20 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.resumeAfterRestart!==undefined&&typeof e.resumeAfterRestart!=="boolean")
       fail("invalid restart continuation consent");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
+    if(e.executionMode!==undefined &&
+       !["local-scheduler","remote-text"].includes(e.executionMode))
+      fail("invalid automation execution mode");
     const tasks=Object.values(mission.tasks);
     if(tasks.some(t=>t.status==="running"||t.status==="failed"))
       fail("interrupted or failed work needs manual review");
     if(tasks.every(t=>t.status==="done"))fail("mission already complete");
-    const kinds=new Set(["text-normalize","text-metrics","text-inspect"]);
+    const kinds=new Set(e.executionMode==="remote-text"?
+      ["text-normalize","text-metrics"]:["text-normalize","text-metrics","text-inspect"]);
     if(tasks.some(t=>(t.spec.effect!==undefined&&t.spec.effect!=="local")||
          !kinds.has(t.spec.taskKind)))
       fail("automatic execution is limited to fixed local text workers");
     mission.automation={enabled:true,maxStarts:e.maxStarts,starts:0,
+      executionMode:e.executionMode??"local-scheduler",
       resumeAfterRestart:e.resumeAfterRestart===true,
       approvedBy:actor.id,approvedAt:at};
     return;
@@ -417,7 +424,10 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
       fail("duplicate task run id");
     let lease:TaskRun["lease"]|undefined;
     if(e.type==="task.lease.claim"){
-      if(mission.automation?.enabled)fail("leased subprocesses require manual dispatch");
+      if(mission.automation?.enabled &&
+         (mission.automation.executionMode!=="remote-text"||
+          !e.ownerId.startsWith("executor-")))
+        fail("leased subprocesses require approved remote-text dispatch");
       if(typeof e.leaseId!=="string"||!ID.test(e.leaseId)||
          typeof e.ownerId!=="string"||!ID.test(e.ownerId))
         fail("invalid lease identity");
@@ -432,6 +442,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
       lease={id:e.leaseId,ownerId:e.ownerId,expiresAt:e.expiresAt,renewals:0};
     }
     if(mission.automation?.enabled){
+      if(e.type==="task.started" && mission.automation.executionMode==="remote-text")
+        fail("remote text consent cannot be consumed by a local task");
       if(mission.automation.starts>=mission.automation.maxStarts)
         fail("automatic task budget exhausted");
       mission.automation.starts+=1;
