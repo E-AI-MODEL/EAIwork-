@@ -199,6 +199,37 @@ export function validateMissionPlan(plan:MissionPlan):void {
     }
   }
 }
+/** Shared, side-effect-free validator for both proposals and approvals. */
+export function validateMissionExtension(mission:MissionRecord,plan:MissionPlan,expectedRevision:number):void {
+    if(!Number.isSafeInteger(expectedRevision)||expectedRevision!==mission.revision)
+      fail("stale mission plan revision");
+    if(mission.automation?.enabled ||
+       Object.values(mission.tasks).some(t=>t.status==="running"))
+      fail("stop automatic or running work before changing plan");
+    validateMissionPlan(plan);
+    const old=mission.plan;
+    if(old.id!==plan.id||old.title!==plan.title||old.goal!==plan.goal||
+       old.sourceInstruction!==plan.sourceInstruction)
+      fail("an extension must preserve the original mission instruction");
+    if(plan.tasks.length<=old.tasks.length||
+       old.tasks.some((task,i)=>JSON.stringify(plan.tasks[i])!==JSON.stringify(task)))
+      fail("an extension may only append tasks, never rewrite existing work");
+    const added=plan.tasks.slice(old.tasks.length).map(t=>t.id);
+    if(old.phases){
+      if(!plan.phases||plan.phases.length<=old.phases.length||
+         old.phases.some((phase,i)=>JSON.stringify(plan.phases![i])!==JSON.stringify(phase)))
+        fail("new phases must append without moving existing tasks");
+    }
+    for(const guard of old.constraints??[]){
+      const next=plan.constraints?.find(g=>g.id===guard.id);
+      if(!next || next.kind!==guard.kind || next.quote!==guard.quote ||
+         next.start!==guard.start || next.end!==guard.end ||
+         next.approverId!==guard.approverId ||
+         !guard.taskIds.every(id=>next.taskIds.includes(id)) ||
+         !added.every(id=>next.taskIds.includes(id)))
+        fail("existing instruction constraints must cover appended tasks");
+    }
+}
 export function applyMissionEvent(missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,at:string):void {
   if(e.type==="mission.create"){
     if(actor.kind!=="person")fail("a person must approve a mission");
@@ -215,34 +246,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   if(e.type==="mission.extend"){
     if(actor.kind!=="person"||actor.id!==mission.createdBy)
       fail("mission extension requires the original human approver");
-    if(!Number.isSafeInteger(e.expectedRevision)||e.expectedRevision!==mission.revision)
-      fail("stale mission plan revision");
-    if(mission.automation?.enabled ||
-       Object.values(mission.tasks).some(t=>t.status==="running"))
-      fail("stop automatic or running work before changing plan");
-    validateMissionPlan(e.plan);
-    const old=mission.plan;
-    if(old.id!==e.plan.id||old.title!==e.plan.title||old.goal!==e.plan.goal||
-       old.sourceInstruction!==e.plan.sourceInstruction)
-      fail("an extension must preserve the original mission instruction");
-    if(e.plan.tasks.length<=old.tasks.length||
-       old.tasks.some((task,i)=>JSON.stringify(e.plan.tasks[i])!==JSON.stringify(task)))
-      fail("an extension may only append tasks, never rewrite existing work");
-    const added=e.plan.tasks.slice(old.tasks.length).map(t=>t.id);
-    if(old.phases){
-      if(!e.plan.phases||e.plan.phases.length<=old.phases.length||
-         old.phases.some((phase,i)=>JSON.stringify(e.plan.phases![i])!==JSON.stringify(phase)))
-        fail("new phases must append without moving existing tasks");
-    }
-    for(const guard of old.constraints??[]){
-      const next=e.plan.constraints?.find(g=>g.id===guard.id);
-      if(!next || next.kind!==guard.kind || next.quote!==guard.quote ||
-         next.start!==guard.start || next.end!==guard.end ||
-         next.approverId!==guard.approverId ||
-         !guard.taskIds.every(id=>next.taskIds.includes(id)) ||
-         !added.every(id=>next.taskIds.includes(id)))
-        fail("existing instruction constraints must cover appended tasks");
-    }
+    validateMissionExtension(mission,e.plan,e.expectedRevision);
     for(const task of e.plan.tasks.slice(old.tasks.length))
       mission.tasks[task.id]={spec:structuredClone(task),status:"queued"};
     mission.plan=structuredClone(e.plan);
