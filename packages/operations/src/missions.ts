@@ -103,6 +103,11 @@ export interface ReleaseDossier {
     commitSha:string;observedAt:string;result:"success"};
   artifactObservation?:{source:"local-file-upload";sha256:string;sizeBytes:number;
     artifactPath:string;checkedAt:string;checkedBy:string};
+  /** Bytes downloaded from the run's GitHub artifact, not a local upload. */
+  githubArtifactObservation?:{source:"github-actions-artifact";runId:number;
+    attempt:number;commitSha:string;artifactId:number;artifactName:string;
+    entryPath:string;archiveSha256:string;sha256:string;sizeBytes:number;
+    observedAt:string};
   review?:{decision:"changes-requested"|"external-verification-needed";by:string;at:string;reason:string};
 }
 export interface MissionRecord {
@@ -129,6 +134,10 @@ export type MissionEvent =
   | {type:"mission.release.artifact.observe";missionId:string;expectedRevision:number;
       observation:{source:"local-file-upload";sha256:string;sizeBytes:number;
         artifactPath:string;checkedAt:string;checkedBy:string}}
+  | {type:"mission.release.github-artifact.observe";missionId:string;expectedRevision:number;
+      observation:{source:"github-actions-artifact";runId:number;attempt:number;
+        commitSha:string;artifactId:number;artifactName:string;entryPath:string;
+        archiveSha256:string;sha256:string;sizeBytes:number;observedAt:string}}
   | {type:"mission.resume";missionId:string}
   | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean;executionMode?:"local-scheduler"|"remote-text"}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
@@ -380,6 +389,36 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        typeof obs.checkedAt!=="string"||!Number.isFinite(Date.parse(obs.checkedAt)))
       fail("artifact observation does not match current release candidate");
     dossier.artifactObservation=structuredClone(obs);
+    return;
+  }
+  if(e.type==="mission.release.github-artifact.observe"){
+    if(actor.kind!=="check"||actor.id!=="check:github-artifact")
+      fail("GitHub artifact observation must come from server checker");
+    const dossier=mission.releaseDossier,obs=e.observation;
+    if(!dossier||dossier.revision!==mission.revision||
+       e.expectedRevision!==mission.revision||dossier.githubArtifactObservation)
+      fail("no current GitHub artifact awaiting verification");
+    const candidate=dossier.candidate,ci=dossier.ciObservation;
+    if(!ci||!plain(obs)||obs.source!=="github-actions-artifact"||
+       !Number.isSafeInteger(obs.runId)||obs.runId!==ci.runId||
+       !Number.isSafeInteger(obs.attempt)||obs.attempt!==1||
+       obs.attempt!==ci.attempt||
+       typeof obs.commitSha!=="string"||
+       obs.commitSha.toLowerCase()!==candidate.commitSha.toLowerCase()||
+       !Number.isSafeInteger(obs.artifactId)||obs.artifactId<1||
+       typeof obs.artifactName!=="string"||
+       !/^[A-Za-z0-9_.-]{1,100}$/.test(obs.artifactName)||
+       typeof obs.entryPath!=="string"||
+       ![candidate.artifactPath,candidate.artifactPath.split("/").at(-1)].includes(obs.entryPath)||
+       typeof obs.sha256!=="string"||
+       obs.sha256.toLowerCase()!==candidate.artifactSha256.toLowerCase()||
+       typeof obs.archiveSha256!=="string"||
+       !/^[a-f0-9]{64}$/i.test(obs.archiveSha256)||
+       !Number.isSafeInteger(obs.sizeBytes)||obs.sizeBytes<1||
+       obs.sizeBytes>16*1024*1024||
+       typeof obs.observedAt!=="string"||!Number.isFinite(Date.parse(obs.observedAt)))
+      fail("GitHub artifact observation mismatches dossier");
+    dossier.githubArtifactObservation=structuredClone(obs);
     return;
   }
   if(e.type==="mission.release.review"){
