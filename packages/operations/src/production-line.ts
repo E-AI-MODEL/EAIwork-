@@ -140,7 +140,7 @@ export function productionLineView(
         detail:latestCandidate&&candidateStatus==="pending-review"?
           "Releasekandidaat "+latestCandidate.id+" wacht op beoordeling door een andere persoon. Aangeleverde CI-verwijzingen zijn nog niet geverifieerd.":
           latestCandidate&&candidateStatus==="accepted-for-verification"?
-          "Beoordeeld voor verdere verificatie. CI, artefact, licenties en publicatierechten zijn nog niet onafhankelijk gecontroleerd.":
+          "Beoordeeld voor verdere verificatie. CI, herkomst, licenties en publicatie zijn nog niet onafhankelijk gecontroleerd.":
           "Er is geen beoordeelde, geverifieerde release met publicatiebewijs geregistreerd.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
