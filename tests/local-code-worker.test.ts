@@ -81,6 +81,16 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:false})).status,409);
   writeFileSync(f.file,"export const count = 3;\n");
   assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  writeFileSync(f.file,"export const count = 1;\n");
+  const approved=await post("/ops/code/apply",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true});
+  assert.equal(approved.status,200);
+  const applied=await approved.json() as any;
+  assert.equal(applied.status,"applied");
+  assert.equal(applied.testsExecuted,false);
+  assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
+  assert.equal(readFileSync(join(f.profile,"code-proposals",proposal.id+".original"),"utf8"),"export const count = 1;\n");
+  assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
   const persisted=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
   assert.equal((await persisted.json() as any).canRestore,true);
   writeFileSync(f.file,"export const count = 4;\n");
@@ -97,16 +107,6 @@ test("code worker never writes before explicit human approval; verifies source h
   const afterReview=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
   assert.equal((await afterReview.json() as any).status,"restored");
 
-  writeFileSync(f.file,"export const count = 1;\n");
-  const approved=await post("/ops/code/apply",{
-    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true});
-  assert.equal(approved.status,200);
-  const applied=await approved.json() as any;
-  assert.equal(applied.status,"applied");
-  assert.equal(applied.testsExecuted,false);
-  assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
-  assert.equal(readFileSync(join(f.profile,"code-proposals",proposal.id+".original"),"utf8"),"export const count = 1;\n");
-  assert.equal((await post("/ops/code/apply",{proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
  }finally{
   if(app)await app.close();
   await new Promise<void>(done=>fake.close(()=>done()));
