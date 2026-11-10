@@ -73,14 +73,24 @@ EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven o
 
 Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
-**6. Plak deze twee regels in het nieuwe codeplan**
+**6. Leg de voorbeeldopdracht vast**
 
-```text
-src/amount.js | tests/amount.test.js | Verander de export amount van 10 naar 12. Behoud de naam amount.
-src/invoice.js | tests/invoice.test.js | Voeg een export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de export total.
+De naam **Proef met twee bestanden** en de twee opdrachtregels staan in de voorbeeldmodus al ingevuld. Je hoeft niets te plakken. Klik **Leg volgorde vast**.
+
+Je ziet nu bovenaan het scherm je opgeslagen plan met `src/amount.js` als eerste bestand. Klik op **Maak voorstel voor dit bestand**. Ollama maakt een voorstel. Verderop onder **Controleer het voorstel** staan de code en de verschillen.
+
+Klik daarna bovenaan op **Test alle bestanden vóór toepassing**. Pas vanaf die knop gebruikt EAIwork Docker. Controleer de uitslag. Bij `passed` kun je de wijziging aanvinken en **Pas deze stap toe** kiezen. Klik vervolgens op **Test alle bestanden na toepassing**. Na een geslaagde test kun je naar `src/invoice.js`.
+
+**Niets te zien na Leg volgorde vast?** Controleer of bovenaan **Proef met twee bestanden** staat met twee echte opdrachtregels. Grijze voorbeeldtekst in een leeg veld telt niet als invoer. De functie **Los bestandsvoorstel** verder naar beneden hoort niet bij deze proef.
+
+**Docker controleren:** open een tweede Terminal-venster terwijl EAIwork draait:
+
+```sh
+docker info
+docker image inspect node:22-alpine
 ```
 
-Klik **Leg volgorde vast**. Controleer per bestand het voorstel, voer de gezamenlijke Docker-test uit, keur de wijziging goed en test daarna opnieuw. De volgende stap wordt alleen vrijgegeven na een geslaagde test.
+Beide commando's moeten gegevens zonder verbindingsfout tonen. Het eerste bevestigt dat de Docker-engine bereikbaar is; het tweede dat de testafbeelding lokaal staat.
 
 **Stoppen:** druk in Terminal op **Ctrl+C**.
 
