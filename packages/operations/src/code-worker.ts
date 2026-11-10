@@ -4,12 +4,14 @@ import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,re
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
 import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
 import {checkCodeSyntax,type CodePreflight} from "./code-preflight.ts";
+import {runIsolatedNodeTest,type DockerTestResult,type DockerTestInput} from "./docker-code-test.ts";
 
 type ProposalRecord={
   id:string;path:string;sourceSha256:string;replacementSha256:string;
   replacement:string;explanation:string;checks:string[];
   createdAt:string;modelId:string;status:"requires-human-review"|"applied";
   preflight?:CodePreflight;
+  testPath?:string;testReport?:DockerTestResult;
   appliedAt?:string;appliedBy?:string;
 };
 const sha=(value:string)=>createHash("sha256").update(value).digest("hex");
@@ -99,7 +101,9 @@ export class LocalCodeWorkspace {
   private readonly host:string;
   private readonly model:string;
   private readonly timeoutMs:number;
-  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number}){
+  private readonly testRunner:(input:DockerTestInput)=>Promise<DockerTestResult>;
+  private readonly activeTests=new Set<string>();
+  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
     this.root=safeRoot(config.workspaceDir);
     const profile=safeRoot(config.profileDir);
     if(this.root===profile||this.root.startsWith(profile+sep)||profile.startsWith(this.root+sep))
@@ -107,6 +111,7 @@ export class LocalCodeWorkspace {
     if(typeof config.model!=="string"||!config.model.trim()||config.model.length>120)
       throw new Error("Ongeldig Ollama-model");
     this.model=config.model;
+    this.testRunner=config.testRunner??runIsolatedNodeTest;
     this.modelId="ollama:"+config.model;
     this.host=localOllamaHost(config.host);
     this.timeoutMs=config.timeoutMs??90000;
@@ -130,11 +135,16 @@ export class LocalCodeWorkspace {
       throw new Error("Voorstelbestand is onjuist");
     return record;
   }
-  async propose(path:string,instruction:string){
+  async propose(path:string,instruction:string,testPath?:string){
     if(typeof instruction!=="string"||!instruction.trim()||instruction.length>4000)
       throw new Error("Beschrijf een concrete wijziging van maximaal 4000 tekens");
     const file=safeExistingFile(this.root,path);
     const original=readBounded(file);
+    if(testPath!==undefined){
+      if(!path.endsWith(".js")||typeof testPath!=="string"||!testPath.endsWith(".test.js")||testPath===path)
+        throw new Error("Docker-test vereist een .js-bron en apart .test.js-testbestand");
+      readBounded(safeExistingFile(this.root,testPath));
+    }
     const response=await fetch(this.host+"/api/chat",{
       method:"POST",redirect:"error",signal:AbortSignal.timeout(this.timeoutMs),
       headers:{"content-type":"application/json"},
@@ -157,10 +167,43 @@ export class LocalCodeWorkspace {
     const record:ProposalRecord={id,path,sourceSha256:sha(original),
       replacementSha256:sha(proposed.replacement),replacement:proposed.replacement,
       explanation:proposed.explanation,checks:proposed.checks,modelId:this.modelId,
-      createdAt:new Date().toISOString(),status:"requires-human-review",preflight};
+      createdAt:new Date().toISOString(),status:"requires-human-review",preflight,
+      ...(testPath?{testPath}:{})};
     saveJson(join(this.storage,id+".json"),record);
     return {...record,originalBytes:Buffer.byteLength(original),
       replacementBytes:Buffer.byteLength(record.replacement)};
+  }
+  async runTests(proposalId:string){
+    const initial=this.record(proposalId);
+    if(initial.status!=="requires-human-review"||!initial.testPath)
+      throw new Error("Dit voorstel heeft geen vrijgegeven testbestand");
+    if(this.activeTests.has(proposalId))
+      throw new Error("De Docker-test is al bezig");
+    if(sha(initial.replacement)!==initial.replacementSha256)
+      throw new Error("Codevoorstel is gewijzigd");
+    const file=safeExistingFile(this.root,initial.path);
+    if(sha(readBounded(file))!==initial.sourceSha256)
+      throw new Error("Bronbestand is gewijzigd; vraag een nieuw voorstel");
+    const testFile=safeExistingFile(this.root,initial.testPath);
+    const testSource=readBounded(testFile);
+    this.activeTests.add(proposalId);
+    try{
+      const result=await this.testRunner({
+        candidatePath:initial.path,candidateSource:initial.replacement,
+        testPath:initial.testPath,testSource
+      });
+      const latest=this.record(proposalId);
+      if(latest.status!=="requires-human-review"||
+         latest.replacementSha256!==initial.replacementSha256||
+         sha(readBounded(file))!==initial.sourceSha256||
+         sha(readBounded(testFile))!==result.testSha256)
+        throw new Error("De bestanden zijn tijdens de test veranderd; resultaat niet opgeslagen");
+      const checkedHashes=result.candidateSha256===initial.replacementSha256 &&
+        result.testSha256===sha(testSource);
+      if(!checkedHashes)throw new Error("De testuitslag hoort niet bij dit voorstel");
+      saveJson(join(this.storage,initial.id+".json"),{...latest,testReport:result});
+      return result;
+    }finally{this.activeTests.delete(proposalId)}
   }
   inspect(proposalId:string){
     const record=this.record(proposalId);
@@ -168,13 +211,19 @@ export class LocalCodeWorkspace {
     const unchanged=sha(readBounded(file))===record.sourceSha256;
     const validStoredReplacement=sha(record.replacement)===record.replacementSha256;
     const preflight=checkCodeSyntax(record.path,record.replacement);
+    const testPassed=!record.testPath||(
+      record.testReport?.status==="passed"&&record.testReport.testsExecuted&&
+      record.testReport.candidateSha256===record.replacementSha256&&
+      record.testReport.testSha256===sha(readBounded(safeExistingFile(this.root,record.testPath)))
+    );
     return {
       proposalId:record.id,path:record.path,modelId:record.modelId,
       status:record.status,sourceUnchanged:unchanged,
       replacementHashMatches:validStoredReplacement,
-      preflight,testsExecuted:false,
+      preflight,testsExecuted:record.testReport?.testsExecuted??false,
+      testPath:record.testPath??null,testReport:record.testReport??null,
       canApply:record.status==="requires-human-review"&&
-        unchanged&&validStoredReplacement&&preflight.status!=="failed"&&
+        unchanged&&validStoredReplacement&&testPassed&&preflight.status!=="failed"&&
         !!record.preflight&&record.preflight.replacementSha256===preflight.replacementSha256,
     };
   }
