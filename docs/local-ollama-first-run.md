@@ -14,7 +14,7 @@ npm run local:ollama -- --model=qwen2.5:1.5b
 
 Gebruik een ander **reeds geïnstalleerd** model met `--model=NAAM`. Bij precies één beschikbaar model kiest EAIwork dat automatisch. Bij meerdere modellen vraagt het om een expliciete keuze. Het programma haalt nooit ongemerkt modellen op.
 
-Ollama draait standaard op `http://127.0.0.1:11434`, het dashboard op `http://127.0.0.1:8788/dashboard`. Een ander lokaal poortnummer kan met `--port=8789`. Het Ollama-adres kan via `--host=http://127.0.0.1:11435` of `EAI_OLLAMA_HOST` worden veranderd. LAN-hosts en externe adressen worden geweigerd. Een langer modelverzoek kan met `--timeout-ms=110000` (maximaal 120 seconden).
+Ollama draait standaard op `http://127.0.0.1:11434`, het dashboard op `http://127.0.0.1:8788/dashboard`. Een ander lokaal poortnummer kan met `--port=8789`. Je kunt de opslagmap apart kiezen met `--data-dir=/pad/naar/eaiwork`, buiten de broncodemap. Het Ollama-adres kan via `--host=http://127.0.0.1:11435` of `EAI_OLLAMA_HOST` worden veranderd. LAN-hosts en externe adressen worden geweigerd. Een langer modelverzoek kan met `--timeout-ms=110000` (maximaal 120 seconden).
 
 ## Een echte lokale planproef
 
@@ -35,8 +35,8 @@ Niet alle voorgestelde taken zijn uitvoerbaar: de aanwezige workers ondersteunen
 - Het token is alleen bedoeld voor je eigen machine. Behandel het als een wachtwoord en deel het niet.
 - De verbinding met een lokaal model wordt in het dashboard als **geconfigureerd** getoond. Echte bereikbaarheid en modeluitvoer worden bij de planoproep vastgesteld.
 - Planvoorstellen krijgen altijd `requires-human-review` en `constraintCoverage:not-evaluated`. Ze mogen geen zelfstandig publicatierecht of bewijsstatus aanmaken.
-- De sessie gebruikt nog een **tijdelijke demo-opslag** en verwijdert die bij normaal afsluiten. Niet gebruiken voor vertrouwelijke leerling-, personeels- of klantgegevens.
-- Voor productie ontbreken nog blijvende lokaal beveiligde opslag, reproduceerbaar modelprofiel, verantwoord modelbudget, beproefde inhoudelijke checks en een generieke codeworker.
+- De lokale sessie bewaart gegevens **blijvend**. Alle data staat in de opgegeven profielmap; maak zelf back-ups en gebruik geen vertrouwelijke leerling-, personeels- of klantgegevens tijdens deze ontwikkelfase.
+- Voor productie ontbreken nog veilige sleutelrotatie, automatische back-ups, reproduceerbaar modelprofiel, verantwoord modelbudget, beproefde inhoudelijke checks en een generieke codeworker.
 
 ## Controles
 
