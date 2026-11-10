@@ -1660,18 +1660,26 @@ function orderedPlanPanel(){
           current.status==='review'?
             (active.suitePolicy==='project-node-v1'?
               btn('Test voorstel','code-plan-project-pre','small')+
-              '<p class="smalltext">Testuitslag: '+h(current.projectPreStatus==='passed'?'Geslaagd':current.projectPreStatus==='failed'?'Mislukt':'Nog niet getest')+'</p>':
-              btn('Test voorstel','code-plan-test-pre','small'))+
-            '<label class="smalltext"><input type="checkbox" id="codePlanAccept"> Ik heb de wijzigingen en de testuitslag bekeken en geef akkoord.</label>'+
-            btn('Pas wijziging toe','code-plan-apply','primary',
-              (active.suitePolicy==='project-node-v1'?
-                !(current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
-                  codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed'):
-                !codeInspection?.canApply)?'disabled':''):
+              '<p class="smalltext">Test: '+h(current.projectPreStatus==='passed'?'Geslaagd':current.projectPreStatus==='failed'?'Mislukt':'Nog niet uitgevoerd')+'</p>':
+              btn('Test voorstel','code-plan-test-pre','small')+
+              '<p class="smalltext">Test: '+h(current.testStatus==='passed'?'Geslaagd':current.testStatus==='failed'?'Mislukt':'Nog niet uitgevoerd')+'</p>')+
+            ((active.suitePolicy==='project-node-v1'?
+              current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
+                codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
+              codeInspection?.canApply)&&codeDraft?.id===current.proposalId?
+              '<div class="card pad mt" role="group" aria-label="Beslis over deze wijziging">'+
+                '<b>Mag EAIwork deze wijziging uitvoeren?</b>'+
+                '<p class="smalltext">De test is geslaagd. EAIwork past alleen dit bestand aan. Daarna volgt nog een test.</p>'+
+                '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
+                  btn('Ja, pas wijziging toe','code-plan-apply','primary')+
+                  btn('Nee, stop opdracht','code-plan-stop','small')+'</div>'+
+                '<p class="muted smalltext">Bij nee worden geen nieuwe bestanden aangepast. Eerdere wijzigingen blijven staan.</p>'+
+              '</div>':
+              '<p class="muted smalltext">Eerst moet de test slagen. Daarna kun je ja of nee kiezen.</p>'):
           current.status==='needs-post-test'?btn('Test wijziging','code-plan-test-post','primary'):
           current.status==='needs-project-test'?btn('Test wijziging','code-plan-project-post','primary'):'')+
         '</div>':'')+
-      (active.state!=='done'&&active.state!=='stopped'?'<div class="mt">'+btn('Stop opdracht','code-plan-stop','small')+'</div>':'')+
+      (active.state!=='done'&&active.state!=='stopped'&&current?.status!=='review'?'<div class="mt">'+btn('Stop opdracht','code-plan-stop','small')+'</div>':'')+
       '</div>':'')+
     (!codePlans.some(p=>p.state==='active'||p.state==='blocked')?
       '<form id="orderedCodeForm" class="form-stack mt">'+
@@ -1877,14 +1885,14 @@ async function runOrderedCodeAction(action){
     const step=plan.steps.find(x=>x.active);
     let body={planId:plan.id};
     if(action==='stop'){
-      if(!window.confirm('Dit plan stoppen? Er worden geen bestanden automatisch teruggedraaid.'))return;
+      // The "Nee, stop opdracht" button already states the consequence.
       body={...body,approve:true};
     }else if(action!=='propose'){
       if(!step?.proposalId)throw new Error('Geen voorstel voor de huidige stap');
       body={...body,proposalId:step.proposalId};
       if(action==='apply'){
-        if(!document.getElementById('codePlanAccept')?.checked)
-          throw new Error('Controleer eerst het voorstel en bevestig je keuze.');
+        // The visible "Ja" button is the explicit human approval.
+        // The server still checks the selected proposal ID, exact bytes and tests.
         const verified=plan.suitePolicy==='project-node-v1'?
           step.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
           codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
@@ -1901,7 +1909,7 @@ async function runOrderedCodeAction(action){
       action==='test-post'?(result.report?.status==='passed'?'Losse test geslaagd. Je kunt verdergaan.':'Test niet geslaagd. Het plan is geblokkeerd.'):
       action==='test-project-pre'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. Controleer het voorstel.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
       action==='test-project-post'?(result.result?.status==='passed'?'Alle gekozen bestanden samen getest. De volgende stap is beschikbaar.':'De gezamenlijke test is mislukt of niet uitgevoerd. Het plan is geblokkeerd.'):
-      'Plan gestopt. Eerder toegepaste bestanden blijven staan.';
+      'Opdracht gestopt. Er worden geen nieuwe bestanden gewijzigd. Eerder toegepaste wijzigingen blijven staan.';
     await loadCodeHistory();
     const updated=codePlans.find(p=>p.id===plan.id);
     const current=updated?.steps?.find(x=>x.active);
