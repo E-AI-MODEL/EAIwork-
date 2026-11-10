@@ -6,6 +6,7 @@ import {join} from "node:path";
 import {OpsStore} from "../packages/operations/src/store.ts";
 import type {OpsEvent,OpsActor} from "../packages/operations/src/registry.ts";
 import {buildMissionTrace} from "../packages/operations/src/trace.ts";
+import {expireLocalLeases,expiredLocalLeases} from "../packages/operations/src/leases.ts";
 
 const runner:OpsActor={kind:"system",id:"system:mission-runner"};
 const human:OpsActor={kind:"person",id:"person:operator"};
@@ -105,5 +106,24 @@ test("lease claims are restricted to known pure adapters, short lifetimes and se
       runId:"run-one",leaseId:"lease-one",ownerId:"local-subprocess",
       expiresAt:time(20000)},runner,time(10000)),/lease renewal denied/);
     assert.equal(f.store.snapshot().missions[plan.id].tasks["task-local"].run?.lease?.renewals,0);
+  }finally{f.close()}
+});
+
+test("startup-style sweep expires only outdated leases and never repeats a job",()=>{
+  const f=fixture();
+  try{
+    f.put(f.claim());
+    f.reopen();
+    assert.equal(expiredLocalLeases(f.store.snapshot(),origin+9999).length,0);
+    assert.equal(expireLocalLeases(f.store,new Date(time(9999))),0);
+    assert.equal(f.store.snapshot().missions[plan.id].tasks["task-local"].status,"running");
+    assert.equal(expireLocalLeases(f.store,new Date(time(10000))),1);
+    const state=f.store.snapshot();
+    assert.equal(state.missions[plan.id].tasks["task-local"].status,"failed");
+    assert.equal(state.history.filter(x=>x.event.type==="task.lease.expire").length,1);
+    assert.equal(expireLocalLeases(f.store,new Date(time(11000))),0);
+    f.reopen();
+    assert.equal(f.store.snapshot().missions[plan.id].tasks["task-local"].status,"failed");
+    assert.equal(f.store.verify().ok,true);
   }finally{f.close()}
 });
