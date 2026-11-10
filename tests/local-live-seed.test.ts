@@ -35,7 +35,11 @@ test("old locally saved demo entries stay in the journal but disappear from the 
     assert.deepEqual(Object.keys(visible.workers),[]);
     assert.deepEqual(visible.measurements,[]);
     assert.deepEqual(visible.history,[]);
-    assert.equal((await get("/ops/catalog")).workers?.length??0,0);
+    const catalog=await get("/ops/catalog");
+    assert.equal(catalog.counts.registered,0);
+    assert.equal(catalog.counts.ready,0);
+    assert.ok(catalog.workers.every((item:any)=>item.registryStage==="unregistered"),
+      "design templates must not be presented as registered workers");
     assert.deepEqual(Object.keys((await get("/ops/missions")).missions),[]);
     assert.equal((await get("/ops/verify")).ok,true);
     assert.ok(originalCount>0,"original history must be nonempty");
