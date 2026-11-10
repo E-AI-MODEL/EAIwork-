@@ -1,0 +1,83 @@
+name: publish-local-docker-preview
+on:
+  push:
+    branches:
+      - feature/docker-isolated-code-test-v01-20261110
+    paths:
+      - '.github/workflows/publish-local-docker-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Verify exact commit and local license
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "E-AI-MODEL/EAIwork-"
+          test "$GITHUB_REF_NAME" = "feature/docker-isolated-code-test-v01-20261110"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          ! gh release view v0.2.0-preview.5 >/dev/null 2>&1
+          grep -q '^# PolyForm Noncommercial License 1.0.0' LICENSE
+      - name: Full local tests
+        run: npm test
+      - name: Verify actual isolated Node tests
+        env:
+          EAI_DOCKER_SMOKE: "1"
+        run: |
+          set -euo pipefail
+          docker pull node:22-alpine
+          node --test tests/docker-sandbox-smoke.test.ts
+      - name: Build and verify ZIP
+        run: |
+          set -euo pipefail
+          python3 scripts/build-distribution.py build
+          python3 scripts/build-distribution.py verify dist/eaiwork-local-demo.zip
+          cp dist/eaiwork-local-demo.zip dist/eaiwork-local-workbench.zip
+          cd dist
+          sha256sum eaiwork-local-workbench.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Test extracted start modules and new source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/eaiwork-local-workbench
+          python3 -m zipfile -e dist/eaiwork-local-workbench.zip /tmp/eaiwork-local-workbench
+          cd /tmp/eaiwork-local-workbench
+          node --input-type=module -e 'import {defaultLocalProfileDir} from "./scripts/local-profile.ts"; import {LocalCodeWorkspace} from "./packages/operations/src/code-worker.ts"; import {chooseInstalledModel} from "./scripts/local-ollama.ts"; if(!defaultLocalProfileDir()||!LocalCodeWorkspace||chooseInstalledModel(["local:1b"])!=="local:1b")process.exit(1)'
+          node --input-type=module -e 'import {runIsolatedNodeTest} from "./packages/operations/src/docker-code-test.ts"; if(typeof runIsolatedNodeTest!=="function")process.exit(1)'
+          node --input-type=module -e 'import {checkCodeSyntax} from "./packages/operations/src/code-preflight.ts"; if(checkCodeSyntax("src/example.ts","export const n: number = 2;").status!=="passed"||checkCodeSyntax("src/example.js","export const n = ;").status!=="failed")process.exit(1)'
+          node --input-type=module -e 'import {createDemoServer} from "./scripts/local-demo.ts"; const demo=createDemoServer({schedulerIntervalMs:0}); await new Promise(resolve=>demo.server.listen(0,"127.0.0.1",resolve)); const {port}=demo.server.address(); const response=await fetch("http://127.0.0.1:"+port+"/dashboard"); if(response.status!==200)process.exitCode=1; await demo.close()'
+      - name: Publish explicitly labelled preview; no site deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create v0.2.0-preview.5 \
+            dist/eaiwork-local-workbench.zip dist/SHA256SUMS LICENSE \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "EAIwork v0.2.0 preview.5: lokale Ollama-codeworker met Docker-tests" \
+            --notes "Lokale EAIwork-preview met blijvende opdrachtregistratie en een optionele, handmatig beoordeelde Ollama-codeworker. Vereist Node.js 22.18+, Ollama en een vooraf geïnstalleerd model. Na uitpakken: npm run local:ollama -- --model=MODELNAAM. De gegevens blijven standaard in ~/.eaiwork/local. Voor codevoorstellen is een uitdrukkelijke --worktree=MAP nodig. JavaScript, TypeScript en JSON krijgen een syntaxiscontrole zonder code-uitvoering. Optioneel kan een bestaand .test.js-testbestand met een voorgestelde .js-bron in een Docker-container worden uitgevoerd. Docker en node:22-alpine zijn lokaal vereist. Bij opgegeven tests blokkeert een fout of ontbrekende Docker de goedkeuring. De container heeft geen netwerk, geen hostwerkmap en geen schrijfrechten op projectbestanden. Er worden geen willekeurige modelcommando's, projectbrede npm-scripts, Git-commits of publicaties uitgevoerd. Andere bestandstypen worden niet automatisch getest. Nog geen OS-sandbox, back-upservice, modelkwaliteitsgarantie of autonome softwareproductielijn. GitHub CI gebruikt een nagebootst Ollama-endpoint. PolyForm Noncommercial 1.0.0. Geen publicatie op eaimodel.nl."
+      - name: Verify GitHub-downloaded release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir /tmp/eaiwork-preview-recheck
+          gh release download v0.2.0-preview.5 --repo "$GITHUB_REPOSITORY" --dir /tmp/eaiwork-preview-recheck
+          cd /tmp/eaiwork-preview-recheck
+          sha256sum -c SHA256SUMS
+          cmp LICENSE "$GITHUB_WORKSPACE/LICENSE"
+          python3 "$GITHUB_WORKSPACE/scripts/build-distribution.py" verify eaiwork-local-workbench.zip
