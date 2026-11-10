@@ -9,6 +9,8 @@ import {
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
+import { runMissionStep } from "../../operations/src/execution.ts";
+import { missionProgress, type MissionPlan } from "../../operations/src/missions.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -317,6 +319,36 @@ export function makeServer(cfg: Config) {
         if (req.method === "GET" && url.pathname === "/ops/verify") {
           return json(res, 200, operations.verify());
         }
+        if (req.method === "GET" && url.pathname === "/ops/missions") {
+          try {
+            const {missions}=operations.snapshot();
+            return json(res,200,{missions:Object.fromEntries(Object.entries(missions).map(([id,m])=>
+              [id,{...m,progress:missionProgress(m)}]))});
+          } catch {throw new HttpError(503,"mission journal unavailable")}
+        }
+        if (req.method === "POST" && url.pathname === "/ops/missions") {
+          if (actor.kind!=="person")throw new HttpError(403,"only people can approve mission plans");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="plan"))throw new HttpError(422,"expected only plan");
+          try {
+            const event={type:"mission.create" as const,plan:(body as {plan:MissionPlan}).plan};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.plan.id,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
+        if(req.method==="POST"&&missionStep){
+          if(actor.kind!=="person")throw new HttpError(403,"only people can start execution");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"step does not accept an execution payload");
+          try{return json(res,200,runMissionStep(operations,missionStep[1]))}
+          catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         if (req.method === "POST" && url.pathname === "/ops/events") {
           requireWritableIntegrity();
           let raw: unknown;
@@ -327,6 +359,9 @@ export function makeServer(cfg: Config) {
           }
           if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
             throw new HttpError(422, "operations event must be an object");
+          }
+          if (["mission.create","mission.pause","mission.resume","task.started","task.completed","task.failed"].includes((raw as any).type)) {
+            throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
             id: "ops-" + randomUUID(),
