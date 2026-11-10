@@ -119,12 +119,20 @@ function transitionOps(
   const defectEvent=["defect.open","repair.record","human.decide"].includes(e.type);
   const qualityEvent=e.type==="quality.record";
   const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent;
+  // A mission event can only change one mission; copy the dictionary and that
+  // one record, not every unrelated mission and all its task results.
+  const copyAffectedMission=():OpsState["missions"]=>{
+    const copy={...current.missions};
+    if("missionId" in e && typeof e.missionId==="string" && current.missions[e.missionId])
+      copy[e.missionId]=structuredClone(current.missions[e.missionId]);
+    return copy;
+  };
   const state:OpsState = cloneHistory ? structuredClone(current) : {
     workers:workerEvent||defectEvent||!knownEvent?structuredClone(current.workers):current.workers,
     workerVersions:workerEvent||defectEvent||!knownEvent?structuredClone(current.workerVersions):current.workerVersions,
-    measurements:qualityEvent||!knownEvent?structuredClone(current.measurements):current.measurements,
+    measurements:qualityEvent?current.measurements.slice():!knownEvent?structuredClone(current.measurements):current.measurements,
     defects:defectEvent||!knownEvent?structuredClone(current.defects):current.defects,
-    missions:missionEvent||!knownEvent?structuredClone(current.missions):current.missions,
+    missions:missionEvent?copyAffectedMission():!knownEvent?structuredClone(current.missions):current.missions,
     // Do not mutate this shared array until the journal write is durable.
     history:current.history,
   };
