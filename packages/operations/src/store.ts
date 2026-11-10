@@ -8,7 +8,7 @@ import { chmodSync, closeSync, existsSync, fsyncSync, mkdirSync, openSync, readF
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
-import { applyOps, emptyOps, type OpsEnvelope, type OpsState } from "./registry.ts";
+import { stageOps, emptyOps, type OpsEnvelope, type OpsState } from "./registry.ts";
 
 interface Line { seq: number; prev: string; hash: string; payload: OpsEnvelope }
 const ZERO = "0".repeat(64);
@@ -46,6 +46,8 @@ export class OpsStore {
   /** Fully written event recovered after an interrupted head update. */
   readonly recoveredTail: number;
   private lines: Line[] = [];
+  /** Exact event IDs, reconstructed by verified replay on startup. */
+  private eventIds = new Set<string>();
   private state: OpsState = emptyOps();
   private fingerprints: string[] = [];
   constructor(dir: string) {
@@ -62,6 +64,7 @@ export class OpsStore {
       const checked=this.verifyInternal(true);
       if (!checked.ok) throw new Error("worker operations journal failed integrity check: "+checked.reason);
       this.lines=checked.lines;
+      this.eventIds=new Set(checked.lines.map(line=>line.payload.id));
       this.state=checked.state;
       recovered=checked.recovered;
       this.fingerprints=this.fileFingerprints();
@@ -115,10 +118,14 @@ export class OpsStore {
          typeof anchored.hash!=="string"||!(/^[a-f0-9]{64}$/.test(anchored.hash)))
         throw new Error("invalid operations head");
       let prev=ZERO, latest=state, committedHead=ZERO;
+      const seen=new Set<string>();
       for(let i=0;i<lines.length;i++){
         const l=lines[i];
         if(l.seq!==i+1 || l.prev!==prev || l.hash!==hash(prev,l.payload)) return {ok:false,lines,state,reason:"invalid journal chain at "+(i+1)};
-        latest=applyOps(latest,l.payload);
+        const next=stageOps(latest,l.payload,seen);
+        next.history.push(structuredClone(l.payload));
+        seen.add(l.payload.id);
+        latest=next;
         prev=l.hash;
         if(i+1===anchored.seq)committedHead=prev;
       }
@@ -147,7 +154,7 @@ export class OpsStore {
   append(envelope: OpsEnvelope): {seq:number;hash:string} {
     if(this.poisoned)throw new Error("operations journal write failed; reopen and verify before continuing");
     if (this.fileFingerprints().join("|")!==this.fingerprints.join("|")) throw new Error("worker operations journal changed outside writer");
-    const next=applyOps(this.state,envelope);
+    const next=stageOps(this.state,envelope,this.eventIds);
     const prev=this.lines.at(-1)?.hash??ZERO;
     const line={seq:this.lines.length+1,prev,hash:hash(prev,envelope),payload:envelope};
     try{
@@ -163,6 +170,9 @@ export class OpsStore {
       this.poisoned=true;
       throw e;
     }
+    // The in-memory commit happens only after both durable write steps.
+    next.history.push(structuredClone(envelope));
+    this.eventIds.add(envelope.id);
     this.lines.push(line);this.state=next;this.fingerprints=this.fileFingerprints();
     return {seq:line.seq,hash:line.hash};
   }
