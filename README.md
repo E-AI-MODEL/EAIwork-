@@ -59,6 +59,22 @@ person / worker capsule / check        ├── review signals
 
 The core package has no network access. The server owns actor identity, event ids and time. Attempts to bypass status rules are rejected and stay observable through the event flow.
 
+## EAIwork-dashboard lokaal uitproberen
+
+De nieuwe operationsomgeving staat voorlopig in [concept-PR #23](https://github.com/E-AI-MODEL/EAIwork-/pull/23). Je kunt een afgeschermde, tijdelijke proef starten zonder eerst tokens en een witnessbestand aan te maken:
+
+```bash
+npm run demo:dashboard
+```
+
+Open het adres dat in de terminal verschijnt, normaal `http://127.0.0.1:8788/dashboard`. Kies **Contracten en registratie**, vul het tijdelijke token uit diezelfde terminal in en verbind de server. Er zijn vier toegelaten lokale workers, vier echte voorbeeldmissies en een eerdere uitvoering beschikbaar. Via **Echte uitvoering**, **Planner en taken**, **Workerleger**, **Bewijs en herkomst**, **Bronnen en RepoSearch** en **Logboek** kun je het verloop onderzoeken. De lokale proef biedt geen algemene autonome AI-agent of online workerhost.
+
+De missie **Automatische tekstverwerking uitproberen** laat twee lokale tekstworkers zelfstandig achter elkaar uitvoeren. Kies bij **Echte uitvoering** een taakmaximum van twee, geef expliciet toestemming en volg het resultaat. Na een serverherstart vervalt de automatische toestemming. Dit is nog geen duurzame, parallelle AI-workerpool.
+
+Deze proef draait uitsluitend op `127.0.0.1`, bewaart gegevens in een tijdelijke map en verwijdert die na normaal afsluiten met Ctrl+C. Gebruik alleen niet-vertrouwelijke voorbeeldinformatie. De publieke HTML-demo op eaimodel.nl bevat geen toegang tot deze lokale server en doet geen modelaanroepen.
+
+Zie [de actuele stand van de uitvoeringsproef](docs/mission-execution-v0.1.md) en [het volledige bouwplan](docs/buildplan-eaiwork-2026-11-10.md). Het oorspronkelijke bewijsgericht werken hieronder blijft van toepassing.
+
 ## Quickstart
 
 Requires Node `22.18+`. No runtime dependencies are required.

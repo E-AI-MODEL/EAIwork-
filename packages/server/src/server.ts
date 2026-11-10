@@ -7,6 +7,15 @@ import {
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
+import { OpsStore } from "../../operations/src/store.ts";
+import { catalogOverview } from "../../operations/src/selector.ts";
+import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
+import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
+import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
+import { buildMissionTrace } from "../../operations/src/trace.ts";
+import { searchLocalRepository } from "../../operations/src/reposearch.ts";
+import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
+import {proposeComposedWorker} from "../../operations/src/builder.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -33,6 +42,14 @@ export interface Config {
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   workers?: Record<string, WorkerRuntime>;
+  /** Optional separate operations journal. Existing evidence logs stay unchanged. */
+  operationsDir?: string;
+  /** 0 disables timer for deterministic testing; default 100 milliseconds. */
+  schedulerIntervalMs?: number;
+  /** Administrator-allowlisted checkout; never taken from a caller or model. */
+  repoSearchRoot?: string;
+  /** Optional local planning model; drafts always require human approval. */
+  planningModel?: PlanningModel;
   maxBodyBytes?: number;
   maxRequestsPerMinute?: number;
   today?: () => string;
@@ -165,9 +182,15 @@ export function makeServer(cfg: Config) {
   }
 
   const store = new Store(cfg.dir, cfg.witness, { exclusiveWriter: true });
+  let operations: OpsStore | null = null;
+  try { operations = cfg.operationsDir ? new OpsStore(cfg.operationsDir) : null; }
+  catch (e) { store.close(); throw e; }
+  let scheduler:LocalMissionScheduler|null=null;
+  try{scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null}
+  catch(e){operations?.close();store.close();throw e}
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
-    store.close();
+    scheduler?.close();operations?.close();store.close();
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
@@ -273,6 +296,17 @@ export function makeServer(cfg: Config) {
         return res.end(readFileSync(new URL("../../client/index.html", import.meta.url)));
       }
 
+      if (req.method === "GET" && url.pathname === "/dashboard") {
+        res.writeHead(200, {
+          "content-type": "text/html; charset=utf-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "referrer-policy": "no-referrer",
+          "content-security-policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+        });
+        return res.end(readFileSync(new URL("../../../prototypes/dashboard/index.html", import.meta.url)));
+      }
       const token = (req.headers.authorization ?? "").replace(/^Bearer /, "");
       const principal = Object.prototype.hasOwnProperty.call(cfg.tokens, token) ? cfg.tokens[token] : undefined;
       if (!principal) return json(res, 401, { error: "missing or unknown token" });
@@ -283,6 +317,255 @@ export function makeServer(cfg: Config) {
       if (!bucket || nowMs - bucket.started >= 60_000) rate.set(token, { started: nowMs, count: 1 });
       else if (++bucket.count > maxRequestsPerMinute) return json(res, 429, { error: "rate limit exceeded" });
 
+      // A separate, authorized operations record. No model can raise atom evidence
+      // through this endpoint; no worker receives authority to modify other logs.
+      if (url.pathname.startsWith("/ops/")) {
+        if (!operations) return json(res, 503, { error: "operations not configured" });
+        if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        if (req.method === "GET" && url.pathname === "/ops/state") {
+          try { return json(res, 200, operations.snapshot()); }
+          catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/catalog") {
+          try { return json(res, 200, catalogOverview(operations.snapshot())); }
+          catch { return json(res, 503, { error: "operations journal changed or unavailable" }); }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/verify") {
+          return json(res, 200, operations.verify());
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/builders/compose"){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may request worker contracts");
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||
+             Object.keys(raw).some(key=>key!=="id"&&key!=="name"))
+            throw new HttpError(422,"expected name and worker id");
+          try{
+            const input=raw as {id:string;name:string};
+            return json(res,200,proposeComposedWorker(input.id,input.name));
+          }catch{return json(res,422,{error:"invalid or unsupported worker composition"})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/plans/propose"){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may request plan proposals");
+          if(!cfg.planningModel)return json(res,503,{error:"local task planner is not configured"});
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||Object.keys(raw).some(k=>k!=="instruction"))
+            throw new HttpError(422,"expected only the original instruction");
+          const instruction=(raw as {instruction?:unknown}).instruction;
+          if(typeof instruction!=="string"||!instruction.trim()||instruction.length>8000)
+            throw new HttpError(422,"invalid instruction");
+          try{
+            const proposal=await proposeMissionPlan(instruction,cfg.planningModel,"mission-"+randomUUID());
+            return json(res,200,proposal);
+          }catch(e){
+            const reason=(e as Error).message;
+            if(/invalid plan|unsupported plan fields|invalid task|constraint|cyclic|instruction|mission|dependencies|plan must|missing|source/.test(reason))
+              throw new HttpError(422,"planner proposal needs correction and human review");
+            throw new HttpError(503,"local planner unavailable");
+          }
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/reposearch"){
+          if(!cfg.repoSearchRoot)return json(res,503,{error:"RepoSearch is not configured on this server"});
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||Object.keys(raw).some(key=>key!=="query"))
+            throw new HttpError(422,"expected repository search query");
+          const query=(raw as {query?:unknown}).query;
+          if(typeof query!=="string"||!query.trim()||query.length>120)throw new HttpError(422,"invalid search query");
+          try{return json(res,200,searchLocalRepository(cfg.repoSearchRoot,query))}
+          catch{return json(res,503,{error:"repository search unavailable"})}
+        }
+        const missionTrace=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/trace$/.exec(url.pathname);
+        if(req.method==="GET"&&missionTrace){
+          try{
+            return json(res,200,buildMissionTrace(operations.snapshot(),missionTrace[1]));
+          }catch(e){
+            if(String(e).includes("unknown mission"))throw new HttpError(404,"unknown mission");
+            throw new HttpError(503,"execution trace unavailable");
+          }
+        }
+        if (req.method === "GET" && url.pathname === "/ops/missions") {
+          try {
+            const {missions}=operations.snapshot();
+            return json(res,200,{missions:Object.fromEntries(Object.entries(missions).map(([id,m])=>
+              [id,{...m,progress:missionProgress(m)}]))});
+          } catch {throw new HttpError(503,"mission journal unavailable")}
+        }
+        if (req.method === "POST" && url.pathname === "/ops/missions") {
+          if (actor.kind!=="person")throw new HttpError(403,"only people can approve mission plans");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="plan"))throw new HttpError(422,"expected only plan");
+          try {
+            const plan=(body as {plan:MissionPlan}).plan;
+            validateMissionPlan(plan);
+            const linkedAtoms=[...new Set(plan.tasks.flatMap(t=>t.evidenceAtomIds??[]))];
+            for(const atom of linkedAtoms){
+              if(!atoms.has(atom))throw new HttpError(422,"unknown evidence atom link");
+              // Until operations has per-mission authorization, audit principals
+              // must all be permitted to see any linked evidence atom ID.
+              if(!canRead(principal,atom)||
+                 Object.values(cfg.tokens).some(p=>canAudit(p)&&!canRead(p,atom)))
+                throw new HttpError(403,"evidence atom link requires shared audit read access");
+            }
+            const event={type:"mission.create" as const,plan};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.plan.id,seq:entry.seq});
+          }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
+        }
+        const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})(?:\/versions\/(\d+\.\d+\.\d+))?\/evaluate$/.exec(url.pathname);
+        if(req.method==="POST"&&builtinTest){
+          if(actor.kind!=="person")throw new HttpError(403,"person required to request worker evaluation");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"evaluation takes no arbitrary input");
+          try{
+            const id=builtinTest[1];
+            if(id==="repo-search"&&!cfg.repoSearchRoot)throw new Error("repository search not configured");
+            const current=operations.snapshot();
+            const record=builtinTest[2]?
+              current.workerVersions[id]?.[builtinTest[2]]:
+              current.workers[id];
+            if(!record||record.stage!=="candidate")throw new Error("worker is not an eligible candidate");
+            const check=evaluateBuiltin(id,record.contract);
+            const evidenceRef="builtin-fixtures:"+randomUUID();
+            const measurement={
+              id:"measurement-"+randomUUID(),workerId:id,version:record.contract.version,
+              taskKind:check.taskKind,dataset:check.dataset,suiteVersion:check.suiteVersion,
+              cohort:check.cohort,metric:check.metric,numerator:check.numerator,denominator:check.denominator,
+              measuredAt:new Date().toISOString(),evidenceRef,
+            };
+            operations.append({
+              id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"check",id:"check:builtins"},
+              event:{type:"quality.record",measurement},
+            });
+            return json(res,200,{...check,evidenceRef,passed:check.numerator===check.denominator});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const missionAutomation=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/automation\/(start|stop)$/.exec(url.pathname);
+        if(req.method==="POST"&&missionAutomation){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person can authorize or stop automatic tasks");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body))
+            throw new HttpError(422,"invalid automation request");
+          const missionId=missionAutomation[1],action=missionAutomation[2];
+          if(action==="start" &&
+             (Object.keys(body).length!==1||!Object.prototype.hasOwnProperty.call(body,"maxStarts")))
+            throw new HttpError(422,"expected automatic task budget");
+          if(action==="stop"&&Object.keys(body).length)
+            throw new HttpError(422,"stop requires an empty request");
+          try{
+            const event=action==="start"?
+              {type:"mission.automation.start" as const,missionId,maxStarts:(body as {maxStarts:number}).maxStarts}:
+              {type:"mission.automation.stop" as const,missionId,reason:"user-stopped" as const};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId,action,seq:entry.seq,automation:operations.snapshot().missions[missionId].automation});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
+        if(req.method==="POST"&&missionStep){
+          if(actor.kind!=="person")throw new HttpError(403,"only people can start execution");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"step does not accept an execution payload");
+          try{
+            if(operations.snapshot().missions[missionStep[1]]?.automation?.enabled)
+              throw new Error("stop automatic execution before manual steps");
+            return json(res,200,runMissionStep(operations,missionStep[1],4,cfg.repoSearchRoot));
+          }
+          catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const gateAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/gates\/([a-z][a-z0-9-]{2,63})\/resolve$/.exec(url.pathname);
+        if(req.method==="POST"&&gateAction){
+          if(actor.kind!=="person")throw new HttpError(403,"only designated people can resolve task gates");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(k=>k!=="evidenceRef"))
+            throw new HttpError(422,"expected a gate evidence reference");
+          try{
+            const event={type:"mission.gate.resolve" as const,missionId:gateAction[1],
+              constraintId:gateAction[2],evidenceRef:(body as {evidenceRef:string}).evidenceRef};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.missionId,constraintId:event.constraintId,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const retryTask=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/tasks\/([a-z][a-z0-9-]{2,63})\/retry$/.exec(url.pathname);
+        if(req.method==="POST"&&retryTask){
+          if(actor.kind!=="person")throw new HttpError(403,"a person must approve retry of interrupted work");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||Object.keys(body).some(x=>x!=="reason"))
+            throw new HttpError(422,"expected retry justification");
+          try{
+            const event={type:"task.retry" as const,missionId:retryTask[1],taskId:retryTask[2],
+              reason:(body as {reason:string}).reason};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:event.missionId,taskId:event.taskId,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        const missionAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/(run|pause|resume)$/.exec(url.pathname);
+        if(req.method==="POST"&&missionAction){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person may control mission execution");
+          requireWritableIntegrity();
+          const raw=await readBody(req,maxBodyBytes);
+          if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"this route takes no arbitrary payload");
+          const missionId=missionAction[1],action=missionAction[2];
+          try{
+            if(action==="run"){
+              if(operations.snapshot().missions[missionId]?.automation?.enabled)
+                throw new Error("stop automatic execution before manual runs");
+              return json(res,200,runMissionUntilBlocked(operations,missionId,32,cfg.repoSearchRoot));
+            }
+            const event={type:action==="pause"?"mission.pause" as const:"mission.resume" as const,missionId};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,200,{missionId,action,seq:entry.seq});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
+        if (req.method === "POST" && url.pathname === "/ops/events") {
+          requireWritableIntegrity();
+          let raw: unknown;
+          try { raw = JSON.parse((await readBody(req, maxBodyBytes)) || "{}"); }
+          catch (e) {
+            if (e instanceof HttpError) throw e;
+            throw new HttpError(400, "invalid JSON");
+          }
+          if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+            throw new HttpError(422, "operations event must be an object");
+          }
+          if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
+          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+            throw new HttpError(403,"mission transitions require their dedicated server route");
+          }
+          const envelope = {
+            id: "ops-" + randomUUID(),
+            at: new Date().toISOString(),
+            actor,
+            event: raw as import("../../operations/src/registry.ts").OpsEvent,
+          };
+          try {
+            const outcome = operations.append(envelope);
+            return json(res, 201, outcome);
+          } catch (e) {
+            if (String(e).includes("changed outside writer")) throw new HttpError(503, "operations journal changed");
+            throw new HttpError(422, (e as Error).message);
+          }
+        }
+      }
       if (req.method === "POST" && url.pathname === "/events") {
         requireWritableIntegrity();
         let raw: any;
@@ -532,8 +815,8 @@ export function makeServer(cfg: Config) {
       return json(res, 500, { error: "internal server error" });
     }
   });
-  server.on("close", () => store.close());
-  return { server, store };
+  server.on("close", () => { scheduler?.close();store.close(); operations?.close(); });
+  return { server, store, operations, scheduler };
 }
 
 // Run directly: EAI_TOKENS=./tokens.json EAI_DIR=./data node packages/server/src/server.ts
@@ -559,6 +842,9 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
   );
   const { server } = makeServer({
     dir: dataDir,
+    operationsDir: process.env.EAI_OPERATIONS_DIR ? resolve(process.env.EAI_OPERATIONS_DIR) : undefined,
+    repoSearchRoot: process.env.EAI_REPO_SEARCH_ROOT ? resolve(process.env.EAI_REPO_SEARCH_ROOT) : undefined,
+    planningModel: process.env.EAI_PLAN_MODEL ? localOllamaPlanningModel({model:process.env.EAI_PLAN_MODEL}) : undefined,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
     witness,
