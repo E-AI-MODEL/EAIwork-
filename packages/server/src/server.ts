@@ -11,6 +11,7 @@ import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
+import {expireLocalLeases} from "../../operations/src/leases.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
@@ -189,8 +190,12 @@ export function makeServer(cfg: Config) {
   try { operations = cfg.operationsDir ? new OpsStore(cfg.operationsDir) : null; }
   catch (e) { store.close(); throw e; }
   let scheduler:LocalMissionScheduler|null=null;
-  try{scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null}
-  catch(e){operations?.close();store.close();throw e}
+  try{
+    // Expired child leases become recorded failures, not automatic retries.
+    // Do this before the scheduler inspects the persisted missions.
+    if(operations)expireLocalLeases(operations);
+    scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null;
+  }catch(e){operations?.close();store.close();throw e}
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
     scheduler?.close();operations?.close();store.close();
