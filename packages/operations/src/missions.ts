@@ -28,6 +28,12 @@ export interface MissionTask {
   /** Existing evidence atoms used as read-only provenance links, not automatic proof. */
   evidenceAtomIds?:string[];
 }
+export interface MissionPhase {
+  id:string;
+  title:string;
+  /** Exactly one phase must contain each planned task. */
+  taskIds:string[];
+}
 export interface MissionPlan {
   /** The original request is preserved unchanged; no model may rewrite it. */
   sourceInstruction?:string;
@@ -36,6 +42,8 @@ export interface MissionPlan {
   title:string;
   goal:string;
   tasks:MissionTask[];
+  /** Optional named phases. Without these, dependency levels are used for display. */
+  phases?:MissionPhase[];
 }
 export interface TaskRun {
   runId:string;
@@ -170,6 +178,26 @@ export function validateMissionPlan(plan:MissionPlan):void {
     visiting.delete(id);visited.add(id);
   };
   for(const task of plan.tasks)visit(task.id);
+  if(plan.phases!==undefined){
+    if(!Array.isArray(plan.phases)||plan.phases.length<1||plan.phases.length>16)
+      fail("invalid mission phases");
+    const phaseIds=new Set<string>(),taskPhase=new Map<string,number>();
+    plan.phases.forEach((phase,index)=>{
+      if(!plain(phase)||typeof phase.id!=="string"||!ID.test(phase.id)||phaseIds.has(phase.id))
+        fail("invalid or duplicate phase id");
+      phaseIds.add(phase.id);
+      bounded(phase.title,"phase title",160);
+      if(!Array.isArray(phase.taskIds)||phase.taskIds.length<1||
+         phase.taskIds.some(id=>typeof id!=="string"||!ids.has(id)||taskPhase.has(id)))
+        fail("invalid or duplicate phase task");
+      for(const id of phase.taskIds)taskPhase.set(id,index);
+    });
+    if(taskPhase.size!==plan.tasks.length)fail("every task must belong to one phase");
+    for(const task of plan.tasks)for(const dep of task.dependsOn){
+      if((taskPhase.get(dep)!)>(taskPhase.get(task.id)!))
+        fail("a phase dependency cannot point to a later phase");
+    }
+  }
 }
 export function applyMissionEvent(missions:Record<string,MissionRecord>,e:MissionEvent,actor:MissionActor,at:string):void {
   if(e.type==="mission.create"){
@@ -201,6 +229,11 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        old.tasks.some((task,i)=>JSON.stringify(e.plan.tasks[i])!==JSON.stringify(task)))
       fail("an extension may only append tasks, never rewrite existing work");
     const added=e.plan.tasks.slice(old.tasks.length).map(t=>t.id);
+    if(old.phases){
+      if(!e.plan.phases||e.plan.phases.length<=old.phases.length||
+         old.phases.some((phase,i)=>JSON.stringify(e.plan.phases![i])!==JSON.stringify(phase)))
+        fail("new phases must append without moving existing tasks");
+    }
     for(const guard of old.constraints??[]){
       const next=e.plan.constraints?.find(g=>g.id===guard.id);
       if(!next || next.kind!==guard.kind || next.quote!==guard.quote ||
