@@ -81,9 +81,10 @@ Geen universeel slagingscijfer voor alle workers. De eerste indicator vergelijkt
 - **Bewijsinspectie:** het bestaande atoomlog is via beveiligde routes opnieuw zichtbaar in het dashboard. Via bestaande atoom-ID's kunnen uitvoertaken naar bewijs verwijzen zonder zichzelf bewezen te verklaren.
 - **Uitvoeringsgeschiedenis:** `GET /ops/missions/:id/trace` leidt eerdere pogingen, statussen, werkerversies, stopredenen en actorbesluiten af uit het operationslog, zonder ruwe taaktekst terug te geven.
 - **Herstel:** een mens kan een onderbroken lokale taak opnieuw laten starten. Voor externe acties ontbreekt nog een veilige algemene idempotency-afhandeling; die worden niet automatisch herhaald.
+- **Begrensde automatische scheduler:** een persoon kan per opdracht toestemming geven voor maximaal 1-32 starts van lokale tekstworkers. Iedere start telt mee vóór uitvoering; de server stopt bij het maximum, ontbrekende workers, fout of open voorwaarde. Opnieuw opstarten van de server trekt openstaande toestemming in. De uitvoering is sequentieel, niet parallel.
 - **Dashboard:** oorspronkelijke demonstratie en verbonden servertaken blijven gescheiden. Bij een live verbinding tonen **Overzicht**, **Echte uitvoering**, **Kwaliteit**, **Bewijs**, **Workerregistratie** en **Logboek** servergegevens in plaats van fictieve prestaties. De demo is niet gekoppeld aan de live API.
 
-**Nog niet gerealiseerd:** langdurige autonome achtergrondloop, volledig automatische betrouwbare taakontleding, werkelijk parallel workerleger, algemene code-Builder, autonome reparaties, webzoeker, externe database/connectoren, kostenmeting en operationeel browsermodel. De gebruiker kan de live uitvoer nog niet op eaimodel.nl zelf starten.
+**Nog niet gerealiseerd:** algemene langdurige autonome achtergrondloop, volledig automatische betrouwbare taakontleding, werkelijk parallel workerleger, algemene code-Builder, autonome reparaties, webzoeker, externe database/connectoren, kostenmeting en operationeel browsermodel. De begrensde scheduler voert alleen de drie vertrouwde lokale tekstbewerkingen automatisch uit. De gebruiker kan de live uitvoer nog niet op eaimodel.nl zelf starten.
 
 Zie `docs/mission-execution-v0.1.md`, `docs/hergebruik-audit-2026-11-10.md` en de tests in `tests/`.
 
