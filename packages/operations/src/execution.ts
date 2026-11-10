@@ -117,6 +117,12 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4):StepRe
     if(!worker || !adapter || adapter.taskKind!==spec.taskKind || worker.stage!=="ready"){
       result.blocked.push({taskId:spec.id,reason:"worker-unavailable"});continue;
     }
+    try {
+      const fixture=evaluateBuiltin(id,worker.contract);
+      if(fixture.numerator!==fixture.denominator)throw new Error("fixed suite failed");
+    }catch{
+      result.blocked.push({taskId:spec.id,reason:"untrusted-worker-contract"});continue;
+    }
     // Local built-ins only. Never execute an arbitrary adapter from a contract.
     const runId="run-"+randomUUID();
     const started=new Date().toISOString();
