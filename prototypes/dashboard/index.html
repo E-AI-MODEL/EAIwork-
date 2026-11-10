@@ -571,7 +571,7 @@ function compactDashboard(live){
   eventRows.length?eventRows.map(e=>'<div class="dash-activity"><i></i><div><b>'+h(e.title)+
    '</b><small>'+h(e.note)+'</small></div></div>').join(''):
   '<div class="dash-empty">Nog geen gebeurtenissen geregistreerd.</div>','Logboek','logboek');
- const modelStatus=live?'<div class="dash-model-status"><span class="dash-model-dot '+(localPlannerStatus?.configured?'ready':'')+'"></span><b>'+h(localPlannerStatus?.configured?'Lokaal model ingesteld':'Geen lokaal model ingesteld')+'</b><span>'+h(localPlannerStatus?.modelId||'De planner heeft nog geen modelconfiguratie')+'</span><small>Planvoorstellen vragen altijd jouw goedkeuring. Modelbereikbaarheid wordt pas bij een verzoek getest.</small></div>':'';
+ const modelStatus=live?'<div class="dash-model-status"><span class="dash-model-dot '+(codeConnections?.ollama?.status==='ready'?'ready':'')+'"></span><b>'+h(localPlannerStatus?.configured?'Lokaal model ingesteld':'Geen lokaal model ingesteld')+'</b><span>'+h(localPlannerStatus?.modelId||'De planner heeft nog geen modelconfiguratie')+'</span><small>Model ingesteld is niet hetzelfde als bereikbaar. Bekijk de verbindingen bij Codeworker.</small></div>':'';
  return headline+modelStatus+cards+pipeline+
   '<div class="dash-columns"><div class="dash-main-column">'+firstPanel+workViz+
   '</div><div class="dash-side-column">'+secondPanel+workerViz+activity+'</div></div>'+
@@ -1041,7 +1041,7 @@ async function connectOps(){
     }catch(error){
       s.productionLine=null;s.productionLineError=String(error.message||error);
     }
-  }catch(e){s.liveOps=null;localPlannerStatus=null;s.productionLine=null;s.productionLineError='';s.liveError=String(e.message||e)}
+  }catch(e){s.liveOps=null;localPlannerStatus=null;codeConnections=null;s.productionLine=null;s.productionLineError='';s.liveError=String(e.message||e)}
   render();
 }
 async function registerOps(e){
