@@ -1,7 +1,8 @@
 /**
  * Small, single-process scheduler for specifically approved local text tasks.
  * Each task start consumes one persisted budget unit before its adapter runs.
- * The scheduler never retries interrupted work or executes external actions.
+ * The scheduler never retries in-flight work or executes external actions.
+ * A person may opt in to resume only not-yet-started local tasks after restart.
  */
 import {randomUUID} from "node:crypto";
 import type {OpsStore} from "./store.ts";
@@ -22,7 +23,8 @@ export class LocalMissionScheduler {
     this.store=store;
     if(!Number.isInteger(intervalMs)||intervalMs<0||(intervalMs>0&&(intervalMs<25||intervalMs>5000)))
       throw new Error("scheduler interval must be zero (manual) or 25-5000 ms");
-    // Fail closed across process restart. A fresh human approval is required.
+    // Resume only where prior human approval explicitly covers restart.
+    // Interrupted in-flight runs are never silently retried.
     this.recoverInterrupted();
     if(intervalMs>0){
       this.timer=setInterval(()=>{try{this.tick()}catch{
@@ -43,10 +45,19 @@ export class LocalMissionScheduler {
     const missions=this.store.snapshot().missions;
     let stopped=0;
     for(const [id,m] of Object.entries(missions)){
-      if(m.automation?.enabled){
-        this.stop(id,"interrupted");
-        stopped++;
+      if(!m.automation?.enabled)continue;
+      if(!m.automation.resumeAfterRestart){
+        this.stop(id,"interrupted");stopped++;continue;
       }
+      // A persisted start may have run before the process crashed.
+      // Do not repeat a possibly executed adapter, even when local.
+      const progress=missionProgress(m);
+      const reason:SchedulerStopReason|undefined=m.paused?"paused":
+        progress.running||progress.failed?"needs-review":
+        progress.status==="complete"?"complete":
+        m.automation.starts>=m.automation.maxStarts?"budget-exhausted":
+        !progress.ready?"blocked":undefined;
+      if(reason){this.stop(id,reason);stopped++}
     }
     return stopped;
   }
