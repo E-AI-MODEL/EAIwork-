@@ -64,6 +64,30 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     assert.equal(hits.results.length,1);
     assert.equal(hits.results[0].path,"src/example.ts");
     assert.equal(hits.results[0].review,"candidate-not-verified");
+    const searchWorker={
+      id:"repo-search",version:"1.0.0",name:"RepoSearch",specialization:"Bounded local source retrieval",
+      taskKinds:["repo-search"],inputSchema:{type:"object"},outputSchema:{type:"object"},
+      tools:["repo.search"],requestedPermissions:["read:repo"],modelPolicy:{preferred:"deterministic"},
+      testSuite:"repo-search-fixture-v1",stopConditions:["missing-source"],
+    };
+    assert.equal((await request("POST","/ops/events","a".repeat(40),{type:"worker.register",contract:searchWorker})).status,201);
+    const repoEvaluation=await request("POST","/ops/workers/repo-search/evaluate","a".repeat(40),{});
+    assert.equal(repoEvaluation.status,200);
+    const repoMetrics=await repoEvaluation.json() as any;
+    assert.equal(repoMetrics.passed,true);
+    assert.equal(repoMetrics.numerator,3);
+    assert.equal((await request("POST","/ops/events","a".repeat(40),
+      {type:"worker.release",id:"repo-search",evidenceRef:repoMetrics.evidenceRef})).status,201);
+    const repoMission={id:"mission-search",title:"Zoek in lokale repository",goal:"Vind exacte bronverwijzingen",
+      tasks:[{id:"task-find",title:"Zoek broncode",taskKind:"repo-search",dependsOn:[],input:{text:"workerFixture"}}]};
+    assert.equal((await request("POST","/ops/missions","a".repeat(40),{plan:repoMission})).status,201);
+    const repoRun=await(await request("POST","/ops/missions/mission-search/run","a".repeat(40),{})).json() as any;
+    assert.equal(repoRun.stopReason,"complete");
+    assert.equal(repoRun.progress.done,1);
+    const seen=await(await request("GET","/ops/missions","a".repeat(40))).json() as any;
+    const outcome=seen.missions["mission-search"].tasks["task-find"].run.output;
+    assert.equal(outcome.results[0].path,"src/example.ts");
+    assert.equal(outcome.results[0].review,"candidate-not-verified");
     assert.equal((await request("POST","/ops/events","r".repeat(40),{type:"worker.register"})).status,403);
     const contract={
       id:"proof-worker",version:"1.0.0",name:"Proof worker",specialization:"Verify test fixtures",
