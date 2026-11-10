@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
@@ -20,8 +20,11 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     ["s".repeat(40)]:{actor:{kind:"system" as const,id:"trusted-test-runner"},access:{read:"*" as const,write:[] as string[],audit:true}},
     ["r".repeat(40)]:{actor:{kind:"person" as const,id:"viewer"},access:{read:"*" as const,write:[] as string[]}},
   };
+  const repoRoot=join(root,"local-repo");
+  mkdirSync(join(repoRoot,"src"),{recursive:true});
+  writeFileSync(join(repoRoot,"src","example.ts"),"export const workerFixture = 'approved-local-only';\n");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
-  const {server}=makeServer({dir:join(root,"evidence"),operationsDir:join(root,"ops"),pack,tokens,witness});
+  const {server}=makeServer({dir:join(root,"evidence"),operationsDir:join(root,"ops"),repoSearchRoot:repoRoot,pack,tokens,witness});
   try{
     await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
     const base="http://127.0.0.1:"+((server.address() as AddressInfo).port);
@@ -40,6 +43,14 @@ test("operations API is isolated, authenticated and enforces repair decisions", 
     assert.equal(library.counts.active,null);
     assert.equal(library.counts.ready,0);
     assert.ok(library.workers.every((w:any)=>w.activeInstances===null));
+    assert.equal((await request("POST","/ops/reposearch","r".repeat(40),{query:"workerFixture"})).status,403);
+    assert.equal((await request("POST","/ops/reposearch","a".repeat(40),{query:"workerFixture",root:"/etc"})).status,422);
+    const searched=await request("POST","/ops/reposearch","a".repeat(40),{query:"workerFixture"});
+    assert.equal(searched.status,200);
+    const hits=await searched.json() as any;
+    assert.equal(hits.results.length,1);
+    assert.equal(hits.results[0].path,"src/example.ts");
+    assert.equal(hits.results[0].review,"candidate-not-verified");
     assert.equal((await request("POST","/ops/events","r".repeat(40),{type:"worker.register"})).status,403);
     const contract={
       id:"proof-worker",version:"1.0.0",name:"Proof worker",specialization:"Verify test fixtures",
