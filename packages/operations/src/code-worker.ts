@@ -186,12 +186,13 @@ export class LocalCodeWorkspace {
   list(limit=20){
     if(!Number.isInteger(limit)||limit<1||limit>50)throw new Error("Ongeldige geschiedenislimiet");
     return readdirSync(this.storage).filter(n=>/^[0-9a-f-]{36}\.json$/.test(n))
-      .sort().slice(-limit).reverse().map(n=>{
-        const r=this.record(n.slice(0,-5));
-        return {id:r.id,path:r.path,modelId:r.modelId,status:r.status,createdAt:r.createdAt,
-          appliedAt:r.appliedAt??null,restoredAt:r.restoredAt??null,
-          sourceSha256:r.sourceSha256,replacementSha256:r.replacementSha256};
-      });
+      .map(n=>this.record(n.slice(0,-5)))
+      .sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id))
+      .slice(0,limit).map(r=>({
+        id:r.id,path:r.path,modelId:r.modelId,status:r.status,createdAt:r.createdAt,
+        appliedAt:r.appliedAt??null,restoredAt:r.restoredAt??null,
+        sourceSha256:r.sourceSha256,replacementSha256:r.replacementSha256,
+      }));
   }
   apply(request:{proposalId:string;expectedSha256:string;approve:true},actorId:string){
     if(!request||request.approve!==true||typeof actorId!=="string"||!actorId.startsWith("person:"))
