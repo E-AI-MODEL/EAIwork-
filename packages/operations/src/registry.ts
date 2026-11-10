@@ -117,8 +117,19 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
     const w=state.workers[e.id]; if (!w) fail("unknown worker");
     if (w.stage !== "candidate") fail("only a candidate can be released");
     meaningful(e.evidenceRef,"test evidence");
-    const hasRecordedTest=state.measurements.some(m=>m.workerId===e.id&&m.version===w.contract.version&&m.evidenceRef===e.evidenceRef&&m.denominator>0);
-    if (!hasRecordedTest) fail("release requires a recorded test for this exact version");
+    const validTest=state.history.some(row=>{
+      const event=row.event;
+      if(event.type!=="quality.record"||row.actor.kind!=="check")return false;
+      const m=event.measurement;
+      return m.workerId===e.id && m.version===w.contract.version &&
+        m.evidenceRef===e.evidenceRef && w.contract.taskKinds.includes(m.taskKind) &&
+        m.suiteVersion===w.contract.testSuite &&
+        m.metric==="fixture-pass" && m.denominator>=3 && m.numerator===m.denominator &&
+        (w.contract.testSuite!=="builtin-fixture-v1" || 
+          (row.actor.id==="check:builtins" && m.dataset==="builtin-fixture-v1" && 
+           m.cohort==="fixed-fixtures"));
+    });
+    if(!validTest)fail("release requires a passed, trusted, matching test for this exact version");
     w.stage="ready"; w.releasedAt=envelope.at; w.releaseEvidence=e.evidenceRef;
     // This is registration only. Runtime rights are still assigned by server authz.
   } else if (e.type === "worker.quarantine") {
