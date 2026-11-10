@@ -23,6 +23,15 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/controlRealMission/);
   assert.match(html,/ops\/missions/);
   assert.match(html,/builtin-release/);
+  assert.match(html,/function liveOverview\(/);
+  assert.match(html,/function liveLogbook\(/);
+  assert.match(html,/function missionTracePanel\(/);
+  assert.match(html,/fetchMissionTrace/);
+  assert.match(html,/data-action="mission-trace-refresh"/);
+  assert.match(html,/case 'real-mission-open'/);
+  assert.match(html,/s.liveOps\)return liveOverview\(\)/);
+  assert.match(html,/s.liveOps\)return liveLogbook\(\)/);
+  assert.match(html,/evidenceState,evidenceDetail/);
   assert.doesNotMatch(html,/localStorage\.setItem\(/);
   assert.doesNotMatch(html,/fetch\(['"]https?:\/\//);
 });
