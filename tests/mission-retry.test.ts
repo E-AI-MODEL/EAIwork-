@@ -56,3 +56,16 @@ test("a reviewed task has a bounded manual retry history",()=>{
   assert.throws(()=>append(state,{type:"task.retry",missionId,taskId:"task-clean",reason:"unbounded"},person),/review limit/);
   assert.equal(state.missions[missionId].tasks["task-clean"].attempts?.length,3);
 });
+
+
+test("an old run ID cannot be reused after a reviewed retry",()=>{
+  const missionId="mission-no-reused-run-id";
+  let state=append(emptyOps(),{type:"mission.create",plan:plan(missionId)});
+  state=append(state,started(missionId,"run-first"),runner);
+  state=append(state,{type:"task.retry",missionId,taskId:"task-clean",
+    reason:"Human verified that the first local attempt is safe to repeat"},person);
+  assert.throws(()=>append(state,started(missionId,"run-first"),runner),/duplicate task run id/);
+  assert.equal(state.missions[missionId].tasks["task-clean"].status,"queued");
+  state=append(state,started(missionId,"run-new"),runner);
+  assert.equal(state.missions[missionId].tasks["task-clean"].run?.runId,"run-new");
+});

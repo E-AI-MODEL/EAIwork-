@@ -376,6 +376,9 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        typeof r.startedAt!=="string"||
        typeof r.inputHash!=="string"||!/^[a-f0-9]{64}$/.test(r.inputHash)||
        r.verification!=="not-evaluated")fail("invalid task start");
+    if(Object.values(mission.tasks).some(other=>
+       other.run?.runId===r.runId || other.attempts?.some(previous=>previous.runId===r.runId)))
+      fail("duplicate task run id");
     if(mission.automation?.enabled){
       if(mission.automation.starts>=mission.automation.maxStarts)
         fail("automatic task budget exhausted");
