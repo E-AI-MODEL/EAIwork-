@@ -220,6 +220,10 @@
 .code-diff-line>code{display:block;padding:1px 8px;white-space:pre-wrap;overflow-wrap:anywhere}
 .code-diff-added{background:#eaf5ed}.code-diff-removed{background:#fcebea}.code-diff-same{background:#fff}
 .code-diff>p{padding:10px;font-size:10px;color:var(--muted)}
+.approval-choice{border-color:#cedbd2;background:#fcfefc;padding:18px}
+.approval-choice>b{font-size:14px;display:block}
+.approval-choice .row .btn{min-height:42px;min-width:170px;flex:1 1 190px;font-size:12px}
+@media(max-width:600px){.approval-choice .row{flex-direction:column;align-items:stretch}.approval-choice .row .btn{width:100%;flex:auto}}
 </style>
 </head>
 <body>
@@ -1668,7 +1672,7 @@ function orderedPlanPanel(){
               current.projectPreStatus==='passed'&&codeInspection?.sourceUnchanged&&
                 codeInspection?.replacementHashMatches&&codeInspection?.preflight?.status!=='failed':
               codeInspection?.canApply)&&codeDraft?.id===current.proposalId?
-              '<div class="card pad mt" role="group" aria-label="Beslis over deze wijziging">'+
+              '<div class="card pad mt approval-choice" role="group" aria-label="Beslis over deze wijziging">'+
                 '<b>Mag EAIwork deze wijziging uitvoeren?</b>'+
                 '<p class="smalltext">De test is geslaagd. EAIwork past alleen dit bestand aan. Daarna volgt nog een test.</p>'+
                 '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
@@ -1800,7 +1804,7 @@ function codeWorkbench(){
       (draft.status==='requires-human-review'&&codePlans.some(p=>p.state==='active'||p.state==='blocked')?
         '<p class="smalltext">Dit voorstel hoort bij het lopende plan. Gebruik bovenaan de knoppen van de geplande stap.</p>':
         draft.status==='requires-human-review'?
-        '<div class="card pad mt" role="group" aria-label="Beslis over dit voorstel">'+
+        '<div class="card pad mt approval-choice" role="group" aria-label="Beslis over dit voorstel">'+
         '<b>Wil je dit bestand aanpassen?</b>'+
         '<p class="smalltext">Je kiest alleen voor dit bestand. Er wordt niets gepubliceerd.</p>'+
         '<div class="row mt" style="gap:10px;flex-wrap:wrap">'+
