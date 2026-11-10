@@ -19,6 +19,7 @@ export interface WorkerContract {
   modelPolicy: { preferred: "small" | "medium" | "large" | "deterministic" | "auto"; fallback?: string };
   testSuite: string;
   stopConditions: string[];
+  recipe?:{kind:"builtin-compose";steps:["text-normalize","text-metrics"]};
 }
 export interface WorkerRecord {
   contract: WorkerContract;
@@ -110,6 +111,15 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
     if (!Array.isArray(c.requestedPermissions) || !c.requestedPermissions.every(x=>typeof x==="string")) fail("invalid permissions");
     if (!Array.isArray(c.stopConditions) || !c.stopConditions.length) fail("stop conditions required");
     if (!plain(c.modelPolicy) || !["small","medium","large","deterministic","auto"].includes(String(c.modelPolicy.preferred))) fail("invalid model policy");
+    if(c.recipe!==undefined){
+      if(!plain(c.recipe)||c.recipe.kind!=="builtin-compose"||
+         !Array.isArray(c.recipe.steps)||JSON.stringify(c.recipe.steps)!==JSON.stringify(["text-normalize","text-metrics"])||
+         JSON.stringify(c.taskKinds)!==JSON.stringify(["text-inspect"])||
+         c.modelPolicy.preferred!=="deterministic"||
+         c.testSuite!=="builtin-compose-fixture-v1" ||
+         c.tools.length!==0||c.requestedPermissions.length!==0)
+        fail("invalid safe worker recipe");
+    }
     if (state.workers[c.id]) fail("worker id already registered; use a new id for a new version");
     state.workers[c.id] = {contract: structuredClone(c), stage:"candidate", registeredAt:envelope.at};
   } else if (e.type === "worker.release") {
