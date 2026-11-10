@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "E-AI-MODEL/EAIwork-"
-          test "$GITHUB_REF_NAME" = "feature/local-ollama-code-proposals-v01-20261110"
+          test "$GITHUB_REF_NAME" = "feature/local-code-review-check-rollback-v01-20261110"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           ! gh release view v0.2.0-preview.4 >/dev/null 2>&1
           grep -q '^# PolyForm Noncommercial License 1.0.0' LICENSE
