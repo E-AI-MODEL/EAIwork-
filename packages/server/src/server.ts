@@ -14,6 +14,7 @@ import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
 import {productionLineView} from "../../operations/src/production-line.ts";
+import {verifyGitHubActionsRun,type GitHubReader} from "../../operations/src/github-actions.ts";
 import {claimTextJob,heartbeatTextJob,completeTextJob,validateJobReference,
   validateExecutorIdentities,type ExecutorIdentity,type JobReference} from "../../operations/src/executor-channel.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
@@ -49,6 +50,10 @@ export interface Config {
   tokens: Record<string, Principal>;
   /** Dedicated local executor credentials, never general API tokens. */
   executorTokens?: Record<string,ExecutorIdentity>;
+  /** Optional read-only GitHub token for private repositories. Never sent to workers. */
+  githubReadToken?:string;
+  /** Test-only injection of GitHub HTTP transport. */
+  githubActionReader?:GitHubReader;
   witness: AnchorWitness;
   checks?: Record<string, DeterministicCheck>;
   workers?: Record<string, WorkerRuntime>;
@@ -609,6 +614,40 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:plan.id,revision:expectedRevision+1,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
+        const verifyCi=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/verify-ci$/.exec(url.pathname);
+        if(req.method==="POST"&&verifyCi){
+          if(actor.kind!=="person")throw new HttpError(403,"a person must request CI verification");
+          requireWritableIntegrity();
+          const body=(await readBody(req,Math.min(maxBodyBytes,256))).trim();
+          if(body!=="{}")throw new HttpError(422,"CI verification takes no parameters");
+          const missionId=verifyCi[1];
+          const mission=operations.snapshot().missions[missionId];
+          if(!mission)throw new HttpError(404,"unknown mission");
+          if(!mission.releaseDossier||
+             mission.releaseDossier.revision!==mission.revision||
+             mission.releaseDossier.ciObservation)
+            throw new HttpError(409,"no current release dossier awaiting CI verification");
+          let observation:Awaited<ReturnType<typeof verifyGitHubActionsRun>>;
+          try{
+            observation=await verifyGitHubActionsRun(mission.releaseDossier.candidate,
+              cfg.githubActionReader??fetch,cfg.githubReadToken);
+          }catch{throw new HttpError(422,"GitHub Actions run could not be confirmed for this candidate")}
+          // A GitHub call is asynchronous: verify that no new plan or
+          // candidate was registered while the provider was responding.
+          const updated=operations.snapshot().missions[missionId];
+          if(!updated||updated.revision!==mission.revision||
+             JSON.stringify(updated.releaseDossier)!==JSON.stringify(mission.releaseDossier))
+            throw new HttpError(409,"release dossier changed during CI verification");
+          try{
+            const entry=operations.append({
+              id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"check",id:"check:github-actions"},
+              event:{type:"mission.release.ci.observe" as const,missionId,
+                expectedRevision:mission.revision,observation},
+            });
+            return json(res,200,{observation,seq:entry.seq,publicationAllowed:false});
+          }catch{throw new HttpError(409,"CI observation could not be saved")}
+        }
         const releaseRoute=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/release\/(submit|review)$/.exec(url.pathname);
         if(req.method==="POST"&&releaseRoute){
           if(actor.kind!=="person")throw new HttpError(403,"release dossier requires a person");
@@ -816,7 +855,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
@@ -1113,6 +1152,7 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file://").h
     operationsDir: process.env.EAI_OPERATIONS_DIR ? resolve(process.env.EAI_OPERATIONS_DIR) : undefined,
     repoSearchRoot: process.env.EAI_REPO_SEARCH_ROOT ? resolve(process.env.EAI_REPO_SEARCH_ROOT) : undefined,
     planningModel: process.env.EAI_PLAN_MODEL ? localOllamaPlanningModel({model:process.env.EAI_PLAN_MODEL}) : undefined,
+    githubReadToken:process.env.EAI_GITHUB_READ_TOKEN,
     pack: JSON.parse(readFileSync(process.env.EAI_PACK ?? "packs/sow-demo/pack.json", "utf8")),
     tokens: JSON.parse(readFileSync(tokenFile, "utf8")),
     witness,
