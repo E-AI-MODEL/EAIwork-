@@ -25,6 +25,7 @@ import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import type {LocalCodeWorkspace} from "../../operations/src/code-worker.ts";
+import {OrderedCodePlans} from "../../operations/src/ordered-code-plans.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
@@ -221,6 +222,7 @@ export function makeServer(cfg: Config) {
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
+  const codePlans=cfg.codeWorkspace?new OrderedCodePlans(cfg.codeWorkspace):null;
   const today = cfg.today ?? (() => new Date().toISOString().slice(0, 10));
   const validFor = Object.fromEntries(cfg.pack.atoms.filter((a) => a.valid_for_days).map((a) => [a.id, a.valid_for_days!]));
   const maxBodyBytes = cfg.maxBodyBytes ?? 64 * 1024;
@@ -447,6 +449,127 @@ export function makeServer(cfg: Config) {
           if(pendingCodeActions().length)
             throw new HttpError(409,"Er staat een onderbroken codewijziging open. Controleer die eerst onder Codeworker > Herstel.");
         };
+        const requireIndependentCodeAction=()=>{
+          if(codePlans?.list().some(plan=>plan.state==="active"||plan.state==="blocked"))
+            throw new HttpError(409,"Er staat een codeplan open. Rond het plan af of stop het eerst.");
+        };
+        const requirePlan=()=>{
+          if(!cfg.codeWorkspace||!codePlans)
+            throw new HttpError(503,"Geen lokale codewerkmap ingesteld");
+          return {workspace:cfg.codeWorkspace,plans:codePlans};
+        };
+        const codePlanRequest=async(fields:string[])=>{
+          let input:unknown;
+          try{input=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"Ongeldige JSON")}
+          if(!input||typeof input!=="object"||Array.isArray(input)||
+             Object.keys(input).some(key=>!fields.includes(key)))
+            throw new HttpError(422,"Ongeldig codeplanverzoek");
+          return input as Record<string,unknown>;
+        };
+        if(req.method==="GET"&&url.pathname==="/ops/code/plans"){
+          const {plans}=requirePlan();
+          try{return json(res,200,{plans:plans.list()})}
+          catch{return json(res,503,{error:"Codeplannen zijn niet veilig leesbaar"})}
+        }
+        if(req.method==="GET"&&url.pathname==="/ops/code/plan"){
+          const {plans}=requirePlan();
+          try{return json(res,200,plans.view(url.searchParams.get("id")??""))}
+          catch{return json(res,404,{error:"Codeplan ontbreekt of is niet veilig leesbaar"})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plans"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag een codeplan maken");
+          const {plans}=requirePlan();
+          requireNoPendingCodeAction();
+          const request=await codePlanRequest(["title","steps"]);
+          try{return json(res,200,plans.create(request as any,actor.id))}
+          catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plan/stop"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag een plan stoppen");
+          const {plans}=requirePlan();
+          const request=await codePlanRequest(["planId","approve"]);
+          if(request.approve!==true||typeof request.planId!=="string")
+            throw new HttpError(422,"Bevestig dat je het plan wilt stoppen");
+          try{return json(res,200,plans.stop(request.planId,actor.id))}
+          catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plan/propose"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag een voorstel aanvragen");
+          const {workspace,plans}=requirePlan();
+          const request=await codePlanRequest(["planId"]);
+          if(typeof request.planId!=="string")throw new HttpError(422,"Geef een codeplan op");
+          requireNoPendingCodeAction();
+          try{
+            return json(res,200,await plans.exclusive(async()=>{
+              const current=plans.active(request.planId as string);
+              if(current.status!=="waiting")throw new Error("Deze stap heeft al een voorstel");
+              const proposed=await workspace.propose(current.step.path,current.step.instruction,current.step.testPath);
+              const journalSeq=recordCodeAction("proposed",proposed,"review-required");
+              return {...plans.attachProposal(request.planId as string,proposed.id),proposalId:proposed.id,journalSeq};
+            }));
+          }catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plan/test-pre"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag tests starten");
+          const {workspace,plans}=requirePlan();
+          const request=await codePlanRequest(["planId","proposalId"]);
+          if(typeof request.planId!=="string"||typeof request.proposalId!=="string")
+            throw new HttpError(422,"Geef plan en voorstel op");
+          requireNoPendingCodeAction();
+          try{
+            return json(res,200,await plans.exclusive(async()=>{
+              plans.assertProposal(request.planId as string,request.proposalId as string,"review");
+              const report=await workspace.runTests(request.proposalId as string);
+              recordCodeAction("tested",workspace.inspect(request.proposalId as string),
+                report.status,report.testSha256);
+              return {report,plan:plans.view(request.planId as string)};
+            }));
+          }catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plan/apply"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag code toepassen");
+          const {workspace,plans}=requirePlan();
+          const request=await codePlanRequest(["planId","proposalId","expectedSha256","approve"]);
+          if(typeof request.planId!=="string"||typeof request.proposalId!=="string"||
+             typeof request.expectedSha256!=="string"||request.approve!==true)
+            throw new HttpError(422,"Controleer het voorstel en bevestig de SHA-256");
+          requireNoPendingCodeAction();
+          try{
+            return json(res,200,await plans.exclusive(async()=>{
+              plans.assertProposal(request.planId as string,request.proposalId as string,"review");
+              const pre=workspace.inspect(request.proposalId as string);
+              if(!pre.canApply||pre.testReport?.status!=="passed"||
+                 !pre.testReport.testsExecuted||pre.replacementSha256!==request.expectedSha256)
+                throw new Error("Goedgekeurde Docker-test of voorstelversie ontbreekt");
+              recordCodeAction("apply-started",{id:pre.id,...pre},"pending");
+              const applied=workspace.apply({
+                proposalId:request.proposalId as string,
+                expectedSha256:request.expectedSha256 as string,approve:true
+              },actor.id);
+              recordCodeAction("applied",{id:pre.id,...pre},"applied");
+              return {applied,plan:plans.view(request.planId as string)};
+            }));
+          }catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/code/plan/test-post"){
+          if(actor.kind!=="person")throw new HttpError(403,"Alleen een persoon mag de wijziging testen");
+          const {workspace,plans}=requirePlan();
+          const request=await codePlanRequest(["planId","proposalId"]);
+          if(typeof request.planId!=="string"||typeof request.proposalId!=="string")
+            throw new HttpError(422,"Geef plan en voorstel op");
+          requireNoPendingCodeAction();
+          try{
+            return json(res,200,await plans.exclusive(async()=>{
+              plans.assertProposal(request.planId as string,request.proposalId as string,"needs-post-test");
+              const report=await workspace.runAppliedTests(request.proposalId as string);
+              recordCodeAction("tested",workspace.inspect(request.proposalId as string),
+                report.status,report.testSha256);
+              const plan=plans.storePostTest(request.planId as string,request.proposalId as string,report);
+              return {report,plan};
+            }));
+          }catch(e){return json(res,409,{error:String((e as Error).message)})}
+        }
         if(req.method==="GET"&&url.pathname==="/ops/code/recovery"){
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
           try{
@@ -522,6 +645,7 @@ export function makeServer(cfg: Config) {
           catch{return json(res,404,{error:"Codevoorstel is niet gevonden of kan niet worden gelezen"})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/propose"){
+          requireIndependentCodeAction();
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codevoorstellen aanvragen");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
           let input:unknown;
@@ -553,6 +677,7 @@ export function makeServer(cfg: Config) {
           catch{return json(res,409,{error:"Codecontrole niet mogelijk: voorstel of bronbestand ontbreekt"})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/test"){
+          requireIndependentCodeAction();
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen Docker-tests starten");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
           let input:unknown;
@@ -587,6 +712,7 @@ export function makeServer(cfg: Config) {
           }catch{return json(res,503,{error:"Docker-test uitgevoerd maar registratie mislukt. Controleer voorstel en operationslog."})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/apply"){
+          requireIndependentCodeAction();
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codewijzigingen goedkeuren");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
           let input:unknown;
@@ -627,6 +753,7 @@ export function makeServer(cfg: Config) {
           }catch{return json(res,503,{error:"Code is aangepast, maar registratie is mislukt. Controleer eerst de bestandsinhoud en het operationslog."})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/restore"){
+          requireIndependentCodeAction();
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen code herstellen");
           if(!cfg.codeWorkspace)return json(res,503,{error:"Geen lokale codewerkmap ingesteld"});
           let input:unknown;

@@ -180,13 +180,13 @@ function transitionOps(
       if(last.type!=="code.activity")fail("invalid code history");
       if(e.action==="tested"){
         if(envelope.actor.kind!=="check")fail("code test outcome requires trusted checker");
-        if(!["proposed","imported","tested"].includes(last.action)||!e.testSha256)
+        if(!["proposed","imported","tested","applied"].includes(last.action)||!e.testSha256)
           fail("code test requires pending proposal and test fingerprint");
       }else if(e.action==="apply-started"){
         requireHuman(envelope.actor);
         const abortedApply=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
           previous.at(-2)?.event.action==="apply-started";
-        if(!["proposed","imported","tested"].includes(last.action)&&!abortedApply)
+        if((!["proposed","imported","tested"].includes(last.action)||previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedApply)
           fail("code apply intent requires pending proposal");
         if(e.testSha256!==undefined)fail("apply intent must not invent test evidence");
       }else if(e.action==="applied"){
@@ -199,7 +199,7 @@ function transitionOps(
         requireHuman(envelope.actor);
         const abortedRestore=last.action==="aborted"&&previous.at(-2)?.event.type==="code.activity"&&
           previous.at(-2)?.event.action==="restore-started";
-        if(!["applied","imported"].includes(last.action)&&!abortedRestore)
+        if(!["applied","imported"].includes(last.action)&&!(last.action==="tested"&&previous.some(row=>row.event.type==="code.activity"&&row.event.action==="applied"))&&!abortedRestore)
           fail("code restore intent requires applied proposal");
         if(e.testSha256!==undefined)fail("restore intent must not invent test evidence");
       }else if(e.action==="restored"){
