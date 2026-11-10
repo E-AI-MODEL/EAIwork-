@@ -110,12 +110,21 @@ function transitionOps(
   const e = envelope.event;
   if (seenIds ? seenIds.has(envelope.id) : current.history.some(x=>x.id===envelope.id))
     fail("duplicate event id");
+  // Clone only the domain that this event is allowed to change. Shared
+  // domains stay read-only; the state is committed only after the disk write.
+  const missionEvent=e.type.startsWith("mission.")||e.type.startsWith("task.");
+  const workerEvent=[
+    "worker.register","worker.release","worker.activate-version","worker.quarantine",
+  ].includes(e.type);
+  const defectEvent=["defect.open","repair.record","human.decide"].includes(e.type);
+  const qualityEvent=e.type==="quality.record";
+  const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent;
   const state:OpsState = cloneHistory ? structuredClone(current) : {
-    workers:structuredClone(current.workers),
-    workerVersions:structuredClone(current.workerVersions),
-    measurements:structuredClone(current.measurements),
-    defects:structuredClone(current.defects),
-    missions:structuredClone(current.missions),
+    workers:workerEvent||defectEvent||!knownEvent?structuredClone(current.workers):current.workers,
+    workerVersions:workerEvent||defectEvent||!knownEvent?structuredClone(current.workerVersions):current.workerVersions,
+    measurements:qualityEvent||!knownEvent?structuredClone(current.measurements):current.measurements,
+    defects:defectEvent||!knownEvent?structuredClone(current.defects):current.defects,
+    missions:missionEvent||!knownEvent?structuredClone(current.missions):current.missions,
     // Do not mutate this shared array until the journal write is durable.
     history:current.history,
   };
