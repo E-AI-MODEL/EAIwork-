@@ -50,6 +50,18 @@ export class LocalMissionScheduler {
       if(!m.automation.resumeAfterRestart){
         this.stop(id,"interrupted");stopped++;continue;
       }
+      if(m.automation.executionMode==="remote-text"){
+        // An existing leased run stays fenced. The HTTP executor may report
+        // before expiry; it is never silently replayed after a restart.
+        const progress=missionProgress(m);
+        const reason:SchedulerStopReason|undefined=m.paused?"paused":
+          progress.failed?"needs-review":
+          progress.status==="complete"?"complete":
+          !progress.running&&m.automation.starts>=m.automation.maxStarts?"budget-exhausted":
+          !progress.running&&!progress.ready?"blocked":undefined;
+        if(reason){this.stop(id,reason);stopped++}
+        continue;
+      }
       // The only safe automatic recovery is a pure, deterministic local
       // calculation. Replay keeps the previous run and spends a new budget
       // unit if the calculation starts again. Any other case needs review.
@@ -96,6 +108,13 @@ export class LocalMissionScheduler {
         };
         if(m.paused){stop("paused");continue}
         const progress=missionProgress(m);
+        if(m.automation.executionMode==="remote-text"){
+          if(progress.status==="complete")stop("complete");
+          else if(progress.failed)stop("needs-review");
+          else if(!progress.running&&m.automation.starts>=m.automation.maxStarts)stop("budget-exhausted");
+          else if(!progress.running&&!progress.ready)stop("blocked");
+          continue;
+        }
         if(progress.status==="complete"){stop("complete");continue}
         if(progress.failed||progress.running){stop("needs-review");continue}
         if(m.automation.starts>=m.automation.maxStarts){stop("budget-exhausted");continue}
