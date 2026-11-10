@@ -184,7 +184,7 @@ function transitionOps(
           fail("code test requires pending proposal and test fingerprint");
       }else if(e.action==="applied"){
         requireHuman(envelope.actor);
-        if(!["proposed","tested"].includes(last.action))
+        if(!["proposed","imported","tested"].includes(last.action))
           fail("code apply requires pending proposal");
         if(e.testSha256!==undefined)fail("apply must not invent test evidence");
       }else if(e.action==="restored"){
