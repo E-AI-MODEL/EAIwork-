@@ -443,8 +443,11 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   if(task.run.lease){
     if(e.leaseId!==task.run.lease.id)
       fail("stale task lease");
-    const finished=Date.parse(e.finishedAt);
-    if(!Number.isFinite(finished)||finished>Date.parse(task.run.lease.expiresAt))
+    const finished=Date.parse(e.finishedAt),committed=Date.parse(at);
+    const expires=Date.parse(task.run.lease.expiresAt);
+    if(!Number.isFinite(finished)||!Number.isFinite(committed)||
+       finished>expires||committed>expires||
+       finished>committed||committed-finished>5000)
       fail("task lease expired before completion");
   }else if(e.leaseId!==undefined)fail("unexpected lease token");
   if(typeof e.finishedAt!=="string"||!Number.isFinite(e.elapsedMs)||e.elapsedMs<0)fail("invalid task timing");
