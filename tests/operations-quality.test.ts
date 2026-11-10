@@ -5,7 +5,7 @@ import { driftSignals } from "../packages/operations/src/quality.ts";
 const actor={kind:"system" as const,id:"validated-test-runner"};
 let seq=0;
 const record=(s:ReturnType<typeof emptyOps>,event:OpsEvent)=>applyOps(s,{
-  id:"q-"+(++seq),at:"2026-11-10T03:00:00Z",actor,event
+  id:"q-"+(++seq),at:"2026-11-10T03:00:00Z",actor:event.type==="worker.register"?{kind:"person" as const,id:"owner"}:actor,event
 } as OpsEnvelope);
 test("drift compares the same version, suite and data cohort",()=>{
   let s=emptyOps();
