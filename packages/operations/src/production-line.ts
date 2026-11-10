@@ -38,6 +38,7 @@ export interface ProductionLineMission {
   releaseCandidate:null|{
     id:string;status:string;revision:number;artifactName:string;
     commitSha:string;proposedBy:string;reviewedBy:string|null;
+    artifactHashVerified:boolean;artifactInspections:number;
   };
   publication:{allowed:false;status:"not-verified";reason:string};
 }
@@ -150,6 +151,8 @@ export function productionLineView(
           revision:latestCandidate.revision,artifactName:latestCandidate.artifactName,
           commitSha:latestCandidate.commitSha,proposedBy:latestCandidate.proposedBy,
           reviewedBy:latestCandidate.review?.by??null,
+          artifactHashVerified:(latestCandidate.artifactChecks??[]).some(check=>check.matched),
+          artifactInspections:latestCandidate.artifactChecks?.length??0,
         }:null,
         publication:{allowed:false,status:"not-verified",
           reason:"Releasegegevens en CI-links zijn niet onafhankelijk geverifieerd. Er is geen publicatierecht."},
