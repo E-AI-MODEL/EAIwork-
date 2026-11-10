@@ -311,7 +311,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
        !/^[a-f0-9]{64}$/.test(c.artifactSha256)||
        c.checkCommitSha!==c.commitSha ||
        typeof c.artifactName!=="string"||
-       !/^[a-zA-Z0-9_.-]{1,160}$/.test(c.artifactName)||
+       !/^[a-zA-Z0-9_-][a-zA-Z0-9_.-]{0,159}$/.test(c.artifactName)||
+       !c.artifactName.includes(".")||
        !(/^[0-9]+$/.test(runId)))
       fail("release references must be exact and consistently scoped");
     if(mission.paused||mission.automation?.enabled||
