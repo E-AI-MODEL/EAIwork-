@@ -13,6 +13,7 @@ import {evaluateBuiltin,runMissionUntilBlocked} from "../packages/operations/src
 import {proposeComposedWorker} from "../packages/operations/src/builder.ts";
 import type {WorkerContract,OpsEvent,OpsActor} from "../packages/operations/src/registry.ts";
 import type {PlanningModel} from "../packages/operations/src/planner.ts";
+import type {GitHubReader} from "../packages/operations/src/github-actions.ts";
 
 const person:OpsActor={kind:"person",id:"person:demo"};
 const check:OpsActor={kind:"check",id:"check:builtins"};
@@ -25,7 +26,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel}={}){
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader}={}){
   const root=mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
   const pair=generateKeyPairSync("ed25519");
@@ -42,6 +43,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     dir:join(root,"evidence"),operationsDir:join(root,"operations"),
     pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
+    githubActionReader:options.githubActionReader,
     tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}},
       [reviewerToken]:{actor:{kind:"person",id:"person:release-reviewer"},
         access:{read:"*",write:[],audit:true}}},
