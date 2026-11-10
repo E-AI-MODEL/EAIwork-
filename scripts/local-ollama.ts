@@ -5,6 +5,7 @@
  */
 import {pathToFileURL} from "node:url";
 import {resolve} from "node:path";
+import type {AddressInfo} from "node:net";
 import {createDemoServer} from "./local-demo.ts";
 import {localOllamaHost,discoverLocalOllamaModels} from "../packages/gateway/src/ollama-provider.ts";
 import {localOllamaPlanningModel} from "../packages/operations/src/planner.ts";
@@ -55,7 +56,7 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
   const host=localOllamaHost(options.host);
   const port=options.port??8788;
   const timeoutMs=options.timeoutMs??90000;
-  if(!Number.isInteger(port)||port<1024||port>65535)
+  if(!Number.isInteger(port)||(port!==0&&port<1024)||port>65535)
     throw new Error("Ongeldige dashboardpoort");
   if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>120000)
     throw new Error("Ongeldige Ollama-timeout");
@@ -74,7 +75,8 @@ export async function startLocalOllama(options:LocalOllamaOptions={}){
       demo.server.listen(port,"127.0.0.1");
     });
   }catch(error){await demo.close();throw error}
-  return {...demo,model,ollamaHost:host,address:"http://127.0.0.1:"+port+"/dashboard"};
+  const actualPort=(demo.server.address() as AddressInfo).port;
+  return {...demo,model,ollamaHost:host,address:"http://127.0.0.1:"+actualPort+"/dashboard"};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   try{
