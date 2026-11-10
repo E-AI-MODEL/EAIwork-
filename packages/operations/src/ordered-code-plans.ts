@@ -76,7 +76,7 @@ export class OrderedCodePlans {
     let released=true;
     const suiteRequired=plan.suitePolicy==="project-node-v1";
     const steps=plan.steps.map((step,index)=>{
-      let status:"waiting"|"review"|"needs-post-test"|"done"|"blocked"="waiting";
+      let status:"waiting"|"review"|"needs-post-test"|"needs-project-test"|"done"|"blocked"="waiting";
       let detail="";
       let proposal:null|ReturnType<LocalCodeWorkspace["inspect"]>=null;
       try{
