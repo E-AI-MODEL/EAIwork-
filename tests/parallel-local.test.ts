@@ -117,3 +117,45 @@ test("parallel invocation refuses active automatic consent and cannot start dupl
     assert.equal(trace.counts.attempts,2);
   }finally{await demo.close()}
 });
+
+
+test("an oversized child payload fails as a recorded task without leaking a worker slot",async()=>{
+  const {demo,call}=await setup();
+  try{
+    const plan={
+      id:"mission-parallel-input-bound",title:"Begrensde kindprocesinvoer",
+      goal:"Bewaar falende taakstart en voltooi onafhankelijk werk",
+      tasks:[
+        {id:"task-oversize",title:"Veel UTF8-data",taskKind:"text-normalize",
+          dependsOn:[],input:{text:"😀".repeat(6000)}},
+        {id:"task-safe",title:"Kleine tekst",taskKind:"text-metrics",
+          dependsOn:[],input:{text:"Twee woorden"}},
+      ],
+    };
+    assert.equal((await call("POST","/ops/missions",{plan})).status,201);
+    const route="/ops/missions/"+plan.id+"/parallel/run";
+    const response=await call("POST",route,{maxParallel:2});
+    assert.equal(response.status,200);
+    const result=await response.json() as any;
+    assert.deepEqual(result.claimed,["task-oversize","task-safe"]);
+    assert.deepEqual(result.failed,["task-oversize"]);
+    assert.deepEqual(result.completed,["task-safe"]);
+    assert.equal(result.progress.status,"needs-review");
+    const before=await(await call("GET","/ops/missions")).json() as any;
+    assert.equal(before.missions[plan.id].tasks["task-oversize"].run.errorCode,"output-invalid");
+    assert.equal(before.missions[plan.id].tasks["task-oversize"].status,"failed");
+    assert.equal(before.missions[plan.id].tasks["task-safe"].run.output.words,2);
+    const repeated=await(await call("POST",route,{maxParallel:2})).json() as any;
+    assert.deepEqual(repeated.claimed,[]);
+    const second={
+      id:"mission-slots-released",title:"Kindprocessen opnieuw beschikbaar",
+      goal:"Controleer dat de vorige fout geen slots vasthoudt",
+      tasks:[{id:"task-reuse",title:"Nieuwe tekst",taskKind:"text-normalize",
+        dependsOn:[],input:{text:"  Nieuwe  taak  "}}],
+    };
+    assert.equal((await call("POST","/ops/missions",{plan:second})).status,201);
+    const next=await call("POST","/ops/missions/"+second.id+"/parallel/run",{maxParallel:2});
+    assert.equal(next.status,200);
+    assert.deepEqual((await next.json() as any).completed,["task-reuse"]);
+  }finally{await demo.close()}
+});
