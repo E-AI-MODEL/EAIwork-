@@ -299,14 +299,17 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(Object.keys(c).some(k=>!["id","revision","repository","commitSha",
        "artifactName","artifactSha256","checkRunUrl","checkCommitSha"].includes(k)))
       fail("unexpected release candidate field");
-    if(!/^[a-zA-Z0-9_.-]{1,90}\\/[a-zA-Z0-9_.-]{1,90}$/.test(c.repository)||
+    const repoParts=typeof c.repository==="string"?c.repository.split("/"):[];
+    const checkPrefix="https://github.com/"+c.repository+"/actions/runs/";
+    const runId=typeof c.checkRunUrl==="string"&&c.checkRunUrl.startsWith(checkPrefix)?
+      c.checkRunUrl.slice(checkPrefix.length):"";
+    if(repoParts.length!==2||repoParts.some(part=>!(/^[a-zA-Z0-9_.-]{1,90}$/.test(part)))||
        !/^[a-f0-9]{40}$/.test(c.commitSha)||
        !/^[a-f0-9]{64}$/.test(c.artifactSha256)||
        c.checkCommitSha!==c.commitSha ||
        typeof c.artifactName!=="string"||
        !/^[a-zA-Z0-9_.-]{1,160}$/.test(c.artifactName)||
-       !/^https:\\/\\/github\\.com\\/[a-zA-Z0-9_.-]+\\/[a-zA-Z0-9_.-]+\\/actions\\/runs\\/[0-9]+$/.test(c.checkRunUrl)||
-       !c.checkRunUrl.startsWith("https://github.com/"+c.repository+"/actions/runs/"))
+       !(/^[0-9]+$/.test(runId)))
       fail("release references must be exact and consistently scoped");
     if(mission.paused||mission.automation?.enabled||
        Object.values(mission.tasks).some(t=>t.status!=="done"||!t.run?.outputHash))
