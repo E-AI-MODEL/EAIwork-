@@ -1,3 +1,4 @@
+import { applyMissionEvent, type MissionEvent, type MissionRecord } from "./missions.ts";
 /**
  * Worker contracts and quality control. This is a separate operations model:
  * it never changes the authority or evidence status of EAIwork atoms.
@@ -62,6 +63,7 @@ export interface Defect {
   decision?: { choice: "replace" | "rebuild" | "manual" | "pause" | "disable"; rationale: string; by: string; at: string };
 }
 export type OpsEvent =
+  | MissionEvent
   | { type: "worker.register"; contract: WorkerContract }
   | { type: "worker.release"; id: string; evidenceRef: string }
   | { type: "worker.quarantine"; id: string; reason: string }
@@ -70,8 +72,8 @@ export type OpsEvent =
   | { type: "repair.record"; defectId: string; attempt: RepairAttempt }
   | { type: "human.decide"; defectId: string; choice: "replace" | "rebuild" | "manual" | "pause" | "disable"; rationale: string };
 export interface OpsEnvelope { id: string; at: string; actor: OpsActor; event: OpsEvent }
-export interface OpsState { workers: Record<string, WorkerRecord>; measurements: QualityMeasurement[]; defects: Record<string, Defect>; history: OpsEnvelope[] }
-export const emptyOps = (): OpsState => ({ workers: {}, measurements: [], defects: {}, history: [] });
+export interface OpsState { workers: Record<string, WorkerRecord>; measurements: QualityMeasurement[]; defects: Record<string, Defect>; missions: Record<string, MissionRecord>; history: OpsEnvelope[] }
+export const emptyOps = (): OpsState => ({ workers: {}, measurements: [], defects: {}, missions: {}, history: [] });
 const fail = (message: string): never => { throw new Error(message); };
 const meaningful = (s: unknown, label: string, max = 512): string => {
   if (typeof s !== "string" || !s.trim() || s.length > max) return fail(label + " is missing or invalid");
@@ -93,7 +95,10 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
   const e = envelope.event;
   if (current.history.some(x => x.id === envelope.id)) fail("duplicate event id");
   const state: OpsState = structuredClone(current);
-  if (e.type === "worker.register") {
+  if (e.type === "mission.create" || e.type === "mission.pause" || e.type === "mission.resume" ||
+      e.type === "task.started" || e.type === "task.completed" || e.type === "task.failed") {
+    applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
+  } else if (e.type === "worker.register") {
     requireHuman(envelope.actor);
     const c = e.contract;
     if (!plain(c) || !/^[a-z][a-z0-9-]{2,63}$/.test(c.id) || !/^\d+\.\d+\.\d+$/.test(c.version)) fail("invalid worker id or version");
