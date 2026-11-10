@@ -9,12 +9,13 @@ import {
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
-import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
+import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
+import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
@@ -346,6 +347,35 @@ export function makeServer(cfg: Config) {
             return json(res,200,proposeComposedWorker(input.id,input.name));
           }catch{return json(res,422,{error:"invalid or unsupported worker composition"})}
         }
+        if(req.method==="POST"&&url.pathname==="/ops/plans/preflight"){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may inspect mission proposals");
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||
+             Object.keys(raw).some(k=>k!=="plan"&&k!=="missingInformation")||
+             !Object.prototype.hasOwnProperty.call(raw,"plan"))
+            throw new HttpError(422,"expected plan and optional missing information");
+          try{
+            const body=raw as {plan:MissionPlan;missingInformation?:string[]};
+            validateMissionPlan(body.plan);
+            const linked=[...new Set(body.plan.tasks.flatMap(task=>task.evidenceAtomIds??[]))];
+            for(const atom of linked){
+              if(!atoms.has(atom))throw new HttpError(422,"unknown evidence atom link");
+              if(!canRead(principal,atom)||
+                 Object.values(cfg.tokens).some(p=>canAudit(p)&&!canRead(p,atom)))
+                throw new HttpError(403,"evidence atom link requires shared audit read access");
+            }
+            const state=operations.snapshot();
+            return json(res,200,inspectMissionPlan(body.plan,{
+              state,runtime:builtinInventoryForState(state,cfg.repoSearchRoot),
+              missingInformation:body.missingInformation,
+            }));
+          }catch(e){
+            if(e instanceof HttpError)throw e;
+            throw new HttpError(422,"mission proposal needs correction before review");
+          }
+        }
         if(req.method==="POST"&&url.pathname==="/ops/plans/propose"){
           if(actor.kind!=="person")throw new HttpError(403,"only people may request plan proposals");
           if(!cfg.planningModel)return json(res,503,{error:"local task planner is not configured"});
@@ -359,7 +389,12 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422,"invalid instruction");
           try{
             const proposal=await proposeMissionPlan(instruction,cfg.planningModel,"mission-"+randomUUID());
-            return json(res,200,proposal);
+            const state=operations.snapshot();
+            const preflight=inspectMissionPlan(proposal.plan,{
+              state,runtime:builtinInventoryForState(state,cfg.repoSearchRoot),
+              missingInformation:proposal.missingInformation,
+            });
+            return json(res,200,{...proposal,preflight});
           }catch(e){
             const reason=(e as Error).message;
             if(/invalid plan|unsupported plan fields|invalid task|constraint|cyclic|instruction|mission|dependencies|plan must|missing|source/.test(reason))
