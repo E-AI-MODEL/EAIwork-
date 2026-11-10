@@ -126,6 +126,42 @@ export class LocalCodeWorkspace {
     }else mkdirSync(this.storage,{mode:0o700});
     if(process.platform!=="win32")chmodSync(this.storage,0o700);
   }
+  /** Only the administrator-selected worktree is readable. No arbitrary paths. */
+  fileSha256(path:string){
+    return sha(readBounded(safeExistingFile(this.root,path)));
+  }
+  get planDir(){return join(this.storage,"..","code-plans")}
+  /** Tests the bytes that are already on disk after a reviewed apply. */
+  async runAppliedTests(proposalId:string){
+    const initial=this.record(proposalId);
+    if(initial.status!=="applied"||!initial.testPath)
+      throw new Error("Alleen een toegepaste wijziging met testbestand kan opnieuw worden getest");
+    if(this.activeTests.has(proposalId))throw new Error("De test is al bezig");
+    const source=safeExistingFile(this.root,initial.path);
+    const testFile=safeExistingFile(this.root,initial.testPath);
+    const candidate=readBounded(source),testSource=readBounded(testFile);
+    if(sha(candidate)!==initial.replacementSha256||
+       sha(initial.replacement)!==initial.replacementSha256)
+      throw new Error("De toegepaste code wijkt af van het goedgekeurde voorstel");
+    if(initial.testReport?.status!=="passed"||
+       !initial.testReport.testsExecuted||
+       initial.testReport.candidateSha256!==initial.replacementSha256||
+       initial.testReport.testSha256!==sha(testSource))
+      throw new Error("De oorspronkelijke Docker-test is niet aantoonbaar geslaagd");
+    this.activeTests.add(proposalId);
+    try{
+      const result=await this.testRunner({candidatePath:initial.path,
+        candidateSource:candidate,testPath:initial.testPath,testSource});
+      const latest=this.record(proposalId);
+      if(latest.status!=="applied"||
+         sha(readBounded(source))!==initial.replacementSha256||
+         sha(readBounded(testFile))!==sha(testSource)||
+         result.candidateSha256!==initial.replacementSha256||
+         result.testSha256!==sha(testSource))
+        throw new Error("Testuitkomst hoort niet bij de actuele bestandsversie");
+      return result;
+    }finally{this.activeTests.delete(proposalId)}
+  }
   private record(id:string):ProposalRecord{
     if(!/^[0-9a-f-]{36}$/.test(id))throw new Error("Ongeldig voorstelnummer");
     const file=join(this.storage,id+".json");
