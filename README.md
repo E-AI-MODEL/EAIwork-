@@ -67,7 +67,7 @@ De nieuwe operationsomgeving staat voorlopig in [concept-PR #23](https://github.
 npm run demo:dashboard
 ```
 
-Open het adres dat in de terminal verschijnt, normaal `http://127.0.0.1:8788/dashboard`. Kies **Contracten en registratie**, vul het tijdelijke token uit diezelfde terminal in en verbind de server. Er zijn vier toegelaten lokale workers, vier echte voorbeeldmissies en een eerdere uitvoering beschikbaar. Via **Echte uitvoering**, **Planner en taken**, **Workerleger**, **Bewijs en herkomst**, **Bronnen en RepoSearch** en **Logboek** kun je het verloop onderzoeken. De lokale proef biedt geen algemene autonome AI-agent of online workerhost.
+Open het adres dat in de terminal verschijnt, normaal `http://127.0.0.1:8788/dashboard`. Kies **Contracten en registratie**, vul het tijdelijke token uit diezelfde terminal in en verbind de server. Er zijn vijf toegelaten lokale workers, vier echte voorbeeldmissies en een eerdere uitvoering beschikbaar. Via **Echte uitvoering**, **Planner en taken**, **Workerleger**, **Bewijs en herkomst**, **Bronnen en RepoSearch** en **Logboek** kun je het verloop onderzoeken. De lokale proef biedt geen algemene autonome AI-agent of online workerhost.
 
 De missie **Automatische tekstverwerking uitproberen** laat twee lokale tekstworkers zelfstandig achter elkaar uitvoeren. Kies bij **Echte uitvoering** een taakmaximum van twee, geef expliciet toestemming en volg het resultaat. Na een serverherstart vervalt de automatische toestemming standaard. Een missie-eigenaar kan via de API vooraf expliciet instemmen met voortzetting van nog niet begonnen lokale taken en met begrensd herstel van bijwerkingsvrije berekeningen. Een onderbroken externe actie wordt nooit automatisch herhaald. Dit is nog geen duurzame, parallelle AI-workerpool.
 
@@ -79,6 +79,8 @@ De ontwikkelbranches voegen ook revisies van missieplannen en een alleen-lezen p
 Een aanvullende, beperkte proef kan twee onafhankelijke lokale teksttaken in afzonderlijke childprocessen uitvoeren via `POST /ops/missions/:id/parallel/run`. Dit is een door een persoon gestarte route, geen automatische parallelle workerpool. De bestaande bewijsregels en herstelbeperkingen blijven gelden. Zie [parallelle uitvoering van vaste tekstworkers](docs/parallel-pure-local-v0.1.md).
 
 Een tweede uitvoeringsproef verbindt een los tekstworkerproces via een beperkt localhost-HTTP-protocol. De missie-eigenaar keurt een taakmaximum goed; de server registreert de claim vóór uitvoering en controleert het resultaat opnieuw. De worker krijgt een apart token zonder toegang tot beheer- of bewijsgegevens. Zie [tekstworker via localhost](docs/local-executor-channel-v0.1.md). Dit is geen gedeelde workerpool over meerdere machines.
+De afzonderlijke executor ondersteunt nu ook de bestaande vaste tekstinspectie en een beperkte Markdown-linkherkenner. Die herkent verwijzingen zonder websites te openen of bronkwaliteit te beoordelen. Beide draaien alleen na toestemming voor een aangewezen executor. Zie [vier vaste tekstspecialisaties](docs/specialized-local-executors-v0.1.md).
+
 
 Zie [de actuele stand van de uitvoeringsproef](docs/mission-execution-v0.1.md) en [het volledige bouwplan](docs/buildplan-eaiwork-2026-11-10.md). Het oorspronkelijke bewijsgericht werken hieronder blijft van toepassing.
 
