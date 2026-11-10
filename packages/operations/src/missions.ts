@@ -301,7 +301,9 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     const gate=mission.plan.constraints?.find(g=>g.id===e.constraintId);
     if(!gate || !["approval","condition","deadline","uncertainty"].includes(gate.kind))
       fail("constraint cannot be resolved");
-    if(actor.kind!=="person" || (gate.kind==="approval" && actor.id!==gate.approverId))
+    if(actor.kind!=="person" ||
+       (gate.kind==="approval" && actor.id!==gate.approverId) ||
+       (gate.kind==="uncertainty" && actor.id!==mission.createdBy))
       fail("constraint requires the designated person");
     bounded(e.evidenceRef,"gate evidence reference",256);
     if(mission.resolvedGates?.[gate.id])fail("constraint already resolved");
