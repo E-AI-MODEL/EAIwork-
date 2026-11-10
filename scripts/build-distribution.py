@@ -11,7 +11,7 @@ OUT = ROOT / "dist" / "eaiwork-local-demo.zip"
 FIXED = (2026, 1, 1, 0, 0, 0)
 INCLUDE = ("package.json", "LICENSE", "README.md", "scripts/local-demo.ts",
            "scripts/local-text-executor.ts")
-DIRECTORIES = ("packages", "packs")
+DIRECTORIES = ("packages", "packs", "prototypes/dashboard")
 MAX_FILES = 400
 MAX_FILE_SIZE = 2 * 1024 * 1024
 MANIFEST = "DISTRIBUTION-MANIFEST.json"
@@ -87,7 +87,7 @@ def verify(archive_path):
         if not isinstance(records, dict) or set(records) != set(names) - {MANIFEST}:
             raise ValueError("manifest coverage mismatch")
         for item in members:
-            if item.is_dir() or item.file_size > MAX_FILE_SIZE or
+            if (item.is_dir() or item.file_size > MAX_FILE_SIZE or
                     ((item.external_attr >> 16) & 0o170000) == 0o120000):
                 raise ValueError("unsafe distribution member")
             if item.filename == MANIFEST:
