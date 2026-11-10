@@ -357,6 +357,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     const task=mission.tasks[e.taskId];
     if(!task||task.status!=="running"||!task.run||task.run.runId!==e.runId)
       fail("no matching in-flight task to recover");
+    if(task.run.lease)fail("leased tasks must not be automatically replayed");
     // Recovery is permitted only for these two pure, built-in adapters.
     // Other composed or external adapters require human review.
     if((task.spec.effect!==undefined&&task.spec.effect!=="local")||
