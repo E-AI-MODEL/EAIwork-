@@ -18,7 +18,7 @@ test("release forms belong to the existing live dashboard, not the synthetic dem
 });
 test("release actions use authenticated relative routes and no publish endpoint",()=>{
   assert.match(dashboard,/postOps\('\/ops\/missions\/'.*'\/releases\/candidates'/);
-  assert.match(dashboard,/encodeURIComponent\\(m\\.candidateId\\)\\+'\\/review'/);
+  assert.ok(dashboard.includes("encodeURIComponent(m.candidateId)+'/review'"));
   assert.match(dashboard,/verify-artifact/);
   assert.match(dashboard,/Content-Type':'application\/octet-stream'/);
   assert.match(dashboard,/onExecutionServer\(\)\|\|!opsToken/);
