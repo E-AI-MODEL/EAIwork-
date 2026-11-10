@@ -13,6 +13,7 @@ import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../o
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
+import {proposeComposedWorker} from "../../operations/src/builder.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
@@ -324,6 +325,19 @@ export function makeServer(cfg: Config) {
         }
         if (req.method === "GET" && url.pathname === "/ops/verify") {
           return json(res, 200, operations.verify());
+        }
+        if(req.method==="POST"&&url.pathname==="/ops/builders/compose"){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may request worker contracts");
+          let raw:unknown;
+          try{raw=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!raw||typeof raw!=="object"||Array.isArray(raw)||
+             Object.keys(raw).some(key=>key!=="id"&&key!=="name"))
+            throw new HttpError(422,"expected name and worker id");
+          try{
+            const input=raw as {id:string;name:string};
+            return json(res,200,proposeComposedWorker(input.id,input.name));
+          }catch{return json(res,422,{error:"invalid or unsupported worker composition"})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/plans/propose"){
           if(actor.kind!=="person")throw new HttpError(403,"only people may request plan proposals");
