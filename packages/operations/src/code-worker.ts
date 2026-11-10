@@ -128,7 +128,11 @@ export class LocalCodeWorkspace {
   }
   /** Only the administrator-selected worktree is readable. No arbitrary paths. */
   fileSha256(path:string){
-    return sha(readBounded(safeExistingFile(this.root,path)));
+    return sha(this.readApprovedFile(path));
+  }
+  /** Read only a bounded existing source or test file in the selected worktree. */
+  readApprovedFile(path:string){
+    return readBounded(safeExistingFile(this.root,path));
   }
   get planDir(){return join(this.storage,"..","code-plans")}
   /** Tests the bytes that are already on disk after a reviewed apply. */
