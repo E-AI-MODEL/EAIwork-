@@ -90,3 +90,11 @@ In het dashboard:
 Een mislukte of niet-uitgevoerde Docker-test blokkeert het toepassen **wanneer een testbestand is opgegeven**. Zonder testbestand is er geen automatische runtime-test; de bestaande syntaxis- en menselijke controles blijven bestaan. Een geslaagde test zegt uitsluitend iets over die meegeleverde test, niet over alle functionaliteit of veiligheid.
 
 Er worden geen scripts uit `package.json` gestart, geen dependencies geïnstalleerd en geen opdrachten van het model als shellcommando uitgevoerd. De eerste versie is beperkt tot JavaScript met Node.js `node:test`. Docker zelf blijft een krachtige lokale dienst; dit is nog geen algemeen bewezen beveiligingsomgeving voor willekeurige vijandige code.
+
+## Eerdere codevoorstellen vergelijken en herstellen
+
+Het lokale Codeworker-scherm toont de toegevoegde en verwijderde regels naast de volledige voorgestelde vervanging. De geschiedenis blijft in dezelfde lokale opslagmap aanwezig na een herstart. Je kunt een voorstel opnieuw openen, de syntaxiscontrole bekijken en, bij een opgegeven testbestand, de Docker-teststatus opnieuw bekijken.
+
+Na een goedgekeurde wijziging kan **Herstel vorige versie** de opgeslagen originele inhoud terugzetten. Daarvoor is opnieuw een afzonderlijke bevestiging nodig. Het gewijzigde bestand moet nog precies gelijk zijn aan het eerder toegepaste voorstel. EAIwork weigert herstel bij een latere handmatige wijziging. De back-up wordt op SHA-256 gecontroleerd en maar één keer toegepast.
+
+De bestaande Node-/TypeScript-syntaxiscontroles en optionele Docker-test blijven verplicht waar ze waren ingesteld. Een diff is een vergelijking, geen bewijs dat het programma correct werkt. De lokale Docker-proef blijft beperkt tot één voorgesteld JavaScript-bestand met één gekozen testbestand. Er is geen projectbrede autonome bouwloop.
