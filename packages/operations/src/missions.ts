@@ -61,6 +61,8 @@ export interface MissionTaskRecord {
 export type SchedulerStopReason = "complete"|"budget-exhausted"|"blocked"|"needs-review"|"interrupted"|"paused"|"user-stopped";
 export interface MissionAutomation {
   enabled:boolean;
+  /** Explicit opt-in to continue queued, side-effect-free work after restart. */
+  resumeAfterRestart?:boolean;
   maxStarts:number;
   starts:number;
   approvedBy:string;
@@ -81,7 +83,7 @@ export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.resume";missionId:string}
-  | {type:"mission.automation.start";missionId:string;maxStarts:number}
+  | {type:"mission.automation.start";missionId:string;maxStarts:number;resumeAfterRestart?:boolean}
   | {type:"mission.automation.stop";missionId:string;reason:SchedulerStopReason}
   | {type:"mission.gate.resolve";missionId:string;constraintId:string;evidenceRef:string}
   | {type:"task.retry";missionId:string;taskId:string;reason:string}
@@ -191,6 +193,8 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(actor.id!==mission.createdBy)fail("only the mission creator may approve automatic execution");
     if(!Number.isInteger(e.maxStarts)||e.maxStarts<1||e.maxStarts>32)
       fail("automatic task budget must be 1-32");
+    if(e.resumeAfterRestart!==undefined&&typeof e.resumeAfterRestart!=="boolean")
+      fail("invalid restart continuation consent");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
     const tasks=Object.values(mission.tasks);
     if(tasks.some(t=>t.status==="running"||t.status==="failed"))
@@ -201,6 +205,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
          !kinds.has(t.spec.taskKind)))
       fail("automatic execution is limited to fixed local text workers");
     mission.automation={enabled:true,maxStarts:e.maxStarts,starts:0,
+      resumeAfterRestart:e.resumeAfterRestart===true,
       approvedBy:actor.id,approvedAt:at};
     return;
   }
