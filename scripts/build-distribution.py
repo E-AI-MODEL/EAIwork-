@@ -52,6 +52,7 @@ def build():
         "requires": "Node.js >=22.18",
         "start": "npm run demo:dashboard",
         "publicationApproved": False,
+        "licenseReview": "required",
         "files": {name: {"sha256": hashlib.sha256(data).hexdigest(),
                          "bytes": len(data)} for name, data in files.items()},
     }
