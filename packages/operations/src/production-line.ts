@@ -44,6 +44,10 @@ export interface ProductionLineMission {
     ciVerification:"unverified"|"github-confirmed";
     ciObservedAt:string|null;
     ciAttempt:number|null;
+    byteVerification:"unverified"|"local-bytes-matched";
+    byteCheckedAt:string|null;
+    byteSize:number|null;
+    artifactOriginVerified:false;
   };
 }
 export interface ProductionLineView {
@@ -134,9 +138,11 @@ export function productionLineView(
       const releaseStage:LineStage={id:"release",label:"Opleverdossier",
         status:dossier?"needs-review":"not-verified",
         detail:dossier?
+          dossier.artifactObservation?
+            "De geüploade bestandsbytes komen overeen met de opgegeven SHA-256. Herkomst uit CI, licentie en bruikbaarheid zijn niet gecontroleerd.":
           dossier.ciObservation?
-            "GitHub bevestigt een geslaagde CI-run voor de opgegeven commit. Artefactbytes, licentie en uitkomst zijn nog niet onafhankelijk gecontroleerd.":
-            "Kandidaat en aangeleverde verwijzingen zijn vastgelegd. De CI-run, artefactbytes en licentie zijn nog niet gecontroleerd.":
+            "GitHub bevestigt de opgegeven CI-run. De bestandsbytes, herkomst en licentie zijn nog niet gecontroleerd.":
+            "Kandidaat en aangeleverde verwijzingen zijn vastgelegd. De CI-run, bestandsbytes en licentie zijn nog niet gecontroleerd.":
           "Nog geen opleverdossier met een exacte commit, artefacthash en testverwijzingen.",
         taskIds:[]};
       return {id:mission.plan.id,title:mission.plan.title,revision:mission.revision,
@@ -162,6 +168,10 @@ export function productionLineView(
           ciVerification:dossier.ciObservation?"github-confirmed":"unverified",
           ciObservedAt:dossier.ciObservation?.observedAt??null,
           ciAttempt:dossier.ciObservation?.attempt??null,
+          byteVerification:dossier.artifactObservation?"local-bytes-matched":"unverified",
+          byteCheckedAt:dossier.artifactObservation?.checkedAt??null,
+          byteSize:dossier.artifactObservation?.sizeBytes??null,
+          artifactOriginVerified:false,
         }}:{}),
       };
     });
