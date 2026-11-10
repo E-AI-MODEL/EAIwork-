@@ -55,7 +55,11 @@ test("interrupted apply on unchanged file blocks work and is cancelled after res
     first=connect(f,stub.url);const api=await first.start();
     const p=await api.post("/ops/code/propose",{path:"src/counter.js",instruction:"Zet de teller op twee"});
     assert.equal(p.status,200);const draft=await p.json() as any;
-    (first.worker as any).apply=()=>{throw Error("simulated crash before rename")};
+    (first.worker as any).apply=()=>{
+      // A backup was already created, but the source rename did not happen.
+      writeFileSync(join(f.profile,"code-proposals",draft.id+".original"),f.source);
+      throw Error("simulated crash after writing the original backup");
+    };
     assert.equal((await api.post("/ops/code/apply",
       {proposalId:draft.id,expectedSha256:draft.replacementSha256,approve:true})).status,409);
     assert.equal(readFileSync(f.file,"utf8"),f.source);
