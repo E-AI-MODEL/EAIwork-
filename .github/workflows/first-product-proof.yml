@@ -32,4 +32,13 @@ jobs:
           docker version
           docker pull node:22-alpine
       - name: Build the first product and check it
+        env:
+          EAI_FIRST_PRODUCT_OUTPUT_DIR: dist/first-product-proof
         run: npm run proof:first-product
+      - name: Save the finished example, tests and proof
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eaiwork-first-product-proof
+          path: dist/first-product-proof/
+          if-no-files-found: error
+          retention-days: 14
