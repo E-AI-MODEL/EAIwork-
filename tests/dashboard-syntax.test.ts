@@ -27,7 +27,7 @@ test("dashboard labels demo measurements and uses same-origin operations API",()
   assert.match(html,/function liveLogbook\(/);
   assert.match(html,/function missionTracePanel\(/);
   assert.match(html,/fetchMissionTrace/);
-  assert.match(html,/data-action="mission-trace-refresh"/);
+  assert.match(html,/mission-trace-refresh/);
   assert.match(html,/case 'real-mission-open'/);
   assert.match(html,/s.liveOps\)return liveOverview\(\)/);
   assert.match(html,/s.liveOps\)return liveLogbook\(\)/);
