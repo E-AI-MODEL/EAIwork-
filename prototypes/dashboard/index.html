@@ -1514,8 +1514,9 @@ function codeWorkbench(){
       (draft.testPath?'<p class="smalltext"><b>Docker-test:</b> '+h(draft.testReport?.status||'Nog niet uitgevoerd')+
          ' · '+h(draft.testPath)+'</p>'+
          (draft.testReport?.output?'<pre class="contract-code" style="max-height:180px;overflow:auto;white-space:pre-wrap">'+h(draft.testReport.output)+'</pre>':''):'')+
-      (codeInspection?'<p class="smalltext" role="status">'+h(codeInspection.canApply?
-        'Bron ongewijzigd; je kunt het voorstel beoordelen en toepassen.':
+      (codeInspection?'<p class="smalltext" role="status">'+h(codePlans.some(p=>p.state==='active'&&p.suitePolicy==='project-node-v1')?
+        'Controleer de verschillen en de gezamenlijke test hierboven vóór goedkeuring.':
+        codeInspection.canApply?'Bron ongewijzigd; je kunt het voorstel beoordelen en toepassen.':
         'Toepassen geblokkeerd: bron of voorstel is veranderd, of syntaxiscontrole mislukt.')+
         (draft.testReport?.testsExecuted?' De opgegeven Docker-test is afzonderlijk uitgevoerd.':' Er zijn geen tests uitgevoerd.')+'</p>':'')+
       '<b>Door het model voorgestelde tests, niet uitgevoerd</b><p class="smalltext">'+h(draft.checks.join(' · ')||'Geen')+'</p>'+
@@ -1633,7 +1634,7 @@ async function runOrderedCodeAction(action){
     const updated=codePlans.find(p=>p.id===plan.id);
     const current=updated?.steps?.find(x=>x.active);
     if(current?.proposalId)await loadCodeProposal(current.proposalId);
-    if(action==='test-pre'&&step?.proposalId)await checkCodeProposal();
+    if((action==='test-pre'||action==='test-project-pre')&&step?.proposalId)await checkCodeProposal();
   }catch(error){codeError=String(error.message||error)}
   render();
 }
