@@ -41,16 +41,34 @@ const safeComposition=(contract:{recipe?:{kind:string;steps:string[]};taskKinds:
   contract.modelPolicy.preferred==="deterministic" &&
   contract.testSuite==="builtin-compose-fixture-v1" &&
   contract.tools.length===0 && contract.requestedPermissions.length===0;
+/** Inspect Markdown links without fetching content or asserting source quality. */
+const referenceExtract=(input:{text:string})=>{
+  const references:Array<{label:string;url:string}>=[];
+  let detected=0;
+  const pattern=/\[([^\]\r\n]{1,80})\]\((https?:\/\/[^\s)<>]{1,260})\)/g;
+  for(const match of input.text.matchAll(pattern)){
+    try{
+      const url=new URL(match[2]);
+      if(!["http:","https:"].includes(url.protocol)||url.username||url.password)continue;
+      detected++;
+      if(references.length<8)references.push({label:match[1],url:match[2]});
+    }catch{continue}
+  }
+  return {text:input.text,references,detected,truncated:detected>references.length,
+    review:"links-not-verified"};
+};
 const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
   "text-normalize":{id:"text-normalize",taskKind:"text-normalize",run:normalize},
   "text-metrics":{id:"text-metrics",taskKind:"text-metrics",run:metrics},
+  "reference-extract":{id:"reference-extract",taskKind:"reference-extract",run:referenceExtract},
 });
-/** The child process can invoke only these two fixed, side-effect-free workers. */
+/** Four explicitly fixed, side-effect-free text tasks, no dynamic scripts or tools. */
 export function runPureTextAdapter(kind:string,input:{text:string}):Record<string,unknown>{
-  if(!["text-normalize","text-metrics"].includes(kind)||
+  if(!["text-normalize","text-metrics","text-inspect","reference-extract"].includes(kind)||
      !input||typeof input.text!=="string"||input.text.length>12000)
     throw new Error("unsupported pure text input or adapter");
-  return BUILTINS[kind].run(structuredClone(input));
+  return kind==="text-inspect" ? composed(structuredClone(input)) :
+    BUILTINS[kind].run(structuredClone(input));
 }
 export function evaluateBuiltin(id:string,contract:{
   id:string;version:string;taskKinds:string[];testSuite:string;
@@ -105,6 +123,17 @@ export function evaluateBuiltin(id:string,contract:{
     {input:{text:"  Hallo  wereld\r\n"},expected:{text:"Hallo wereld",changed:true}},
     {input:{text:"Al goed"},expected:{text:"Al goed",changed:false}},
     {input:{text:"\tA  B\t"},expected:{text:"A B",changed:true}},
+  ]:id==="reference-extract"?[
+    {input:{text:"Lees [de bron](https://example.org/pad)."},
+      expected:{text:"Lees [de bron](https://example.org/pad).",
+        references:[{label:"de bron",url:"https://example.org/pad"}],
+        detected:1,truncated:false,review:"links-not-verified"}},
+    {input:{text:"Geen verwijzingen"},
+      expected:{text:"Geen verwijzingen",references:[],
+        detected:0,truncated:false,review:"links-not-verified"}},
+    {input:{text:"[Niet geldig](javascript:alert)"},
+      expected:{text:"[Niet geldig](javascript:alert)",references:[],
+        detected:0,truncated:false,review:"links-not-verified"}},
   ]:[
     {input:{text:"Hallo wereld\nNu"},expected:{text:"Hallo wereld\nNu",characters:15,words:3,lines:2}},
     {input:{text:""},expected:{text:"",characters:0,words:0,lines:0}},

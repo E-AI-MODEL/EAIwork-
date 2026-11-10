@@ -10,7 +10,7 @@ import {selectWorker} from "./selector.ts";
 import {builtinInventoryForState,evaluateBuiltin,inputFor,runPureTextAdapter} from "./execution.ts";
 import type {OpsEvent,OpsState} from "./registry.ts";
 
-export type FixedTextKind="text-normalize"|"text-metrics";
+export type FixedTextKind="text-normalize"|"text-metrics"|"text-inspect"|"reference-extract";
 export interface ExecutorIdentity {
   ownerId:string;
   taskKinds:FixedTextKind[];
@@ -21,23 +21,32 @@ export interface ExecutorJob {
   runId:string;leaseId:string;leaseExpiresAt:string;
   input:{text:string};
 }
-const FIXED:ReadonlySet<string>=new Set(["text-normalize","text-metrics"]);
+/** Each permitted task kind resolves to one fixed, server-tested worker ID. */
+const WORKER_ID:Readonly<Record<FixedTextKind,string>>=Object.freeze({
+  "text-normalize":"text-normalize",
+  "text-metrics":"text-metrics",
+  "text-inspect":"text-inspector",
+  "reference-extract":"reference-extract",
+});
+const FIXED:ReadonlySet<string>=new Set(Object.keys(WORKER_ID));
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const nowIso=()=>new Date().toISOString();
 const fail=(message:string):never=>{throw new Error(message)};
 const emit=(store:OpsStore,event:OpsEvent,at=nowIso())=>
   store.append({id:"ops-"+randomUUID(),at,
     actor:{kind:"system",id:"system:mission-runner"},event});
-const admitted=(state:OpsState,kind:FixedTextKind):{version:string}|null=>{
+const admitted=(state:OpsState,kind:FixedTextKind):{version:string;workerId:string}|null=>{
+  const workerId=WORKER_ID[kind];
   const candidate=selectWorker({taskKind:kind},state,builtinInventoryForState(state));
-  if(candidate.selectedWorkerId!==kind)return null;
-  const contract=state.workers[kind]?.contract;
-  if(!contract||state.workers[kind].stage!=="ready")return null;
+  if(candidate.selectedWorkerId!==workerId)return null;
+  const record=state.workers[workerId],contract=record?.contract;
+  if(!contract||record.stage!=="ready"||
+     contract.taskKinds.length!==1||contract.taskKinds[0]!==kind)return null;
   try{
-    const checked=evaluateBuiltin(kind,contract);
-    if(checked.numerator!==checked.denominator)return null;
+    const checked=evaluateBuiltin(workerId,contract);
+    if(checked.taskKind!==kind||checked.numerator!==checked.denominator)return null;
   }catch{return null}
-  return {version:contract.version};
+  return {workerId,version:contract.version};
 };
 export function validateExecutorIdentities(
   tokens:Record<string,ExecutorIdentity>|undefined,
@@ -55,9 +64,9 @@ export function validateExecutorIdentities(
       fail("invalid or duplicate executor identity");
     owners.add(identity.ownerId);
     if(!Array.isArray(identity.taskKinds)||identity.taskKinds.length<1||
-       identity.taskKinds.length>2||identity.taskKinds.some(k=>!FIXED.has(k))||
+       identity.taskKinds.length>4||identity.taskKinds.some(k=>!FIXED.has(k))||
        new Set(identity.taskKinds).size!==identity.taskKinds.length)
-      fail("executor only supports two known local text adapters");
+      fail("executor only supports four known local text adapters");
   }
 }
 
@@ -112,7 +121,7 @@ export function claimTextJob(store:OpsStore,executor:ExecutorIdentity):ExecutorJ
       const leaseExpiresAt=new Date(Date.parse(startedAt)+15000).toISOString();
       emit(store,{type:"task.lease.claim",missionId:mission.plan.id,taskId:spec.id,
         leaseId,ownerId:executor.ownerId,expiresAt:leaseExpiresAt,
-        run:{runId,workerId:spec.taskKind,workerVersion:entry.version,
+        run:{runId,workerId:entry.workerId,workerVersion:entry.version,
           adapterId:spec.taskKind,inputHash:digest(input),startedAt,
           verification:"not-evaluated"}},startedAt);
       return {protocol:"eai-local-executor-v1",missionId:mission.plan.id,
@@ -149,7 +158,9 @@ const activeClaim=(store:OpsStore,identity:ExecutorIdentity,ref:JobReference)=>{
     fail("executor claim no longer active");
   if(Date.now()>=Date.parse(lease.expiresAt))fail("executor lease has expired");
   const admittedWorker=admitted(state,task.spec.taskKind as FixedTextKind);
-  if(!admittedWorker||admittedWorker.version!==task.run.workerVersion)
+  if(!admittedWorker||admittedWorker.version!==task.run.workerVersion||
+     admittedWorker.workerId!==task.run.workerId||
+     task.run.adapterId!==task.spec.taskKind)
     fail("executor worker no longer admitted");
   return {mission,task,lease};
 };

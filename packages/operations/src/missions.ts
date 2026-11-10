@@ -395,7 +395,8 @@ export function applyMissionEvent(
       fail("interrupted or failed work needs manual review");
     if(tasks.every(t=>t.status==="done"))fail("mission already complete");
     const kinds=new Set(e.executionMode==="remote-text"?
-      ["text-normalize","text-metrics"]:["text-normalize","text-metrics","text-inspect"]);
+      ["text-normalize","text-metrics","text-inspect","reference-extract"]:
+      ["text-normalize","text-metrics","text-inspect","reference-extract"]);
     if(tasks.some(t=>(t.spec.effect!==undefined&&t.spec.effect!=="local")||
          !kinds.has(t.spec.taskKind)))
       fail("automatic execution is limited to fixed local text workers");
@@ -440,10 +441,12 @@ export function applyMissionEvent(
     if(!["running","failed"].includes(task.status)||!task.run)fail("task is not retryable");
     if(task.spec.effect!==undefined&&task.spec.effect!=="local")
       fail("external task must never be retried without a separate idempotency protocol");
-    const fixedAdapters=new Set(["text-normalize","text-metrics","text-inspect"]);
-    if(!fixedAdapters.has(task.run.adapterId) ||
-       !fixedAdapters.has(task.run.workerId) ||
-       !["text-normalize","text-metrics","text-inspect"].includes(task.spec.taskKind))
+    const knownWorkerId:Record<string,string>={
+      "text-normalize":"text-normalize","text-metrics":"text-metrics",
+      "text-inspect":"text-inspector","reference-extract":"reference-extract",
+    };
+    if(knownWorkerId[task.spec.taskKind]!==task.run.workerId ||
+       task.run.adapterId!==task.spec.taskKind)
       fail("retry requires a known side-effect-free local adapter");
     bounded(e.reason,"retry justification",600);
     task.attempts??=[];
@@ -540,9 +543,13 @@ export function applyMissionEvent(
       if(typeof e.leaseId!=="string"||!ID.test(e.leaseId)||
          typeof e.ownerId!=="string"||!ID.test(e.ownerId))
         fail("invalid lease identity");
+      const knownWorkerId:Record<string,string>={
+        "text-normalize":"text-normalize","text-metrics":"text-metrics",
+        "text-inspect":"text-inspector","reference-extract":"reference-extract",
+      };
       if((task.spec.effect!==undefined&&task.spec.effect!=="local")||
-         !["text-normalize","text-metrics"].includes(task.spec.taskKind)||
-         r.workerId!==task.spec.taskKind||r.adapterId!==task.spec.taskKind)
+         knownWorkerId[task.spec.taskKind]!==r.workerId||
+         r.adapterId!==task.spec.taskKind)
         fail("lease restricted to fixed side-effect-free text workers");
       const started=Date.parse(r.startedAt),expires=Date.parse(e.expiresAt);
       if(!Number.isFinite(started)||!Number.isFinite(expires)||
