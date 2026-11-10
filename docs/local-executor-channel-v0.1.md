@@ -22,7 +22,10 @@ doorzoeken. Hij ontvangt geen volledige opdracht, andere taken of bewijsstaat.
 Bij het terugmelden controleert de server opnieuw de workeridentiteit,
 de actuele lease en de toegestane worker. De uitkomst wordt met de
 server-eigen vaste tekstbewerking opnieuw berekend. Een afwijkend
-antwoord wordt niet als voltooid geregistreerd.
+antwoord wordt niet als voltooid geregistreerd. De server legt een
+afwijkend antwoord als mislukte poging vast, zonder de onbevestigde
+inhoud in de taakuitvoer op te slaan. Een nieuwe poging vraagt
+menselijke beoordeling.
 
 ## Zelf bekijken
 
