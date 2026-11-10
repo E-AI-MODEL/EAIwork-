@@ -76,6 +76,15 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal(inspection.sourceUnchanged,true);
   assert.equal(inspection.preflight.status,"passed");
   assert.equal(inspection.testsExecuted,false);
+  const review=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal(review.status,200);
+  const reviewData=await review.json() as any;
+  assert.equal(reviewData.canApply,true);
+  assert.ok(reviewData.comparison.lines.some((line:any)=>line.kind==="added"));
+  assert.ok(reviewData.comparison.lines.some((line:any)=>line.kind==="removed"));
+  const history=await fetch(base+"/ops/code/proposals",{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal(history.status,200);
+  assert.equal((await history.json() as any).proposals[0].id,proposal.id);
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 1;\n");
   assert.equal(requests.length,1);
   assert.equal(JSON.stringify(requests[0]).includes(app.token),false);
@@ -105,6 +114,21 @@ test("code worker never writes before explicit human approval; verifies source h
   assert.equal((await badCheck.json() as any).canApply,false);
   assert.equal((await post("/ops/code/apply",{proposalId:badProposal.id,expectedSha256:badProposal.replacementSha256,approve:true})).status,409);
   assert.equal(readFileSync(f.file,"utf8"),"export const count = 2;\n");
+  const appliedReview=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal((await appliedReview.json() as any).canRestore,true);
+  writeFileSync(f.file,"export const count = 4;\n");
+  assert.equal((await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  writeFileSync(f.file,"export const count = 2;\n");
+  const restored=await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true});
+  assert.equal(restored.status,200);
+  assert.equal((await restored.json() as any).status,"restored");
+  assert.equal(readFileSync(f.file,"utf8"),"export const count = 1;\n");
+  assert.equal((await post("/ops/code/restore",{
+    proposalId:proposal.id,expectedSha256:proposal.replacementSha256,approve:true})).status,409);
+  const afterRestore=await fetch(base+"/ops/code/proposal?id="+proposal.id,{headers:{Authorization:"Bearer "+app.token}});
+  assert.equal((await afterRestore.json() as any).status,"restored");
  }finally{
   if(app)await app.close();
   await new Promise<void>(done=>fake.close(()=>done()));
