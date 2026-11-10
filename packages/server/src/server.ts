@@ -405,6 +405,44 @@ export function makeServer(cfg: Config) {
       if (url.pathname.startsWith("/ops/")) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        const recordCodeAction=(
+          action:"proposed"|"tested"|"applied"|"restored",
+          detail:{id:string;path:string;sourceSha256:string;replacementSha256:string;modelId:string},
+          result:"review-required"|"passed"|"failed"|"unavailable"|"applied"|"restored",
+          testSha256?:string
+        )=>{
+          const exists=operations.snapshot().history.some(row=>
+            row.event.type==="code.activity"&&row.event.proposalId===detail.id);
+          const common={proposalId:detail.id,path:detail.path,
+            sourceSha256:detail.sourceSha256,replacementSha256:detail.replacementSha256,
+            modelId:detail.modelId};
+          // A proposal created with an older preview has no operations entry.
+          // Import it as legacy, never claim we witnessed its creation.
+          if(!exists&&action!=="proposed"){
+            operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),
+              actor:{kind:"system",id:"system:legacy-code-import"},
+              event:{type:"code.activity",action:"imported",...common,result:"legacy-unverified"}});
+          }
+          const entry=operations.append({id:"ops-"+randomUUID(),
+            at:new Date().toISOString(),
+            actor:action==="tested"?{kind:"check" as const,id:"check:docker-code-test"}:actor,
+            event:{type:"code.activity",action,...common,result,
+              ...(testSha256?{testSha256}:{})}
+          });
+          return entry.seq;
+        };
+        if(req.method==="GET"&&url.pathname==="/ops/code/activity"){
+          try{
+            const filter=url.searchParams.get("proposalId");
+            if(filter&&(!/^[0-9a-f-]{36}$/.test(filter)))return json(res,422,{error:"Ongeldig voorstelnummer"});
+            const events=operations.snapshot().history.filter(row=>
+              row.event.type==="code.activity"&&
+              (!filter||row.event.proposalId===filter))
+              .slice(-60);
+            return json(res,200,{events,source:"operations-hash-journal",
+              note:"Geregistreerde gebeurtenissen, geen inhoudelijke codegoedkeuring."});
+          }catch{return json(res,503,{error:"Operationslog is niet beschikbaar"})}
+        }
         if (req.method === "GET" && url.pathname === "/ops/code/workspace") {
           return json(res,200,{enabled:!!cfg.codeWorkspace,
             worktree:cfg.codeWorkspace?.root??null,
@@ -431,8 +469,13 @@ export function makeServer(cfg: Config) {
               Object.keys(input).some(k=>!["path","instruction","testPath"].includes(k)))
             throw new HttpError(422,"Vul een relatief bestand en opdracht in");
           const item=input as {path:string;instruction:string;testPath?:string};
-          try{return json(res,200,await cfg.codeWorkspace.propose(item.path,item.instruction,item.testPath))}
+          let proposed;
+          try{proposed=await cfg.codeWorkspace.propose(item.path,item.instruction,item.testPath)}
           catch{return json(res,422,{error:"Codevoorstel kon niet veilig worden gemaakt"})}
+          try{
+            const journalSeq=recordCodeAction("proposed",proposed,"review-required");
+            return json(res,200,{...proposed,journalSeq});
+          }catch{return json(res,503,{error:"Voorstel is opgeslagen maar niet in het operationslog geregistreerd. Controleer de voorstelgeschiedenis."})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/check"){
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen voorstellen controleren");
@@ -457,8 +500,28 @@ export function makeServer(cfg: Config) {
              Object.keys(input).some(k=>k!=="proposalId")||
              typeof (input as any).proposalId!=="string")
             throw new HttpError(422,"Geef een bestaand voorstelnummer op");
-          try{return json(res,200,await cfg.codeWorkspace.runTests((input as any).proposalId))}
+          const proposalId=(input as any).proposalId as string;
+          // Verify and import older proposals before starting the Docker test.
+          try{
+            const beforeTest=cfg.codeWorkspace.inspect(proposalId);
+            if(!operations.snapshot().history.some(row=>
+               row.event.type==="code.activity"&&row.event.proposalId===proposalId)){
+              operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),
+                actor:{kind:"system",id:"system:legacy-code-import"},
+                event:{type:"code.activity",action:"imported",
+                  proposalId,path:beforeTest.path,sourceSha256:beforeTest.sourceSha256,
+                  replacementSha256:beforeTest.replacementSha256,
+                  modelId:beforeTest.modelId,result:"legacy-unverified"}});
+            }
+          }catch{return json(res,503,{error:"Codevoorstel kan niet in de registratie worden opgenomen"})}
+          let result;
+          try{result=await cfg.codeWorkspace.runTests(proposalId)}
           catch{return json(res,409,{error:"Docker-test geweigerd: controleer voorstel, bron en testbestand"})}
+          try{
+            const inspected=cfg.codeWorkspace.inspect(proposalId);
+            const journalSeq=recordCodeAction("tested",{id:proposalId,...inspected},result.status,result.testSha256);
+            return json(res,200,{...result,journalSeq});
+          }catch{return json(res,503,{error:"Docker-test uitgevoerd maar registratie mislukt. Controleer voorstel en operationslog."})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/apply"){
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen codewijzigingen goedkeuren");
@@ -469,8 +532,28 @@ export function makeServer(cfg: Config) {
           if(!input||typeof input!=="object"||Array.isArray(input)||
              Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
             throw new HttpError(422,"Ongeldige goedkeuring");
-          try{return json(res,200,cfg.codeWorkspace.apply(input as any,actor.id))}
+          const proposalId=(input as any).proposalId as string;
+          // Import a legacy record BEFORE the file is changed.
+          try{
+            const pre=cfg.codeWorkspace.inspect(proposalId);
+            if(!operations.snapshot().history.some(row=>
+               row.event.type==="code.activity"&&row.event.proposalId===proposalId)){
+              operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),
+                actor:{kind:"system",id:"system:legacy-code-import"},
+                event:{type:"code.activity",action:"imported",proposalId,
+                  path:pre.path,sourceSha256:pre.sourceSha256,
+                  replacementSha256:pre.replacementSha256,modelId:pre.modelId,
+                  result:"legacy-unverified"}});
+            }
+          }catch{return json(res,503,{error:"Registratie niet beschikbaar; code blijft ongewijzigd"})}
+          let applied;
+          try{applied=cfg.codeWorkspace.apply(input as any,actor.id)}
           catch{return json(res,409,{error:"Code is niet toegepast: bron of goedkeuring klopt niet"})}
+          try{
+            const post=cfg.codeWorkspace.inspect(proposalId);
+            const journalSeq=recordCodeAction("applied",{id:proposalId,...post},"applied");
+            return json(res,200,{...applied,journalSeq});
+          }catch{return json(res,503,{error:"Code is aangepast, maar registratie is mislukt. Controleer eerst de bestandsinhoud en het operationslog."})}
         }
         if(req.method==="POST"&&url.pathname==="/ops/code/restore"){
           if(actor.kind!=="person")throw new HttpError(403,"alleen personen kunnen code herstellen");
@@ -481,8 +564,27 @@ export function makeServer(cfg: Config) {
           if(!input||typeof input!=="object"||Array.isArray(input)||
              Object.keys(input).some(k=>!["proposalId","expectedSha256","approve"].includes(k)))
             throw new HttpError(422,"Ongeldige herstelgoedkeuring");
-          try{return json(res,200,cfg.codeWorkspace.restore(input as any,actor.id))}
+          const proposalId=(input as any).proposalId as string;
+          try{
+            const pre=cfg.codeWorkspace.inspect(proposalId);
+            if(!operations.snapshot().history.some(row=>
+               row.event.type==="code.activity"&&row.event.proposalId===proposalId)){
+              operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),
+                actor:{kind:"system",id:"system:legacy-code-import"},
+                event:{type:"code.activity",action:"imported",proposalId,
+                  path:pre.path,sourceSha256:pre.sourceSha256,
+                  replacementSha256:pre.replacementSha256,modelId:pre.modelId,
+                  result:"legacy-unverified"}});
+            }
+          }catch{return json(res,503,{error:"Registratie niet beschikbaar; herstel niet gestart"})}
+          let restored;
+          try{restored=cfg.codeWorkspace.restore(input as any,actor.id)}
           catch{return json(res,409,{error:"Herstellen geweigerd: bestandsinhoud of goedkeuring klopt niet"})}
+          try{
+            const post=cfg.codeWorkspace.inspect(proposalId);
+            const journalSeq=recordCodeAction("restored",{id:proposalId,...post},"restored");
+            return json(res,200,{...restored,journalSeq});
+          }catch{return json(res,503,{error:"Bestand is hersteld maar registratie mislukt. Controleer de bestandsinhoud."})}
         }
         if (req.method === "GET" && url.pathname === "/ops/model") {
           return json(res,200,{
@@ -1045,6 +1147,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
+          if ((raw as any).type==="code.activity")throw new HttpError(403,"code history must originate from the controlled code routes");
           if (["mission.create","mission.extend","mission.release.submit","mission.release.review","mission.release.ci.observe","mission.release.artifact.observe","mission.release.github-artifact.observe","mission.pause","mission.resume","mission.gate.resolve","task.started","task.lease.claim","task.lease.renew","task.lease.expire","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
