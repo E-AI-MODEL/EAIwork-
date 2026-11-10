@@ -98,7 +98,7 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
   if (current.history.some(x => x.id === envelope.id)) fail("duplicate event id");
   const state: OpsState = structuredClone(current);
   if (e.type === "mission.create" || e.type === "mission.pause" || e.type === "mission.resume" ||
-      e.type === "task.started" || e.type === "task.completed" || e.type === "task.failed" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
+      e.type === "task.started" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
     applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
   } else if (e.type === "worker.register") {
     requireHuman(envelope.actor);
