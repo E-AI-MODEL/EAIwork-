@@ -82,3 +82,11 @@ Een gebruiker moet opdrachten kunnen starten en volgen terwijl EAIwork deze opde
 `packages/core/src/derive.ts`, `replay.ts`, `packages/gateway/src/gateway.ts`, `packages/evidence/src/observe.ts`, `packages/server/src/server.ts`, `store.ts`, `witness.ts`, `packages/client/index.html` bevatten al de atoomstructuur, geïsoleerde modelaanroepen, bronfragmenten, statusafleiding, toegangscontrole en controleerbare eventgeschiedenis. Deze functies moeten behouden blijven.
 
 Bron: https://github.com/E-AI-MODEL/EAIwork-/ . Experimentele decompositie: https://github.com/E-AI-MODEL/EAIwork-/pull/22 .
+## Workerbibliotheek en taakselectie: uitbreiding 10 november 2026
+
+- De productreferentie bevat een aparte bibliotheek met 56 **voorgestelde** specialisaties in zes groepen. Catalogusstatus, geregistreerde toestand en actieve uitvoering worden nooit als één status getoond.
+- Iedere specialisatie vermeldt mogelijke taaksoort, voorlopig modeltype en benodigde tools. De Registry blijft de enige plek waar echte workerversies en kwaliteitsgegevens staan.
+- Een gebruiker kan een voorbeeld uit de bibliotheek kiezen en als **kandidaatcontract** voorbereiden. Dat contract geeft geen rechten en er is geen proces gestart.
+- De eerste selector mag pas een geregistreerde worker voorstellen na toelating, beschikbaarheid van een adapter, capabilities en rechten. Hij maakt geen uitvoeringsbesluit; de scheduler moet vóór uitvoering opnieuw controleren.
+- Nieuwe specialisaties buiten de bibliotheek moeten via RepoSearch en Worker Builder kunnen ontstaan. Deze functies zijn nog niet uitgevoerd.
+- Demo-aantallen zijn niet gelijk aan aantallen actieve workers. Ontbrekende uitvoeringsgegevens krijgen de tekst *niet meetbaar*.
