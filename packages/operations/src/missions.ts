@@ -25,6 +25,8 @@ export interface MissionTask {
   dependsOn:string[];
   input?:{text:string};
   textFrom?:string;
+  /** Existing evidence atoms used as read-only provenance links, not automatic proof. */
+  evidenceAtomIds?:string[];
 }
 export interface MissionPlan {
   /** The original request is preserved unchanged; no model may rewrite it. */
@@ -90,6 +92,11 @@ export function validateMissionPlan(plan:MissionPlan):void {
     if(!Array.isArray(task.dependsOn)||task.dependsOn.length>32||
       !task.dependsOn.every(x=>typeof x==="string"&&ID.test(x))||
       new Set(task.dependsOn).size!==task.dependsOn.length)fail("invalid dependencies");
+    if(task.evidenceAtomIds!==undefined && (!Array.isArray(task.evidenceAtomIds) ||
+       task.evidenceAtomIds.length>24 ||
+       task.evidenceAtomIds.some(id=>typeof id!=="string"||!ID.test(id)) ||
+       new Set(task.evidenceAtomIds).size!==task.evidenceAtomIds.length))
+       fail("invalid evidence links");
     if(task.textFrom!==undefined&&(typeof task.textFrom!=="string"||!ID.test(task.textFrom)))fail("invalid text source");
     if(task.input!==undefined&&(!plain(task.input)||typeof task.input.text!=="string"||task.input.text.length>12000||
        Object.keys(task.input).some(key=>key!=="text")))fail("invalid task input");
