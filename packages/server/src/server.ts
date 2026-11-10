@@ -416,6 +416,7 @@ export function makeServer(cfg: Config) {
           if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
             throw new HttpError(422, "operations event must be an object");
           }
+          if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
           if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
