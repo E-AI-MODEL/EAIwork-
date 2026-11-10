@@ -93,6 +93,17 @@ test("only explicit JavaScript files become part of a bounded suite manifest",()
     {...valid.files[0],path:"node_modules/x.js"},...valid.files.slice(1)
   ]}),/ongeldig|Ongeldig/);
 });
+test("plan refuses the same test file twice before contacting Ollama",async()=>{
+  const f=await setup();
+  try{
+    const plans=new OrderedCodePlans(f.workspace,{suiteRunner:f.suiteRunner});
+    assert.throws(()=>plans.create({
+      title:"Duplicate test",suitePolicy:"project-node-v1",
+      steps:[f.steps[0],{...f.steps[1],testPath:f.steps[0].testPath}]
+    },"person:tester"),/uniek/);
+    assert.equal(f.calls.length,0);
+  }finally{await f.close()}
+});
 test("combined suite covers imports and gates every step before and after apply",async()=>{
   const f=await setup();
   const plans=new OrderedCodePlans(f.workspace,{suiteRunner:f.suiteRunner});
