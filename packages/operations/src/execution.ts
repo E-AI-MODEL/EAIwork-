@@ -11,7 +11,7 @@ import {searchLocalRepository} from "./reposearch.ts";
 import type { OpsStore } from "./store.ts";
 import { selectWorker, type RuntimeInventory } from "./selector.ts";
 import { blockingConstraints, missionProgress, type MissionRecord } from "./missions.ts";
-import type { OpsEvent } from "./registry.ts";
+import type { OpsEvent, OpsState } from "./registry.ts";
 
 export interface LocalAdapter {
   id:string;
@@ -119,6 +119,12 @@ export function builtinInventory(repoSearchRoot?:string,composedIds:string[]=[])
     supportedModelSizes:["deterministic"],
   };
 }
+/** The same runtime inventory is used for execution and advisory preflight. */
+export function builtinInventoryForState(state:OpsState,repoSearchRoot?:string):RuntimeInventory {
+  const composedIds=Object.values(state.workers)
+    .filter(w=>safeComposition(w.contract)).map(w=>w.contract.id);
+  return builtinInventory(repoSearchRoot,composedIds);
+}
 const fail=(s:string):never=>{throw new Error(s)};
 function inputFor(mission:MissionRecord,taskId:string):{text:string} {
   const task=mission.tasks[taskId];
@@ -165,8 +171,8 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4,repoSea
     try{payload=inputFor(now,spec.id)}catch{
       result.blocked.push({taskId:spec.id,reason:"dependency-output-unavailable"});continue;
     }
-    const composedIds=Object.values(current.workers).filter(w=>safeComposition(w.contract)).map(w=>w.contract.id);
-    const choice=selectWorker({taskKind:spec.taskKind},current,builtinInventory(repoSearchRoot,composedIds));
+    const choice=selectWorker({taskKind:spec.taskKind},current,
+      builtinInventoryForState(current,repoSearchRoot));
     const id=choice.selectedWorkerId;
     if(!id){result.blocked.push({taskId:spec.id,reason:choice.nextStep});continue}
     const worker=current.workers[id];
