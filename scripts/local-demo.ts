@@ -30,7 +30,7 @@ const simple=(id:string,taskKind:string,testSuite="builtin-fixture-v1"):WorkerCo
   modelPolicy:{preferred:"deterministic"},testSuite,stopConditions:["invalid-input"],
 });
 
-export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string;codeWorkspace?:LocalCodeWorkspace;projectSuiteRunner?:(input:ProjectTestInput)=>Promise<ProjectTestResult>;dockerConnectionProbe?:()=>DockerConnectionStatus}={}){
+export function createDemoServer(options:{schedulerIntervalMs?:number;planningModel?:PlanningModel;githubActionReader?:GitHubReader;githubReadToken?:string;maxArtifactBytes?:number;persistentDir?:string;codeWorkspace?:LocalCodeWorkspace;projectSuiteRunner?:(input:ProjectTestInput)=>Promise<ProjectTestResult>;dockerConnectionProbe?:()=>DockerConnectionStatus;seedDemoData?:boolean;localLiveView?:boolean}={}){
   const profile=options.persistentDir?openLocalProfile(options.persistentDir):null;
   const root=profile?.root??mkdtempSync(join(tmpdir(),"eaiwork-dashboard-demo-"));
   const witnessDir=profile?.witnessDir??mkdtempSync(join(tmpdir(),"eaiwork-demo-witness-"));
@@ -50,6 +50,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     codeWorkspace:options.codeWorkspace,
     dockerConnectionProbe:options.dockerConnectionProbe,
     projectSuiteRunner:options.projectSuiteRunner,
+    localLiveView:options.localLiveView??false,
     githubActionReader:options.githubActionReader,
     githubReadToken:options.githubReadToken,
     maxArtifactBytes:options.maxArtifactBytes,
@@ -63,7 +64,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   const emit=(event:OpsEvent,actor:OpsActor=person)=>operations.append({
     id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event,
   });
-  if(operations.snapshot().history.length===0){
+  if((options.seedDemoData??true)&&operations.snapshot().history.length===0){
   for(const contract of [
     simple("text-normalize","text-normalize"),
     simple("text-metrics","text-metrics"),
