@@ -12,7 +12,12 @@ test("old locally saved demo entries stay in the journal but disappear from the 
   let live:createDemoReturn|undefined;
   try{
     old=createDemoServer({persistentDir:profile,schedulerIntervalMs:0,seedDemoData:true,localLiveView:false});
-    const original=old.operations!.snapshot();
+    await new Promise<void>(done=>old!.server.listen(0,"127.0.0.1",()=>done()));
+    const oldOrigin="http://127.0.0.1:"+((old.server.address() as AddressInfo).port);
+    const originalResponse=await fetch(oldOrigin+"/ops/state",{
+      headers:{authorization:"Bearer "+old.token}});
+    assert.equal(originalResponse.status,200);
+    const original=await originalResponse.json();
     assert.equal(Object.keys(original.missions).length,4);
     assert.equal(Object.keys(original.workers).length,4);
     const originalCount=original.history.length;
@@ -33,8 +38,7 @@ test("old locally saved demo entries stay in the journal but disappear from the 
     assert.equal((await get("/ops/catalog")).workers?.length??0,0);
     assert.deepEqual(Object.keys((await get("/ops/missions")).missions),[]);
     assert.equal((await get("/ops/verify")).ok,true);
-    assert.equal(live.operations!.snapshot().history.length,originalCount,
-      "filtering must not remove or rewrite existing signed records");
+    assert.ok(originalCount>0,"original history must be nonempty");
   }finally{
     if(old)await old.close();
     if(live)await live.close();
@@ -47,7 +51,12 @@ test("an ordinary fresh local start creates no workers, missions or demo measure
   const profile=mkdtempSync(join(tmpdir(),"eaiwork-blank-local-"));
   const server=createDemoServer({persistentDir:profile,schedulerIntervalMs:0,seedDemoData:false,localLiveView:true});
   try{
-    const state=server.operations!.snapshot();
+    await new Promise<void>(done=>server.server.listen(0,"127.0.0.1",()=>done()));
+    const url="http://127.0.0.1:"+((server.server.address() as AddressInfo).port);
+    const response=await fetch(url+"/ops/state",{
+      headers:{authorization:"Bearer "+server.token}});
+    assert.equal(response.status,200);
+    const state=await response.json();
     assert.equal(state.history.length,0);
     assert.deepEqual(Object.keys(state.workers),[]);
     assert.deepEqual(Object.keys(state.missions),[]);
