@@ -144,13 +144,15 @@ export class OrderedCodePlans {
        !["single-file-v1","project-node-v1"].includes(input.suitePolicy))
       throw new Error("Onbekende testmethode voor het codeplan");
     const paths=new Set<string>();
+    const tests=new Set<string>();
     for(const step of input.steps){
       if(!step||typeof step.path!=="string"||!step.path.endsWith(".js")||
          typeof step.testPath!=="string"||!step.testPath.endsWith(".test.js")||
          typeof step.instruction!=="string"||!step.instruction.trim()||
-         step.instruction.length>3000||step.path===step.testPath||paths.has(step.path))
+         step.instruction.length>3000||step.path===step.testPath||
+         paths.has(step.path)||tests.has(step.testPath))
         throw new Error("Elke stap vereist een uniek .js-bestand, een .test.js-bestand en een opdracht");
-      paths.add(step.path);
+      paths.add(step.path);tests.add(step.testPath);
     }
     if(input.steps.some(step=>paths.has(step.testPath)))
       throw new Error("Testbestanden mogen niet tegelijk gewijzigde bronbestanden zijn");
