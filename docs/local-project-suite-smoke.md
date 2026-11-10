@@ -73,6 +73,14 @@ EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven o
 
 Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
+**Controleer eerst de drie verbindingen.** Bovenaan Codeworker staat **Verbindingen**, met **Controleer verbindingen opnieuw**. Daar zie je drie afzonderlijke uitkomsten:
+
+- **Dashboard en EAIwork: Bereikbaar.** Het toegangstoken klopt en de lokale server antwoordt.
+- **Ollama: Bereikbaar.** Ollama antwoordt op deze Mac en het gekozen model staat in de lijst. Dit bewijst nog niet dat het model goede code genereert.
+- **Docker: Bereikbaar.** Docker reageert en `node:22-alpine` staat lokaal. Een echte projecttest moet nog slagen.
+
+Staat ergens **Niet bereikbaar**, **Model ontbreekt** of **Testafbeelding ontbreekt**, dan geeft het scherm aan wat je moet doen. Je hoeft hiervoor geen extra sleutel in te voeren. Het toegangstoken maakt zelf geen verbinding met Ollama.
+
 **6. Leg de voorbeeldopdracht vast**
 
 De naam **Proef met twee bestanden** en de twee opdrachtregels staan in de voorbeeldmodus al ingevuld. Je hoeft niets te plakken. Klik **Leg volgorde vast**.
