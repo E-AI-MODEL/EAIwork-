@@ -11,6 +11,7 @@ import { OpsStore } from "../../operations/src/store.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin } from "../../operations/src/execution.ts";
 import { missionProgress, validateMissionPlan, type MissionPlan } from "../../operations/src/missions.ts";
+import {LocalMissionScheduler} from "../../operations/src/scheduler.ts";
 import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
@@ -43,6 +44,8 @@ export interface Config {
   workers?: Record<string, WorkerRuntime>;
   /** Optional separate operations journal. Existing evidence logs stay unchanged. */
   operationsDir?: string;
+  /** 0 disables timer for deterministic testing; default 100 milliseconds. */
+  schedulerIntervalMs?: number;
   /** Administrator-allowlisted checkout; never taken from a caller or model. */
   repoSearchRoot?: string;
   /** Optional local planning model; drafts always require human approval. */
@@ -182,9 +185,12 @@ export function makeServer(cfg: Config) {
   let operations: OpsStore | null = null;
   try { operations = cfg.operationsDir ? new OpsStore(cfg.operationsDir) : null; }
   catch (e) { store.close(); throw e; }
+  let scheduler:LocalMissionScheduler|null=null;
+  try{scheduler=operations?new LocalMissionScheduler(operations,cfg.schedulerIntervalMs??100):null}
+  catch(e){operations?.close();store.close();throw e}
   const initialIntegrity = store.verify();
   if (!initialIntegrity.ok) {
-    store.close();
+    scheduler?.close();operations?.close();store.close();
     throw new Error(`event log integrity check failed at ${initialIntegrity.log ?? "events"} seq ${initialIntegrity.badAt ?? "?"}`);
   }
 
@@ -444,13 +450,40 @@ export function makeServer(cfg: Config) {
             return json(res,200,{...check,evidenceRef,passed:check.numerator===check.denominator});
           }catch(e){throw new HttpError(422,(e as Error).message)}
         }
+        const missionAutomation=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/automation\/(start|stop)$/.exec(url.pathname);
+        if(req.method==="POST"&&missionAutomation){
+          if(actor.kind!=="person")throw new HttpError(403,"only a person can authorize or stop automatic tasks");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body))
+            throw new HttpError(422,"invalid automation request");
+          const missionId=missionAutomation[1],action=missionAutomation[2];
+          if(action==="start" &&
+             (Object.keys(body).length!==1||!Object.prototype.hasOwnProperty.call(body,"maxStarts")))
+            throw new HttpError(422,"expected automatic task budget");
+          if(action==="stop"&&Object.keys(body).length)
+            throw new HttpError(422,"stop requires an empty request");
+          try{
+            const event=action==="start"?
+              {type:"mission.automation.start" as const,missionId,maxStarts:(body as {maxStarts:number}).maxStarts}:
+              {type:"mission.automation.stop" as const,missionId,reason:"user-stopped" as const};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId,action,seq:entry.seq,automation:operations.snapshot().missions[missionId].automation});
+          }catch(e){throw new HttpError(422,(e as Error).message)}
+        }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
         if(req.method==="POST"&&missionStep){
           if(actor.kind!=="person")throw new HttpError(403,"only people can start execution");
           requireWritableIntegrity();
           const raw=await readBody(req,maxBodyBytes);
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"step does not accept an execution payload");
-          try{return json(res,200,runMissionStep(operations,missionStep[1],4,cfg.repoSearchRoot))}
+          try{
+            if(operations.snapshot().missions[missionStep[1]]?.automation?.enabled)
+              throw new Error("stop automatic execution before manual steps");
+            return json(res,200,runMissionStep(operations,missionStep[1],4,cfg.repoSearchRoot));
+          }
           catch(e){throw new HttpError(422,(e as Error).message)}
         }
         const gateAction=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/gates\/([a-z][a-z0-9-]{2,63})\/resolve$/.exec(url.pathname);
@@ -493,7 +526,11 @@ export function makeServer(cfg: Config) {
           if(raw.trim()&&raw.trim()!=="{}")throw new HttpError(422,"this route takes no arbitrary payload");
           const missionId=missionAction[1],action=missionAction[2];
           try{
-            if(action==="run")return json(res,200,runMissionUntilBlocked(operations,missionId,32,cfg.repoSearchRoot));
+            if(action==="run"){
+              if(operations.snapshot().missions[missionId]?.automation?.enabled)
+                throw new Error("stop automatic execution before manual runs");
+              return json(res,200,runMissionUntilBlocked(operations,missionId,32,cfg.repoSearchRoot));
+            }
             const event={type:action==="pause"?"mission.pause" as const:"mission.resume" as const,missionId};
             const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
             return json(res,200,{missionId,action,seq:entry.seq});
@@ -511,7 +548,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry"].includes((raw as any).type)) {
+          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
@@ -778,8 +815,8 @@ export function makeServer(cfg: Config) {
       return json(res, 500, { error: "internal server error" });
     }
   });
-  server.on("close", () => { store.close(); operations?.close(); });
-  return { server, store, operations };
+  server.on("close", () => { scheduler?.close();store.close(); operations?.close(); });
+  return { server, store, operations, scheduler };
 }
 
 // Run directly: EAI_TOKENS=./tokens.json EAI_DIR=./data node packages/server/src/server.ts
