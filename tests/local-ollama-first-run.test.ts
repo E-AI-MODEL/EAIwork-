@@ -12,7 +12,7 @@ test("Ollama launcher rejects remote hosts, ambiguous models and unsafe flags",(
   assert.throws(()=>chooseInstalledModel(["a"],"b"),/niet lokaal geinstalleerd/);
   assert.throws(()=>parseLocalOllamaArgs(["--host=http://192.168.1.10:11434"],{}),/local loopback/);
   assert.throws(()=>parseLocalOllamaArgs(["--model=qwen:1b","--model=qwen:2b"],{}),/Gebruik/);
-  assert.throws(()=>parseLocalOllamaArgs(["--port=0"],{}),/dashboardpoort/);
+  assert.throws(()=>parseLocalOllamaArgs(["--port=0"],{}),/Dashboardpoort/);
   assert.throws(()=>parseLocalOllamaArgs(["--timeout-ms=999999"],{}),/timeout/);
   assert.throws(()=>parseLocalOllamaArgs(["--token=abc"],{}),/Gebruik/);
   assert.deepEqual(parseLocalOllamaArgs(["--model=qwen2.5:1.5b"],{}),{
