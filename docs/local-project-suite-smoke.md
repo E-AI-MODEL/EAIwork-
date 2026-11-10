@@ -44,7 +44,7 @@ docker pull node:22-alpine
 **3. Haal EAIwork op**
 
 ```sh
-git clone -b feature/local-connection-checks-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
+git clone -b feature/live-dashboard-without-demo-data-v01-20261110 https://github.com/E-AI-MODEL/EAIwork-.git ~/EAIwork-test
 cd ~/EAIwork-test
 ```
 
@@ -53,7 +53,7 @@ cd ~/EAIwork-test
 ```sh
 cd ~/EAIwork-test
 git fetch origin
-git switch --track origin/feature/local-connection-checks-v01-20261110
+git switch --track origin/feature/live-dashboard-without-demo-data-v01-20261110
 ```
 
 **4. Start EAIwork met een veilig voorbeeldproject**
@@ -78,6 +78,8 @@ Typ het nummer en druk op Enter:
 EAIwork maakt zelf een nieuwe, aparte voorbeeldmap. Je eigen projecten blijven ongewijzigd.
 
 **5. Open je lokale dashboard**
+
+Het lokale dashboard laat **geen demonstratieopdrachten, fictieve workerpercentages of simulatieknoppen** zien. Vóór het aanmelden krijg je alleen het verbindingsscherm. Daarna verschijnen uitsluitend opdrachten, workers en metingen uit je lokale server. Ontbreken die, dan toont het dashboard een lege toestand. De afzonderlijke openbare demo behoudt zijn voorbeeldgegevens.
 
 Open [http://127.0.0.1:8788/dashboard](http://127.0.0.1:8788/dashboard), of gebruik het adres dat Terminal aangeeft. Kopieer het **toegangstoken** uit Terminal naar **Contracten en registratie**. Open daarna **Codeworker**.
 
