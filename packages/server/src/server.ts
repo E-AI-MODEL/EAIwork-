@@ -420,6 +420,33 @@ export function makeServer(cfg: Config) {
             return json(res,201,{missionId:event.plan.id,seq:entry.seq});
           }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
         }
+        const missionExtend=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/extend$/.exec(url.pathname);
+        if(req.method==="POST"&&missionExtend){
+          if(actor.kind!=="person")throw new HttpError(403,"only the mission owner may approve a plan extension");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="plan"&&k!=="expectedRevision")||
+             !Object.prototype.hasOwnProperty.call(body,"plan")||
+             !Object.prototype.hasOwnProperty.call(body,"expectedRevision"))
+            throw new HttpError(422,"expected plan and revision");
+          try{
+            const {plan,expectedRevision}=body as {plan:MissionPlan;expectedRevision:number};
+            validateMissionPlan(plan);
+            if(plan.id!==missionExtend[1])throw new Error("mission id mismatch");
+            for(const atom of new Set(plan.tasks.flatMap(t=>t.evidenceAtomIds??[]))){
+              if(!atoms.has(atom))throw new HttpError(422,"unknown evidence atom link");
+              if(!canRead(principal,atom)||
+                 Object.values(cfg.tokens).some(p=>canAudit(p)&&!canRead(p,atom)))
+                throw new HttpError(403,"evidence atom link requires shared audit read access");
+            }
+            const event={type:"mission.extend" as const,missionId:missionExtend[1],plan,expectedRevision};
+            const entry=operations.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor,event});
+            return json(res,201,{missionId:plan.id,revision:expectedRevision+1,seq:entry.seq});
+          }catch(e){if(e instanceof HttpError)throw e;throw new HttpError(422,(e as Error).message)}
+        }
         const builtinTest=/^\/ops\/workers\/([a-z][a-z0-9-]{2,63})(?:\/versions\/(\d+\.\d+\.\d+))?\/evaluate$/.exec(url.pathname);
         if(req.method==="POST"&&builtinTest){
           if(actor.kind!=="person")throw new HttpError(403,"person required to request worker evaluation");
@@ -554,7 +581,7 @@ export function makeServer(cfg: Config) {
             throw new HttpError(422, "operations event must be an object");
           }
           if ((raw as any).type==="quality.record")throw new HttpError(403,"quality measurements must originate from a server-side evaluator");
-          if (["mission.create","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
+          if (["mission.create","mission.extend","mission.pause","mission.resume","mission.gate.resolve","task.started","task.completed","task.failed","task.retry","task.recover","mission.automation.start","mission.automation.stop"].includes((raw as any).type)) {
             throw new HttpError(403,"mission transitions require their dedicated server route");
           }
           const envelope = {
