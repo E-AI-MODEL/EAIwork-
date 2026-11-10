@@ -7,7 +7,7 @@ De oorspronkelijke bewijsomgeving blijft bestaan. Een voltooide taak is nooit au
 
 | Onderdeel | Werkelijk gedrag | Begrenzing |
 | --- | --- | --- |
-| Opdrachten en afhankelijkheden | Mensen registreren een goedgekeurd plan. De server valideert taken, afhankelijkheden en cycli. | Maximaal 32 taken; geen autonome langdurige scheduler. |
+| Opdrachten en afhankelijkheden | Mensen registreren een goedgekeurd plan. De server valideert taken, afhankelijkheden en cycli. | Maximaal 32 taken; alleen korte lokale teksttaken kunnen na expliciete menselijke toestemming automatisch starten. Geen algemene langdurige scheduler. |
 | Oorspronkelijke voorwaarden | Een plan bewaart tekst en exacte vindplaatsen van verboden, toestemming, voorwaarden en deadlines. | Structureel gecontroleerde vindplaatsen bewijzen niet dat de planner *alle* beperkingen heeft gevonden. |
 | Menselijke toestemming | Een aangewezen persoon registreert een besluit; verboden blijven blokkeren. | Dit geeft geen directe externe uitvoeringsrechten. |
 | Lokale planner via Ollama | Optioneel model maakt een taakplan als **voorstel**. | Alleen met \`EAI_PLAN_MODEL\`; niet zelf-goedkeurend; geen browsermodel van PIM. |
@@ -16,7 +16,8 @@ De oorspronkelijke bewijsomgeving blijft bestaan. Een voltooide taak is nooit au
 | \`text-metrics\` | Telt regels, woorden en tekens. | Geen semantische beoordeling. |
 | \`repo-search\` | Zoekt werkelijk in een door de beheerder ingestelde lokale checkout. Retourneert bestand, regel, fragment, SHA-256 en waar beschikbaar Git-revisie. | Geen web/GitHubzoekactie, broninterpretatie, tests of automatische code-import. |
 | Vaste Worker Builder | Stelt \`text-normalize\` en \`text-metrics\` samen tot \`text-inspect\`. Daarna kandidaatregistratie, serverfixtures en menselijke vrijgave. | Geen modelgegenereerde code, geen algemene assembler of sandbox voor onbekende code. |
-| Uitvoering | Start maximaal vier gereedstaande taken per *sequentiële* ronde; synchrone loop begrensd op 32 rondes. | Niet daadwerkelijk parallel, geen duurzame achtergrondjobs. |
+| Uitvoering | Start maximaal vier gereedstaande taken per *sequentiële* ronde; synchrone loop begrensd op 32 rondes. | Niet daadwerkelijk parallel. |
+| Beperkte scheduler | Start na menselijke toestemming maximaal 1 tot 32 korte lokale teksttaken, één per interval. Bewaart de startteller en stopreden. | Geen web, RepoSearch, externe acties, modelaanroepen of hervatten zonder nieuwe toestemming na herstart. |
 | Herstel | Een mens kan een onderbroken/mislukte **lokale** taak opnieuw inplannen. Eerdere pogingen blijven in de geschiedenis. | Externe en destructieve acties niet automatisch opnieuw uitvoeren. |
 | Kwaliteitsmonitor | Slaat meetrecords en defecten op; vergelijkt meetseries voorzichtig en telt tot drie herstelpogingen. | Nog geen zelfstandig reparerende agent of inhoudelijk sluitende kwaliteitscontrole. |
 | HITL | Na drie mislukte pogingen vereist het register een menselijk besluit. Veiligheidsdefecten blokkeren direct. | Besluiten sturen nog geen algemene scheduler of Builder aan. |
@@ -71,13 +72,24 @@ De HTML van het dashboard heeft geen werkende server op \`eaimodel.nl\` nodig om
 
 ## Wat niet geclaimd mag worden
 
-De \`run\`-route draait binnen één HTTP-verzoek. Er zijn geen duurzame queues, echte parallelle workers, workerleases, heartbeats, modelkostenmetingen, betrouwbare capaciteitplanning, langlopende autonome loop of algemene achtergrondherstart. De huidige \`OpsStore\` gebruikt een lokale hashketen, maar heeft geen afzonderlijk ondertekende witness, geen crash-transactionele outbox en geen algemene idempotency voor externe acties.
+De \`run\`-route draait binnen één HTTP-verzoek. De beperkte scheduler voert korte teksttaken zelfstandig uit na expliciete toestemming. Er zijn nog geen duurzame queues voor willekeurige taken, echte parallelle workers, workerleases, heartbeats, modelkostenmetingen, betrouwbare capaciteitsplanning, algemene langlopende autonome loop of automatische hervatting zonder menselijke beoordeling. De huidige \`OpsStore\` gebruikt een lokale hashketen, maar heeft geen afzonderlijk ondertekende witness, geen crash-transactionele outbox en geen algemene idempotency voor externe acties.
 
 Er bestaat nog geen algemene autonome Worker Builder, die uit zoekresultaten nieuwe onbetrouwbare code kan schrijven, in een gesandboxte omgeving toetsen en veilig activeren. De huidige Builder assembleert slechts één vast bekend recept. De 56 workers uit de bibliotheek zijn voor het grootste deel **ontwerpen**, geen werkende instanties.
 
 RepoSearch zoekt een lokale checkout en kan fragmenten vinden. Dit is geen onafhankelijk beoordeeld hergebruikadvies: licentie, tests en compatibiliteit blijven te onderzoeken. Externe web-, kennisbank- en GitHub-API-adapters ontbreken in de uitvoeringslaag. Een browser-LLM zoals PIM is nog niet verbonden.
 
 De gemeten looptijd is niet hetzelfde als inhoudelijke kwaliteit. Kosten en tokengebruik staan waar onbekend ook werkelijk op onbekend.
+
+
+## Automatische uitvoering in de lokale proef
+
+Start \`npm run demo:dashboard\`, verbind via het tijdelijke token uit de terminal en kies bij **Echte uitvoering** de opdracht **Automatische tekstverwerking uitproberen**. Stel het maximum op twee taakstarts, bevestig de toestemming en start de proef. De server voert de eerste lokale tekstworker uit en begint daarna vanzelf aan de afhankelijke taak. Het dashboard haalt de nieuwe stand op zolang de uitvoering actief is. Je kunt de toestemming stopzetten.
+
+Alleen \`text-normalize\`, \`text-metrics\` en de vaste \`text-inspect\`-samenstelling komen in aanmerking. De scheduler registreert de taakstart vóór uitvoering, telt die mee voor het maximum en stopt bij een fout, ontbrekende worker, open voorwaarde of bereikt maximum. Na een serverherstart stopt hij bestaande toestemming met de reden \`interrupted\`. Een taak die bij de uitval nog liep, wordt niet automatisch herhaald.
+
+API: \`POST /ops/missions/:id/automation/start\` met \`{"maxStarts":2}\`, en \`POST /ops/missions/:id/automation/stop\` met \`{}\`. Beide vereisen een menselijke actor met audittoegang. Handmatige \`step\` en \`run\` worden geweigerd zolang automatische uitvoering actief is. Bij de uitvoering worden de bestaande workercontracten, afhankelijkheden en toestemmingen opnieuw gecontroleerd.
+
+Dit is een automatische **lokale** uitvoeringsproef met één korte taak per tick, geen parallel workerleger of duurzame achtergrondwachtrij. Het operationslog is nog niet tegen alle vormen van crash en opslagmanipulatie beschermd. De originele bewijsregistratie blijft daarvan gescheiden.
 
 ## Verificatie en regressies
 
@@ -93,3 +105,6 @@ De gemeten looptijd is niet hetzelfde als inhoudelijke kwaliteit. Kosten en toke
 Deze tests bewijzen specifieke gedragingen van een ontwikkelproef. Ze maken nog geen productie-release of autonome werkdienst betrouwbaar.
 
 Zie ook \`docs/hergebruik-audit-2026-11-10.md\`, \`docs/worker-versions-and-evidence-links.md\` en [PR #23](https://github.com/E-AI-MODEL/EAIwork-/pull/23).
+
+- \`tests/scheduler.test.ts\`: startlimiet, actorrechten, afhankelijke taken, herstart en stopredenen.
+- \`tests/automation-api.test.ts\`: HTTP-toegang, echte intervaluitvoering, taakbudget en scheiding van handmatige uitvoering.
