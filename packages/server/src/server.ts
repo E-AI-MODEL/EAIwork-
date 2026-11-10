@@ -16,6 +16,7 @@ import { buildMissionTrace } from "../../operations/src/trace.ts";
 import { searchLocalRepository } from "../../operations/src/reposearch.ts";
 import {proposeMissionPlan,localOllamaPlanningModel,type PlanningModel} from "../../operations/src/planner.ts";
 import {inspectMissionPlan} from "../../operations/src/preflight.ts";
+import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
 import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
@@ -413,6 +414,52 @@ export function makeServer(cfg: Config) {
           if(typeof query!=="string"||!query.trim()||query.length>120)throw new HttpError(422,"invalid search query");
           try{return json(res,200,searchLocalRepository(cfg.repoSearchRoot,query))}
           catch{return json(res,503,{error:"repository search unavailable"})}
+        }
+        const replanProposal=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/replan\/propose$/.exec(url.pathname);
+        if(req.method==="POST"&&replanProposal){
+          if(actor.kind!=="person")throw new HttpError(403,"only a mission owner may propose revision");
+          if(!cfg.planningModel?.proposeRevision)
+            throw new HttpError(503,"local revision planner is not configured");
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(k=>k!=="reason"&&k!=="expectedRevision")||
+             !Object.prototype.hasOwnProperty.call(body,"reason")||
+             !Object.prototype.hasOwnProperty.call(body,"expectedRevision"))
+            throw new HttpError(422,"expected revision and reason");
+          const {reason,expectedRevision}=body as {reason:string;expectedRevision:number};
+          if(typeof reason!=="string"||!reason.trim()||reason.length>600||
+             !Number.isSafeInteger(expectedRevision))
+            throw new HttpError(422,"invalid revision request");
+          const before=operations.snapshot();
+          const old=before.missions[replanProposal[1]];
+          if(!old)throw new HttpError(404,"unknown mission");
+          if(actor.id!==old.createdBy)throw new HttpError(403,"only mission owner can request revision");
+          if(expectedRevision!==old.revision)throw new HttpError(409,"mission revision changed");
+          let proposed:Awaited<ReturnType<typeof proposeMissionRevision>>;
+          try{proposed=await proposeMissionRevision(old,cfg.planningModel,reason)}
+          catch(e){
+            if(/stale|invalid|revision|phase|plan|constraint|task|source|mission|guard|fields|dependenc|automation|running/.test(String(e)))
+              throw new HttpError(422,"revision proposal requires correction");
+            throw new HttpError(503,"local revision planner unavailable");
+          }
+          const after=operations.snapshot();
+          if(after.missions[old.plan.id]?.revision!==expectedRevision||
+             after.missions[old.plan.id]?.automation?.enabled||
+             Object.values(after.missions[old.plan.id]?.tasks??{}).some(t=>t.status==="running"))
+            throw new HttpError(409,"mission changed while proposal was being prepared");
+          for(const atom of new Set(proposed.plan.tasks.flatMap(t=>t.evidenceAtomIds??[]))){
+            if(!atoms.has(atom))throw new HttpError(422,"unknown evidence atom link");
+            if(!canRead(principal,atom)||
+               Object.values(cfg.tokens).some(p=>canAudit(p)&&!canRead(p,atom)))
+              throw new HttpError(403,"evidence atom link requires shared audit read access");
+          }
+          const preflight=inspectMissionPlan(proposed.plan,{
+            state:after,runtime:builtinInventoryForState(after,cfg.repoSearchRoot),
+            missingInformation:proposed.missingInformation,
+          });
+          return json(res,200,{...proposed,preflight});
         }
         const missionTrace=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/trace$/.exec(url.pathname);
         if(req.method==="GET"&&missionTrace){
