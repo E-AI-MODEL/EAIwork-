@@ -89,14 +89,36 @@ const requireHuman = (actor: OpsActor) => { if (actor.kind !== "person") fail("h
 const requireTrustedTest = (actor: OpsActor) => {
   if (actor.kind !== "system" && actor.kind !== "check") fail("measurement must come from a trusted check or system");
 };
+/**
+ * The public reducer stays pure. OpsStore uses stageOps for a copy of mutable
+ * domains only, leaving the event history untouched until fsync commits.
+ */
 export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
+  return transitionOps(current,envelope,undefined,true);
+}
+export function stageOps(current: OpsState, envelope: OpsEnvelope, seenIds:ReadonlySet<string>):OpsState {
+  return transitionOps(current,envelope,seenIds,false);
+}
+function transitionOps(
+  current:OpsState,envelope:OpsEnvelope,seenIds:ReadonlySet<string>|undefined,
+  cloneHistory:boolean,
+):OpsState {
   if (!plain(envelope) || !plain(envelope.actor) || !plain(envelope.event)) fail("invalid operations envelope");
   meaningful(envelope.id, "event id", 128); meaningful(envelope.at, "event time", 64);
   meaningful(envelope.actor.id, "actor id", 128);
   if (!["person","system","check"].includes(envelope.actor.kind)) fail("invalid actor");
   const e = envelope.event;
-  if (current.history.some(x => x.id === envelope.id)) fail("duplicate event id");
-  const state: OpsState = structuredClone(current);
+  if (seenIds ? seenIds.has(envelope.id) : current.history.some(x=>x.id===envelope.id))
+    fail("duplicate event id");
+  const state:OpsState = cloneHistory ? structuredClone(current) : {
+    workers:structuredClone(current.workers),
+    workerVersions:structuredClone(current.workerVersions),
+    measurements:structuredClone(current.measurements),
+    defects:structuredClone(current.defects),
+    missions:structuredClone(current.missions),
+    // Do not mutate this shared array until the journal write is durable.
+    history:current.history,
+  };
   if (e.type === "mission.create" || e.type === "mission.extend" || e.type === "mission.pause" || e.type === "mission.resume" ||
       e.type === "task.started" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
     applyMissionEvent(state.missions,e,envelope.actor,envelope.at);
@@ -241,7 +263,7 @@ export function applyOps(current: OpsState, envelope: OpsEnvelope): OpsState {
   } else {
     fail("unknown operations event");
   }
-  state.history.push(structuredClone(envelope));
+  if(cloneHistory)state.history.push(structuredClone(envelope));
   return state;
 }
 export function qualityOverview(state: OpsState, id: string) {
