@@ -154,6 +154,7 @@ test("coding model only sees selected related source and existing test, read-onl
   writeFileSync(join(f.work,"tests","counter.test.js"),
     "import {test} from 'node:test'; test('named',()=>{});\n");
   writeFileSync(join(f.work,"src","helper.js"),"export const helper = 2;\n");
+  writeFileSync(join(f.work,"src","counter.js"),"export const count = 1;\n");
   let seen:any=null;
   const fake=createServer(async(req,res)=>{
     let body="";for await(const chunk of req)body+=chunk.toString();
@@ -165,12 +166,12 @@ test("coding model only sees selected related source and existing test, read-onl
   try{
     const coder=new LocalCodeWorkspace({workspaceDir:f.work,profileDir:f.profile,
       host:"http://127.0.0.1:"+((fake.address() as AddressInfo).port),model:"test"});
-    await coder.propose("src/counter.ts","Change count","tests/counter.test.js",["src/helper.js"]);
+    await coder.propose("src/counter.js","Change count","tests/counter.test.js",["src/helper.js"]);
     assert.deepEqual(seen.relatedFiles,[{path:"src/helper.js",content:"export const helper = 2;\n"}]);
     assert.equal(seen.existingTest.path,"tests/counter.test.js");
     assert.match(seen.existingTest.content,/named/);
     assert.equal(readFileSync(join(f.work,"src","helper.js"),"utf8"),"export const helper = 2;\n");
-    await assert.rejects(coder.propose("src/counter.ts","Change",undefined,["../secret.js"]),/bestandspad/i);
+    await assert.rejects(coder.propose("src/counter.js","Change",undefined,["../secret.js"]),/bestandspad/i);
   }finally{
     await new Promise<void>(done=>fake.close(()=>done()));
     f.close();
