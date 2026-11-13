@@ -54,7 +54,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
     githubActionReader:options.githubActionReader,
     githubReadToken:options.githubReadToken,
     maxArtifactBytes:options.maxArtifactBytes,
-    tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true}},
+    tokens:{[token]:{actor:person,access:{read:"*",write:[],audit:true,code:!!options.codeWorkspace}},
       [reviewerToken]:{actor:{kind:"person",id:"person:release-reviewer"},
         access:{read:"*",write:[],audit:true}}},
     executorTokens:{[workerToken]:{ownerId:"executor-local-demo",

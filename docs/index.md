@@ -8,6 +8,8 @@ Begin bij de [README](../README.md). Dit overzicht koppelt de onderdelen aan de 
 - **Onderzoek en metingen:** [modelvergelijking](atom-vs-whole-comparison.md), [bevroren validatie](frozen-cross-domain-validation.md), [onderzoeksgrenzen](validation-3b-7b-after-action.md).
 - **Versies:** [wijzigingen](../CHANGELOG.md), [v0.1.0](releases/v0.1.0.md).
 
+Zie ook de [beveiligingscontrole van 13 november](security-review-2026-11-13.md), met concrete reparaties, uitgevoerde proeven en overgebleven grenzen.
+
 ## Wat een geslaagde codeproef wel en niet zegt
 
 De codeplan-API toont een `proof` met `status: current` wanneer de laatste Docker-projecttest slaagde en de hash van alle geplande bron- en testbestanden nog gelijk is. Die status verandert in `stale` zodra een van die bestanden wijzigt of de controle niet meer aantoonbaar geldig is. Alleen de bestanden in het testmanifest vallen hieronder. Een nieuwe, niet in het plan opgenomen map of bestand wordt niet automatisch gecontroleerd. Deze status bewijst niet dat een AI-model de code zelfstandig maakte, dat een release is gepubliceerd of dat iedere inhoudelijke bewering waar is.

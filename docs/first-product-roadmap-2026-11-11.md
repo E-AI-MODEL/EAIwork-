@@ -33,9 +33,9 @@ De eindcontrole staat in `examples/multifile-smoke/acceptance/final-product.test
 ### Twee onafhankelijke manieren om te testen
 
 - `npm test`: test de gewone repositoryfunctionaliteit; de productproef met Docker wordt hierbij overgeslagen als Docker niet is aangezet. De CI heeft afzonderlijk een verplichte Docker-controle.
-- `npm run proof:first-product`: voert via de echte lokale HTTP-API de twee voorstel-, test- en akkoordstappen uit, gebruikt de bestaande Docker-runner, en controleert als laatste met een afzonderlijke Node-test het complete resultaat. Deze proef gebruikt een **nagebootst Ollama-antwoord** om de uitvoeringsroute herhaalbaar te testen. Dit is geen bewijs dat een lokaal AI-model de code zelfstandig correct maakt.
+- `npm run proof:first-product`: voert via de echte lokale HTTP-API de twee voorstel-, test- en akkoordstappen uit, gebruikt de bestaande Docker-runner, en controleert als laatste met een afzonderlijke Node-test het complete resultaat. Deze proef gebruikt **een echt Ollama-codeermodel** en stopt bij ontbrekende of foutieve modeluitvoer. De onafhankelijke eindtest bepaalt of de daadwerkelijk voorgestelde code aan de beperkte gebruikersvraag voldoet. Normale unittests mogen gesimuleerde transportantwoorden gebruiken; de productproef niet.
 
-De proef voert het werk in een tijdelijke projectmap uit. GitHub Actions slaat na geslaagde controles ook een **downloadbare kopie van de gewijzigde bestanden**, de testbestanden, de onafhankelijke eindtest, `OPLEVERING.md` en `PROEFRESULTAAT.json` op als `eaiwork-first-product-proof`. Het artifact is een controleerbaar voorbeeld, geen publicatie of zelfstandige complete applicatie. De testmap wordt na afloop verwijderd. Een werkelijk model en de Mac-interface worden apart beproefd. De artifact-download staat bij de bijbehorende geslaagde GitHub Actions-run.
+De proef voert het werk in een tijdelijke projectmap uit. GitHub Actions slaat na geslaagde controles ook een **downloadbare kopie van de gewijzigde bestanden**, de testbestanden, de onafhankelijke eindtest, `OPLEVERING.md` en `PROEFRESULTAAT.json` op als `eaiwork-first-product-proof`. Het artifact is een controleerbaar voorbeeld, geen publicatie of zelfstandige complete applicatie. De testmap wordt na afloop verwijderd. Een echte modelrun op de GitHub-runner maakt deel uit van de productproef. Het gedrag op de eigen Mac en in de Mac-interface moet nog apart worden beproefd. De artifact-download staat bij de bijbehorende geslaagde GitHub Actions-run.
 
 ## PR-inventaris: niet blind samenvoegen
 
@@ -61,7 +61,7 @@ Deze inventaris is geen bewijs dat de afgetakte wijzigingen veilig geïntegreerd
 
 ## Wat de eerste proef nog niet bewijst
 
-- Ollama genereert zelfstandig de juiste wijzigingen, inclusief inhoudelijke kwaliteit.
+- Het model kan buiten de twee geteste wijzigingen zelfstandig steeds de juiste code maken.
 - EAIwork ontleedt een vrije opdracht zelfstandig in uitvoerbare taken.
 - Het systeem kan nieuwe productstructuren vanaf nul maken.
 - Onbeperkt autonoom herstellen, langdurig doorwerken of veilig publiceren.
@@ -69,10 +69,14 @@ Deze inventaris is geen bewijs dat de afgetakte wijzigingen veilig geïntegreerd
 
 Zolang dit niet is getest, mag het dashboard geen voltooiing of bewezen werking suggereren.
 
+### Waar de codeproef wordt uitgevoerd
+
+De door Ollama voorgestelde code draait uitsluitend in een netwerkloze Docker-container met alleen-lezen bestanden. Ook de afsluitende acceptatietest en de controle van de gekopieerde oplevering gebruiken Docker. De GitHub-runner voert de gegenereerde code niet zelf uit. Het script gebruikt een automatisch aangemaakt testtoken om de gebruikersgoedkeuring na te bootsen; dat is **geen menselijke codebeoordeling**. Buiten de gecontroleerde proef blijft goedkeuring door een persoon verplicht.
+
 ## Stopregels
 
 Stop de productproef bij een mislukte Docker-test, ontbrekende modelreactie, ontbrekende menselijke toestemming of gewijzigde bronbestanden. Geen stilzwijgende publicatie en geen goedkeuring op basis van een voorgesteld, maar niet uitgevoerd, testresultaat.
 
 ## Volgende stap na de eerste groene proef
 
-Op de eigen Mac één echte Ollama-run doorlopen met ditzelfde project. Leg vast: instructie, modelnaam, aangeboden code, Docker-resultaten, wijzigingen na akkoord, eindcontrole en wat de gebruiker daadwerkelijk in het dashboard zag. Bouw alleen aan ontbrekende verbindingen die deze proef zichtbaar maakt.
+Op de eigen Mac dezelfde echte Ollama-run en het dashboard doorlopen. Leg vast: instructie, modelnaam, aangeboden code, Docker-resultaten, wijzigingen na akkoord, eindcontrole en wat de gebruiker daadwerkelijk in het dashboard zag. Bouw alleen aan ontbrekende verbindingen die deze proef zichtbaar maakt.

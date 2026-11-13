@@ -104,9 +104,10 @@ export class LocalCodeWorkspace {
   private readonly host:string;
   private readonly model:string;
   private readonly timeoutMs:number;
+  private readonly maxPredictTokens:number;
   private readonly testRunner:(input:DockerTestInput)=>Promise<DockerTestResult>;
   private readonly activeTests=new Set<string>();
-  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
+  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;maxPredictTokens?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
     this.root=safeRoot(config.workspaceDir);
     const profile=safeRoot(config.profileDir);
     if(this.root===profile||this.root.startsWith(profile+sep)||profile.startsWith(this.root+sep))
@@ -118,8 +119,11 @@ export class LocalCodeWorkspace {
     this.modelId="ollama:"+config.model;
     this.host=localOllamaHost(config.host);
     this.timeoutMs=config.timeoutMs??90000;
-    if(!Number.isInteger(this.timeoutMs)||this.timeoutMs<1000||this.timeoutMs>120000)
+    if(!Number.isInteger(this.timeoutMs)||this.timeoutMs<1000||this.timeoutMs>300000)
       throw new Error("Ongeldige Ollama-timeout");
+    this.maxPredictTokens=config.maxPredictTokens??5000;
+    if(!Number.isInteger(this.maxPredictTokens)||this.maxPredictTokens<128||this.maxPredictTokens>5000)
+      throw new Error("Ongeldige limiet voor modeltokens");
     this.storage=join(profile,"code-proposals");
     if(existsSync(this.storage)){
       if(lstatSync(this.storage).isSymbolicLink()||!lstatSync(this.storage).isDirectory())
@@ -191,16 +195,26 @@ export class LocalCodeWorkspace {
       throw new Error("Voorstelbestand is onjuist");
     return record;
   }
-  async propose(path:string,instruction:string,testPath?:string){
+  async propose(path:string,instruction:string,testPath?:string,relatedPaths:string[]=[]){
     if(typeof instruction!=="string"||!instruction.trim()||instruction.length>4000)
       throw new Error("Beschrijf een concrete wijziging van maximaal 4000 tekens");
     const file=safeExistingFile(this.root,path);
     const original=readBounded(file);
+    let existingTest:null|{path:string;content:string}=null;
     if(testPath!==undefined){
       if(!path.endsWith(".js")||typeof testPath!=="string"||!testPath.endsWith(".test.js")||testPath===path)
         throw new Error("Docker-test vereist een .js-bron en apart .test.js-testbestand");
-      readBounded(safeExistingFile(this.root,testPath));
+      existingTest={path:testPath,content:readBounded(safeExistingFile(this.root,testPath))};
     }
+    if(!Array.isArray(relatedPaths)||relatedPaths.length>7||
+       new Set(relatedPaths).size!==relatedPaths.length||
+       relatedPaths.some(related=>typeof related!=="string"||!related.endsWith(".js")||related===path))
+      throw new Error("Ongeldige verwante bestanden voor het model");
+    const relatedFiles=relatedPaths.map(related=>({
+      path:related,content:readBounded(safeExistingFile(this.root,related))
+    }));
+    if(Buffer.byteLength(JSON.stringify({original,existingTest,relatedFiles}))>28000)
+      throw new Error("De beschikbare codecontext is te groot voor dit voorstel");
     const response=await fetch(this.host+"/api/chat",{
       method:"POST",redirect:"error",signal:AbortSignal.timeout(this.timeoutMs),
       headers:{"content-type":"application/json"},
@@ -210,10 +224,10 @@ export class LocalCodeWorkspace {
           explanation:{type:"string",maxLength:3000},
           checks:{type:"array",maxItems:8,items:{type:"string",maxLength:200}},
         },required:["replacement","explanation","checks"],additionalProperties:false},
-        options:{temperature:0,num_predict:5000},
+        options:{temperature:0,num_predict:this.maxPredictTokens},
         messages:[{role:"user",content:JSON.stringify({
-          instruction:"Propose the COMPLETE replacement for the single existing source file. Do not request shell commands, other file access, network, or publication. Give suggested checks but do not claim tests were executed.",
-          userRequest:instruction,path,original,
+          instruction:"Return valid JSON with exactly replacement, explanation and checks. In replacement write the COMPLETE JavaScript module for path, keeping existing named exports and imports. Implement the user request exactly. The relatedFiles and existingTest below are READ ONLY reference, not files to edit. Import ONLY names that are visibly exported by relatedFiles, never invent imports. Do not request commands, network access or publication. Report checks as suggestions, not performed tests.",
+          userRequest:instruction,path,original,existingTest,relatedFiles,
         })}],
       })
     });

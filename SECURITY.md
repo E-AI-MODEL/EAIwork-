@@ -10,6 +10,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 
 - Actor identity and authorization come from the server-side principal map, never from the request body.
 - Read/write/check/worker/audit permissions are explicit and default-deny. Write scope must stay inside read scope.
+- Local code proposals and changes require a separate `code: true` token capability, in addition to a person actor and audit access. Audit-only and worker tokens cannot read or operate on the local code workspace.
 - State and derived metadata are filtered before being returned, so hidden atoms do not leak through dependencies, rule output, checksums or audit counters. Global rejection counts are exposed only when the principal can read every atom.
 - Deterministic checks declare their input atoms. The caller must be allowed to read all inputs and the check receives only that scoped state, preventing check results from becoming an oracle over hidden atoms.
 - Public API tokens may not represent model actors. Model events are produced only by server-owned worker execution.
@@ -36,6 +37,8 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 
 - Review signals (`needs-person`, `confidence-lowered`) and answer provenance are derived views. They are filtered to the atoms a principal may read and never feed back into status.
 - No public HTTP path produces `confidence.lowered` or a model-raised flag today: model actors hold no tokens and the worker route writes answers only. Those event types exist in the core and in replayed logs.
+
+Local code tests force a verified Unix-domain Docker socket. Remote `DOCKER_HOST` URLs and Docker contexts are not forwarded, so the code copied for testing is not sent to a deliberately configured remote daemon. This does not protect against a compromised local Docker daemon, a local socket proxy, or a compromised host. Model-generated acceptance tests also run in networkless, read-only Docker; they are never run directly by the host Node process.
 
 Legacy events without an explicit registered `source_ref` do not corroborate, even if they have distinct actor IDs or lineages. The Docker codeplan proof is bound to a full SHA-256 manifest of explicitly planned source and test files and is checked again on every read. It does not grant runtime rights, publication rights or semantic `proven` status to unrelated atoms.
 

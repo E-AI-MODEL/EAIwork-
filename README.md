@@ -53,7 +53,7 @@ A model cannot raise status, but its work is not a black box. Every worker propo
 
 In the HTTP server, evidence origin is assigned by the server: from the registered source a person or system cites, or from the actor identity when none is cited. A client cannot create extra independent origins by changing a lineage string, and cannot cite a source that only feeds atoms it may not read. `check.passed` is server-generated only.
 
-Every token maps to a principal with explicit `read`, `write`, `checks`, `workers` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
+Every token maps to a principal with explicit `read`, `write`, `checks`, `workers` and optional `audit` permissions. Local source-code operations also require a separate `code: true` capability. Existing audit tokens do not gain access to code by default. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
 
 Model workers are isolated differently from ordinary API principals. A pack declares each worker's allowed dependency values, opaque source handles and context limits. The server builds an `AtomCapsule` containing its local question, optional typed claim-verification contract, choices and bounded authorized inputs. The model never receives the atom id, pack, cluster, sibling atoms, status, evidence, lineage, project goal or caller-supplied context. Public API tokens may not represent model actors, and every atom execution opens a fresh single-use model session. The worker scheduler can be execute-only: no state read, no normal event writes and a bodyless 204 response that does not reveal the model result or whether that result was accepted into state. See [docs/worker-isolation.md](docs/worker-isolation.md) and [docs/atomic-claim-contract.md](docs/atomic-claim-contract.md).
 
@@ -210,7 +210,7 @@ The normative behavior of the status ladder lives in `conformance/vectors/`. The
 
 De lokale codeplan-API geeft bij elk plan een `proof` terug. Alleen na een geslaagde, werkelijk uitgevoerde Docker-projecttest op de huidige geplande bron- en testbestanden staat `proof.status` op `current`. Bij gewijzigde of ongeteste bestanden binnen dat manifest wordt dit `stale`. Een testverklaring geldt niet voor bestanden buiten het plan en maakt geen willekeurige inhoudelijke atoomclaim `proven`.
 
-`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef zijn modelantwoorden nagebootst. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
+`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef is een echt Ollama-model verplicht. Zonder model stopt de proef. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
 
 ## Current limits
 

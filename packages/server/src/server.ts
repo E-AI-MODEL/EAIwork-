@@ -33,7 +33,7 @@ import {inspectMissionPlan} from "../../operations/src/preflight.ts";
 import {proposeMissionRevision} from "../../operations/src/replan.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
 import { executeAtomWorker, type ModelProvider, type SourceBroker } from "../../gateway/src/gateway.ts";
-import { canAudit, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
+import { canAudit, canManageCode, canRead, canRunCheck, canRunWorker, canWrite, validatePrincipals, type Principal } from "./authz.ts";
 import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 
 export interface DeterministicCheck {
@@ -457,6 +457,8 @@ export function makeServer(cfg: Config) {
       if (url.pathname.startsWith("/ops/")) {
         if (!operations) return json(res, 503, { error: "operations not configured" });
         if (!canAudit(principal)) return json(res, 403, { error: "operations access required" });
+        if (url.pathname.startsWith("/ops/code/") && !canManageCode(principal))
+          return json(res, 403, { error: "local code access required" });
         const recordCodeAction=(
           action:"proposed"|"tested"|"suite-tested"|"apply-started"|"applied"|"restore-started"|"restored"|"aborted",
           detail:{id:string;path:string;sourceSha256:string;replacementSha256:string;modelId:string},
@@ -556,7 +558,10 @@ export function makeServer(cfg: Config) {
             return json(res,200,await plans.exclusive(async()=>{
               const current=plans.active(request.planId as string);
               if(current.status!=="waiting")throw new Error("Deze stap heeft al een voorstel");
-              const proposed=await workspace.propose(current.step.path,current.step.instruction,current.step.testPath);
+              const relatedPaths=current.record.steps.map(step=>step.path)
+                .filter(path=>path!==current.step.path);
+              const proposed=await workspace.propose(current.step.path,current.step.instruction,
+                current.step.testPath,relatedPaths);
               const journalSeq=recordCodeAction("proposed",proposed,"review-required");
               return {...plans.attachProposal(request.planId as string,proposed.id),proposalId:proposed.id,journalSeq};
             }));

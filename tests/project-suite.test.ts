@@ -93,6 +93,18 @@ test("only explicit JavaScript files become part of a bounded suite manifest",()
     {...valid.files[0],path:"node_modules/x.js"},...valid.files.slice(1)
   ]}),/ongeldig|Ongeldig/);
 });
+test("independent acceptance can add a third test without a third source",()=>{
+  const suite={files:[
+    {path:"src/a.js",content:"export const a=1;"},
+    {path:"src/b.js",content:"export const b=2;"},
+    {path:"tests/a.test.js",content:"import {test} from 'node:test'; test('a',()=>{});"},
+    {path:"tests/b.test.js",content:"import {test} from 'node:test'; test('b',()=>{});"},
+    {path:"acceptance/final.test.js",content:"import {test} from 'node:test'; test('acceptance',()=>{});"}
+  ],testPaths:["tests/a.test.js","tests/b.test.js","acceptance/final.test.js"]};
+  assert.equal(validateProjectInput(suite).testPaths.length,3);
+  assert.match(projectManifestSha256(suite),/^[a-f0-9]{64}$/);
+  assert.throws(()=>validateProjectInput({...suite,files:suite.files.filter(f=>f.path!=="acceptance/final.test.js")}));
+});
 test("plan refuses the same test file twice before contacting Ollama",async()=>{
   const f=await setup();
   try{
