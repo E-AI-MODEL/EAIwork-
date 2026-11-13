@@ -174,7 +174,7 @@
 
       <div class="signal-grid">
         <div class="signal"><strong>Open questions</strong><b id="open-count">0</b><p>Unknown or assumption-level atoms.</p></div>
-        <div class="signal"><strong>Review signals</strong><b id="review-count">0</b><p>Flags, shaky dependencies and coverage prompts.</p></div>
+        <div class="signal"><strong>Review signals</strong><b id="review-count">0</b><p>Flags, shaky dependencies, coverage prompts and answers that need a person.</p></div>
         <div class="signal"><strong>Strong evidence</strong><b id="strong-count">0</b><p>Atoms at checked or proven status.</p></div>
       </div>
 
@@ -273,6 +273,7 @@ function renderWarnings(){
   for(const f of state.flags || []) items.push({title:`Flag · ${f.rule}`,body:f.message});
   for(const s of state.shaky || []) items.push({title:'Dependency mismatch',body:s.message});
   for(const c of state.coverage?.notes || []) items.push({title:'Coverage review',body:c});
+  for(const r of state.review || []) items.push({title:r.kind==='needs-person'?'Needs a person':'Confidence lowered',body:r.message});
   if(!items.length){ root.innerHTML='<div class="warning"><b>No review signals detected</b><p>That does not mean the work is safe or complete. It only means the current checks did not flag anything.</p></div>'; return; }
   for(const item of items){
     const div=document.createElement('div');div.className='warning';div.innerHTML=`<b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.body)}</p>`;root.append(div);
@@ -296,8 +297,10 @@ async function inspectAtom(id,button){
     const deps=(a.dependsOn||[]).length ? (a.dependsOn||[]).map(dep=>{
       const d=state.atoms[dep]; return `<div class="reason"><strong>${escapeHtml(dep)}</strong><br>${escapeHtml(d?.question || '')}<br><span style="color:var(--muted)">${escapeHtml(d?.status || 'unknown')}</span></div>`;
     }).join('') : '<div class="empty-mini">No prerequisites.</div>';
+    const proposer=ex.answeredBy ? `<div class="reason">Proposed by ${escapeHtml(ex.answeredBy.id)} <span style="color:var(--muted)">(${escapeHtml(ex.answeredBy.kind)})</span></div>` : '';
+    const lowered=(ex.lowered||[]).length ? `<div class="section"><div class="section-title">Confidence lowered</div>${ex.lowered.map(x=>`<div class="reason">${escapeHtml(x)}</div>`).join('')}</div>` : '';
     const expired=(ex.expired||[]).length ? `<div class="section"><div class="section-title">Expired evidence</div>${ex.expired.map(x=>`<div class="reason">${escapeHtml(x)}</div>`).join('')}</div>` : '';
-    box.innerHTML=`<div class="atom-id">${escapeHtml(id)}</div><h4>${escapeHtml(a.question)}</h4><span class="status-pill" style="--status:${statusVar(a.status)}">${escapeHtml(a.status)}</span><div class="section"><div class="section-title">Current answer</div><div>${escapeHtml(a.value ?? 'No answer')}</div></div><div class="section"><div class="section-title">Why this status</div>${reasons}</div><div class="section"><div class="section-title">Evidence</div>${evidence}</div><div class="section"><div class="section-title">Prerequisites</div>${deps}</div>${expired}`;
+    box.innerHTML=`<div class="atom-id">${escapeHtml(id)}</div><h4>${escapeHtml(a.question)}</h4><span class="status-pill" style="--status:${statusVar(a.status)}">${escapeHtml(a.status)}</span><div class="section"><div class="section-title">Current answer</div><div>${escapeHtml(a.value ?? 'No answer')}</div>${proposer}</div><div class="section"><div class="section-title">Why this status</div>${reasons}</div>${lowered}<div class="section"><div class="section-title">Evidence</div>${evidence}</div><div class="section"><div class="section-title">Prerequisites</div>${deps}</div>${expired}`;
   }catch(e){
     box.innerHTML += `<div class="section"><div class="error">Could not load evidence: ${escapeHtml(e.message)}</div></div>`;
   }
@@ -312,7 +315,7 @@ function renderWorkspace(){
   $('checksum').textContent=`log ${String(state.checksum || '').slice(0,10)}`;
   const counts=countAll(); renderBar(counts,$('overall-bar')); renderLegend(counts);
   $('open-count').textContent=(counts.unknown||0)+(counts.assumption||0);
-  $('review-count').textContent=(state.flags?.length||0)+(state.shaky?.length||0)+(state.coverage?.notes?.length||0);
+  $('review-count').textContent=(state.flags?.length||0)+(state.shaky?.length||0)+(state.coverage?.notes?.length||0)+(state.review?.length||0);
   $('strong-count').textContent=(counts.checked||0)+(counts.proven||0);
   $('atom-total').textContent=`${Object.keys(state.atoms).length} atoms`;
   renderClusters(); renderWarnings();
@@ -323,9 +326,13 @@ async function load(){
   if(!currentToken){$('error').textContent='Enter an access token.';return}
   const btn=$('load'); btn.disabled=true; btn.textContent='Opening…';
   try{
-    const [s,integrity]=await Promise.all([api('/state'),api('/log/verify')]);
+    // Log verification needs the audit permission. A scoped reader still gets the workbench,
+    // with an explicit "not verified" badge instead of a false "intact".
+    const [s,integrity]=await Promise.all([api('/state'),api('/log/verify').catch(()=>null)]);
     state=s; renderWorkspace();
-    const badge=$('integrity'); badge.className='integrity '+(integrity.ok?'ok':'bad'); badge.querySelector('span').textContent=integrity.ok?'log intact':'log issue';
+    const badge=$('integrity');
+    badge.className='integrity'+(integrity?(integrity.ok?' ok':' bad'):'');
+    badge.querySelector('span').textContent=integrity?(integrity.ok?'log intact':'log issue'):'log not verified for this token';
   }catch(e){$('error').textContent='Could not open this workbench. Check the token and server.';}
   finally{btn.disabled=false;btn.textContent='Open workbench'}
 }

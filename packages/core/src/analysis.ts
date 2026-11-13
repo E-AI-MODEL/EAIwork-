@@ -2,6 +2,7 @@ import type { Derived, State, Status } from "./types.ts";
 import { LADDER } from "./types.ts";
 import { rank } from "./derive.ts";
 import type { Pack } from "./pack.ts";
+import { route } from "./calibrate.ts";
 
 type D = Record<string, Derived>;
 const st = (d: D, id: string): Status => d[id]?.status ?? "unknown";
@@ -56,4 +57,39 @@ export function coverage(p: Pack, state: State, d: D) {
     if (c.atoms.length && unknown / c.atoms.length >= 0.8) notes.push(`cluster ${c.id}: ${unknown} of ${c.atoms.length} atoms unanswered`);
   }
   return { notes, disclaimer: "Prompts for review, not a guarantee of completeness." };
+}
+
+export interface ReviewSignal {
+  atom: string;
+  kind: "confidence-lowered" | "needs-person";
+  message: string;
+}
+
+/**
+ * Review prompts that come from the asymmetry rule itself. They never change status.
+ * - confidence-lowered: an actor (usually a model) recorded doubt about the current answer.
+ * - needs-person: the current answer is an unevidenced model proposal that the routing
+ *   policy sends to a person (high impact, "unknown" winning, or low self-reported probability).
+ * Self-reported model probability is a routing input only. It is not shown as a score.
+ */
+export function reviewSignals(p: Pack, state: State, d: D, minConfidence = 0.8): ReviewSignal[] {
+  const out: ReviewSignal[] = [];
+  for (const a of p.atoms) {
+    const s = state[a.id];
+    if (!s) continue;
+    if (s.lowered.length) {
+      out.push({ atom: a.id, kind: "confidence-lowered", message: `confidence lowered on ${a.id}: ${s.lowered.join("; ")}` });
+    }
+    if (s.answeredBy?.kind !== "model" || st(d, a.id) !== "assumption") continue;
+    const impact = a.impact ?? "low";
+    const probabilities = s.probabilities && Object.keys(s.probabilities).length ? s.probabilities : undefined;
+    if (impact === "high") {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} is high impact and its answer is an unevidenced model proposal` });
+    } else if (!probabilities) {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} holds a model proposal without a usable probability distribution` });
+    } else if (route(probabilities, impact, minConfidence) === "ask-person") {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} holds a model proposal below the routing threshold` });
+    }
+  }
+  return out;
 }

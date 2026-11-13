@@ -1,0 +1,10 @@
+{"name":"Evidence older than the atom's validity window stops supporting","now":"2026-10-05",
+ "validForDays":{"a.old":90,"a.fresh":90},
+ "events":[
+  {"id":"e1","at":"2026-06-01","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.old","value":"yes"},
+  {"id":"e2","at":"2026-06-01","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.old",
+   "evidence":{"id":"ev1","source":"form seen in June","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:a","supports":true}},
+  {"id":"e3","at":"2026-09-20","actor":{"kind":"person","id":"person:jan"},"type":"answer.proposed","atom":"a.fresh","value":"yes"},
+  {"id":"e4","at":"2026-09-20","actor":{"kind":"person","id":"person:jan"},"type":"evidence.attached","atom":"a.fresh",
+   "evidence":{"id":"ev2","source":"form seen in September","observer":{"kind":"person","id":"person:jan"},"mode":"observed","lineage":"origin:b","supports":true}}],
+ "expect":{"a.old":"assumption","a.fresh":"observed"},"expectRejected":[]}

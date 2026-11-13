@@ -27,6 +27,8 @@ export type EaiEvent =
 
 export interface AtomState {
   value?: string;
+  /** Who proposed the current answer. Provenance only; never an input to status. */
+  answeredBy?: Actor;
   evidence: Evidence[];
   flags: { id: string; message: string; by: Actor; dismissed?: boolean }[];
   lowered: string[];

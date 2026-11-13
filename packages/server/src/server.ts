@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import {
-  coverage, derive, distribution, lintPack, optionsFor, propagate, replay, runRules, validate, weakestLink,
+  coverage, derive, distribution, lintPack, optionsFor, propagate, replay, reviewSignals, runRules, validate, weakestLink,
   type Actor, type EaiEvent, type Pack, type State,
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
@@ -250,6 +250,7 @@ export function makeServer(cfg: Config) {
         flags: [...ruleFlags, ...actorFlags],
         shaky: propagate(visiblePack, visibleDerived),
         coverage: coverage(visiblePack, visibleState, visibleDerived),
+        review: reviewSignals(visiblePack, visibleState, visibleDerived),
         checksum,
         ...(canAudit(principal) && visible.size === cfg.pack.atoms.length ? { rejectedAttempts: store.rejections.length } : {}),
         note: "Nothing flagged means not detected, not safe.",
@@ -514,6 +515,8 @@ export function makeServer(cfg: Config) {
           ...derive(r.state[id], snapshotDate, { validForDays: validFor[id] }),
           evidence: r.state[id]?.evidence ?? [],
           flags: r.state[id]?.flags ?? [],
+          answeredBy: r.state[id]?.answeredBy ?? null,
+          lowered: r.state[id]?.lowered ?? [],
         });
       }
       if (req.method === "GET" && url.pathname === "/weakest") {
