@@ -13,7 +13,7 @@ import type {DockerTestInput,DockerTestResult} from "../packages/operations/src/
 
 const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
 const check=(input:DockerTestInput,status:"passed"|"failed"="passed"):DockerTestResult=>({
-  runner:"docker-node-test-v1",status,candidateSha256:hash(input.candidateSource),
+  runner:"docker-node-test-v1",proofFormat:"tap-named-v2",status,candidateSha256:hash(input.candidateSource),
   testSha256:hash(input.testSource),imageId:"sha256:"+"a".repeat(64),
   testsExecuted:true,exitCode:status==="passed"?0:1,timedOut:false,
   output:status,recordedAt:new Date().toISOString()

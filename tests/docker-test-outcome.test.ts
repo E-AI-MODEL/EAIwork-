@@ -24,3 +24,10 @@ test("skipped, todo, failed or missing counts never produce a passing report",()
     full("a").replace("# tests 1","")
   ])assert.equal(inspectNodeTestOutput(s).passed,false);
 });
+
+test("a historical successful-looking Docker report is not accepted",async()=>{
+  const {validSingleFilePass}=await import("../packages/operations/src/docker-test-outcome.ts");
+  assert.equal(validSingleFilePass({status:"passed",runner:"docker-node-test-v1",
+    candidateSha256:"x",testSha256:"y",imageId:"sha256:"+"a".repeat(64),
+    testsExecuted:true,exitCode:0,timedOut:false,output:full("test"),recordedAt:"2026-11-01"}),false);
+});

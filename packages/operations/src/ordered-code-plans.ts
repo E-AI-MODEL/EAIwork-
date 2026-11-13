@@ -6,6 +6,7 @@ import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,re
 import {join} from "node:path";
 import type {LocalCodeWorkspace} from "./code-worker.ts";
 import type {DockerTestResult} from "./docker-code-test.ts";
+import {validSingleFilePass} from "./docker-test-outcome.ts";
 import {runIsolatedProjectSuite,projectManifestSha256,type ProjectTestInput,type ProjectTestResult} from "./docker-project-suite.ts";
 import {evidenceForProject,validProjectPass} from "./checked-code-evidence.ts";
 
@@ -95,7 +96,7 @@ export class OrderedCodePlans {
                 status="done";
               else if(step.projectPostTest){status="blocked";detail="Gezamenlijke projecttest is niet geslaagd"}
               else status="needs-project-test";
-            }else if(!proposal.sourceChanged&&step.postTest?.status==="passed"&&step.postTest.testsExecuted&&
+            }else if(!proposal.sourceChanged&&validSingleFilePass(step.postTest)&&
                      step.postTest.candidateSha256===proposal.replacementSha256&&
                      step.postTest.testSha256===step.testSha256)status="done";
             else if(!proposal.sourceChanged&&!step.postTest)status="needs-post-test";
@@ -218,6 +219,7 @@ export class OrderedCodePlans {
     const {record,index,step}=this.assertProposal(id,proposalId,"needs-post-test");
     const checked=this.workspace.inspect(proposalId);
     if(checked.status!=="applied"||checked.sourceChanged||
+       (result.status==="passed"&&!validSingleFilePass(result))||
        result.candidateSha256!==checked.replacementSha256||
        result.testSha256!==step.testSha256)
       throw new Error("Testuitslag hoort niet bij de daadwerkelijk toegepaste bron");

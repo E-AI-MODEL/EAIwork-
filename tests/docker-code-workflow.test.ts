@@ -41,7 +41,7 @@ test("Docker test status must match candidate and unchanged test file before app
   const port=(fake.address() as AddressInfo).port;
   const runner=async(input:DockerTestInput):Promise<DockerTestResult>=>{
     calls.push(input);
-    return {status:"passed",runner:"docker-node-test-v1",candidateSha256:hash(input.candidateSource),
+    return {status:"passed",runner:"docker-node-test-v1",proofFormat:"tap-named-v2",candidateSha256:hash(input.candidateSource),
       testSha256:hash(input.testSource),imageId:"sha256:"+"a".repeat(64),
       testsExecuted:true,exitCode:0,timedOut:false,
       output:"TAP version 13\n# tests 1\n# pass 1\n# fail 0",

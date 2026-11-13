@@ -16,3 +16,12 @@ export function inspectNodeTestOutput(output: string, minimumNamedTests = 1) {
   return { testsExecuted, passed: testsExecuted && passed === tests &&
     failed === 0 && skipped === 0 && cancelled === 0 && todo === 0 };
 }
+
+/** A saved result from before the named-test gate cannot authorize application. */
+import type {DockerTestResult} from "./docker-code-test.ts";
+export function validSingleFilePass(result:DockerTestResult|undefined):boolean{
+  return !!result && result.proofFormat==="tap-named-v2" &&
+    result.runner==="docker-node-test-v1" && result.status==="passed" &&
+    result.testsExecuted===true && result.exitCode===0 && result.timedOut===false &&
+    typeof result.imageId==="string" && /^sha256:[a-f0-9]{64}$/.test(result.imageId);
+}

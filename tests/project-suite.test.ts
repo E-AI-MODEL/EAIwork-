@@ -19,14 +19,14 @@ const replacementA='import {number} from "./b.js";\nexport const total = number 
 const sourceB="export const number = 1;\n";
 const replacementB="export const number = 2;\n";
 function runnerResult(input:ProjectTestInput,status:"passed"|"failed"|"unavailable"):ProjectTestResult{
-  return {runner:"docker-project-node-v1",manifestSha256:projectManifestSha256(input),
+  return {runner:"docker-project-node-v1",proofFormat:"tap-named-v2",manifestSha256:projectManifestSha256(input),
     status,fileCount:input.files.length,testPaths:[...input.testPaths].sort(),
     testsExecuted:status!=="unavailable",exitCode:status==="passed"?0:status==="failed"?1:null,
     imageId:"sha256:"+"f".repeat(64),timedOut:false,output:status,
     recordedAt:new Date().toISOString()};
 }
 function oneFileResult(input:DockerTestInput):DockerTestResult{
-  return {runner:"docker-node-test-v1",status:"passed",
+  return {runner:"docker-node-test-v1",proofFormat:"tap-named-v2",status:"passed",
     candidateSha256:hash(input.candidateSource),testSha256:hash(input.testSource),
     imageId:"sha256:"+"e".repeat(64),testsExecuted:true,exitCode:0,
     timedOut:false,output:"passed",recordedAt:new Date().toISOString()};

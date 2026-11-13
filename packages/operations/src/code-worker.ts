@@ -6,6 +6,7 @@ import {localOllamaHost,discoverLocalOllamaModels} from "../../gateway/src/ollam
 import {checkCodeSyntax,type CodePreflight} from "./code-preflight.ts";
 import {compareSource} from "./code-diff.ts";
 import {runIsolatedNodeTest,type DockerTestResult,type DockerTestInput} from "./docker-code-test.ts";
+import {validSingleFilePass} from "./docker-test-outcome.ts";
 
 type ProposalRecord={
   id:string;path:string;sourceSha256:string;replacementSha256:string;
@@ -161,8 +162,7 @@ export class LocalCodeWorkspace {
     if(sha(candidate)!==initial.replacementSha256||
        sha(initial.replacement)!==initial.replacementSha256)
       throw new Error("De toegepaste code wijkt af van het goedgekeurde voorstel");
-    if(initial.testReport?.status!=="passed"||
-       !initial.testReport.testsExecuted||
+    if(!validSingleFilePass(initial.testReport)||
        initial.testReport.candidateSha256!==initial.replacementSha256||
        initial.testReport.testSha256!==sha(testSource))
       throw new Error("De oorspronkelijke Docker-test is niet aantoonbaar geslaagd");
@@ -257,6 +257,8 @@ export class LocalCodeWorkspace {
       const checkedHashes=result.candidateSha256===initial.replacementSha256 &&
         result.testSha256===sha(testSource);
       if(!checkedHashes)throw new Error("De testuitslag hoort niet bij dit voorstel");
+      if(result.status==="passed"&&!validSingleFilePass(result))
+        throw new Error("De testuitkomst mist controleerbaar uitgevoerde Node-tests");
       saveJson(join(this.storage,initial.id+".json"),{...latest,testReport:result});
       return result;
     }finally{this.activeTests.delete(proposalId)}
@@ -275,7 +277,7 @@ export class LocalCodeWorkspace {
       throw new Error("Opgeslagen uitgangsversie is veranderd");
     const preflight=checkCodeSyntax(record.path,record.replacement);
     const testPassed=!record.testPath||(
-      record.testReport?.status==="passed"&&record.testReport.testsExecuted&&
+      validSingleFilePass(record.testReport)&&
       record.testReport.candidateSha256===record.replacementSha256&&
       record.testReport.testSha256===sha(readBounded(safeExistingFile(this.root,record.testPath)))
     );

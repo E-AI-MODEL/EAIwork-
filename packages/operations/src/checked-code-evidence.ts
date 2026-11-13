@@ -14,6 +14,7 @@ export type ProjectProof={
 };
 export function validProjectPass(result:ProjectTestResult|undefined):boolean{
   return !!result && result.runner==="docker-project-node-v1" &&
+    result.proofFormat==="tap-named-v2" &&
     result.status==="passed" && result.testsExecuted===true &&
     result.exitCode===0 && result.timedOut===false &&
     typeof result.imageId==="string" && /^sha256:[a-f0-9]{64}$/.test(result.imageId);

@@ -13,6 +13,7 @@ import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
 export type DockerTestResult={
   status:"passed"|"failed"|"unavailable";
   runner:"docker-node-test-v1";
+  proofFormat?:"tap-named-v2"; // Old saved reports without this cannot authorize new changes.
   candidateSha256:string;
   testSha256:string;
   imageId:string|null;
@@ -39,7 +40,7 @@ const safePath=(path:string)=>typeof path==="string" && path.length<=240 &&
     /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(x)) &&
   !path.includes("\\")&&!path.includes("\0");
 const unavailable=(candidate:string,test:string,detail:string):DockerTestResult=>({
-  status:"unavailable",runner:"docker-node-test-v1",
+  status:"unavailable",runner:"docker-node-test-v1",proofFormat:"tap-named-v2",
   candidateSha256:sha(candidate),testSha256:sha(test),imageId:null,
   testsExecuted:false,exitCode:null,timedOut:false,
   output:detail.slice(0,1000),recordedAt:new Date().toISOString(),

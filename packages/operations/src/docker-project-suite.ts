@@ -12,6 +12,7 @@ export type ProjectTestFile={path:string;content:string};
 export type ProjectTestInput={files:ProjectTestFile[];testPaths:string[]};
 export type ProjectTestResult={
   runner:"docker-project-node-v1";
+  proofFormat?:"tap-named-v2"; // Old saved reports without this cannot authorize new changes.
   status:"passed"|"failed"|"unavailable";
   manifestSha256:string;
   fileCount:number;testPaths:string[];
@@ -63,7 +64,7 @@ export function projectManifestSha256(input:ProjectTestInput):string{
   }));
 }
 const absent=(input:ProjectTestInput,detail:string):ProjectTestResult=>({
-  runner:"docker-project-node-v1",status:"unavailable",
+  runner:"docker-project-node-v1",proofFormat:"tap-named-v2",status:"unavailable",
   manifestSha256:projectManifestSha256(input),fileCount:input.files.length,
   testPaths:[...input.testPaths].sort(),imageId:null,testsExecuted:false,
   exitCode:null,timedOut:false,output:detail.slice(0,1000),
