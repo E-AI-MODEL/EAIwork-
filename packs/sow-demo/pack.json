@@ -4,13 +4,16 @@
   "domain": "school onboarding trajectory (invented demo data)",
   "sources": [
     {
-      "id": "s.fin.request"
+      "id": "s.fin.request",
+      "title": "Budget request form"
     },
     {
-      "id": "s.fin.approval"
+      "id": "s.fin.approval",
+      "title": "Budget holder approval record"
     },
     {
-      "id": "s.plan.startdate"
+      "id": "s.plan.startdate",
+      "title": "Planning calendar"
     }
   ],
   "clusters": [

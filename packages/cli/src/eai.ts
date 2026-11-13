@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { agreement, coverage, distribution, lintPack, propagate, replay, runRules, weakestLink } from "../../core/src/index.ts";
+import { agreement, coverage, distribution, lintPack, propagate, replay, reviewSignals, runRules, weakestLink } from "../../core/src/index.ts";
 import { Store } from "../../server/src/store.ts";
 import { SignedFileAnchorVerifier, SignedFileAnchorWitness } from "../../server/src/witness.ts";
 
@@ -37,7 +37,12 @@ if (cmd === "lint-pack") {
   const r = replay(readLog(args[1]), now, validFor(p));
   const d = r.derived[args[2]];
   console.log(args[2], "->", d?.status ?? "unknown");
+  if (d) console.log(" rule:", d.rule, d.basis.length ? `(carried by ${d.basis.join(", ")})` : "");
   (d?.reasons ?? []).forEach((x) => console.log(" -", x));
+  if (d?.next) console.log(" next status needs:", d.next);
+  const answeredBy = r.state[args[2]]?.answeredBy;
+  if (answeredBy) console.log(" answer proposed by", `${answeredBy.kind}/${answeredBy.id}`);
+  r.state[args[2]]?.lowered.forEach((x) => console.log(" confidence lowered:", x));
   r.state[args[2]]?.evidence.forEach((e) => console.log(" evidence", e.id, `${e.observer.kind}/${e.mode}`, e.lineage));
 } else if (cmd === "report") {
   const p = readJson(args[0]);
@@ -51,6 +56,7 @@ if (cmd === "lint-pack") {
   }
   const cv = coverage(p, r.state, r.derived);
   cv.notes.forEach((x) => console.log("REVIEW", x));
+  reviewSignals(p, r.state, r.derived).forEach((x) => console.log("REVIEW", x.message));
   console.log("\nNothing flagged means not detected, not safe.");
 } else if (cmd === "agree") {
   const r = agreement(readJson(args[0]), readJson(args[1]));

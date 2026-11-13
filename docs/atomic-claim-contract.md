@@ -2,12 +2,12 @@
 
 **Status: first implementation of a declarative claim-verification contract.**
 
-The initial 3B comparison exposed a **semantic confound**: "Does the record explicitly confirm approval?" can be correctly answered "no" when approval is missing, but the benchmark labeled such answers "unknown". The test measured a mismatch in interpretation, not just model quality. Original DEV fixture is preserved at `benchmarks/archive/evidence-controls.v0.1.dev.json` and its GitHub-run output must not be reinterpreted as product performance.
+The initial 3B comparison exposed a **semantic confound**: "Does the record explicitly confirm approval?" can be correctly answered "no" when approval is missing, but the benchmark labeled such answers "unknown". The test measured a mismatch in interpretation, not just model quality. The original v0.1 DEV fixture is no longer a file in the tree; it is preserved in git history as `benchmarks/evidence-controls.dev.json` at commit `0479ad2`. Its GitHub-run output must not be reinterpreted as product performance.
 
 ## Design influence
 
-- FEVER-style claim verification separates **supported**, **refuted**, and **not enough information**. Their benchmark labels inspired our three local outcomes; we do not copy their dataset or assert that our tiny synthetic suite has comparable rigor.
-- DSPy signatures separate declarative task inputs and outputs from an ad hoc prompt. Here the pack author defines an atom-local claim; providers render it through one shared instruction policy.
+- FEVER-style claim verification (`fever-2018` in `evidence/bibliography.yaml`) separates **supported**, **refuted**, and **not enough information**. Their benchmark labels inspired our three local outcomes; we do not copy their dataset or assert that our tiny synthetic suite has comparable rigor.
+- DSPy signatures (`dspy-2023`) separate declarative task inputs and outputs from an ad hoc prompt. Here the pack author defines an atom-local claim; providers render it through one shared instruction policy.
 - Ollama/Structured Outputs JSON schemas constrain **syntax**. They do not ensure epistemic accuracy.
 
 ## Answer contract

@@ -80,7 +80,7 @@ The exact citation here is valid; a trained reviewer or separately validated sem
 - **Not** the UMDT regex engine repurposed to infer objective truth.
 - **Not** automatic accept/reject of a proposition; only citation integrity and review routing.
 - **Not** an evidence promotion shortcut, self-check by the same model, or verifier of source authenticity.
-- **Not yet wired** to the current Ollama worker response: that provider currently returns **only a probability distribution**, not source anchors. Calling the observer on a hypothetical citation would be fake verification.
+- **Wired only as an opt-in sidecar.** Since the model-capability-neutral change the Ollama provider can return citation anchors through `propose()`, and a trusted caller can pass them to this observer with `observeEvidence: true` (see [model-capability-neutral.md](model-capability-neutral.md)). The HTTP worker route still uses the default probability-only path, so nothing observed here reaches the event log.
 - **Not** a replacement for EAIwork's non-model evidence constraints, actor authorization, or independent-origin requirements.
 - **No new UI claim** of `checked` or `proven` on the strength of an exact text match.
 

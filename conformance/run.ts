@@ -5,9 +5,10 @@ let failed = 0;
 const dir = new URL("./vectors/", import.meta.url);
 for (const f of readdirSync(dir).filter((x) => x.endsWith(".json")).sort()) {
   const v = JSON.parse(readFileSync(new URL(f, dir), "utf8"));
-  const r = replay(v.events, v.now);
+  // Optional per-atom validity windows, as a pack would declare them with valid_for_days.
+  const r = replay(v.events, v.now, v.validForDays ?? {});
   const got = Object.fromEntries(Object.entries(r.derived).map(([k, d]: any) => [k, d.status]));
-  const again = replay(v.events, v.now).checksum; // determinism
+  const again = replay(v.events, v.now, v.validForDays ?? {}).checksum; // determinism
   const okStatus = JSON.stringify(got) === JSON.stringify(v.expect);
   const okRej = JSON.stringify(r.rejected.map((x) => x.index)) === JSON.stringify(v.expectRejected);
   const ok = okStatus && okRej && again === r.checksum;

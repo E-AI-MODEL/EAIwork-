@@ -9,8 +9,11 @@ export function apply(state: State, e: EaiEvent): State {
   const s: State = { ...state, [e.atom]: a };
   switch (e.type) {
     case "answer.proposed":
-      if (a.value !== undefined && a.value !== e.value) a.evidence = [];
+      // Evidence and lowered-confidence reasons belong to one answer value. A new value starts clean.
+      if (a.value !== undefined && a.value !== e.value) { a.evidence = []; a.lowered = []; }
       a.value = e.value;
+      a.answeredBy = e.actor;
+      a.answerBasis = e.basis;
       a.probabilities = e.probabilities;
       break;
     case "evidence.attached":

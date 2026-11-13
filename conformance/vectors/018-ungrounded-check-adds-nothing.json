@@ -1,0 +1,82 @@
+{
+ "name": "A deterministic check with no registered source, no premises and no independent support restates the answer: not counted",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "check:calc",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:calc",
+    "supports": true,
+    "deterministic": true
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.two",
+   "value": "yes"
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.two",
+   "evidence": {
+    "id": "ev4",
+    "source": "check:calc",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:calc",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.two": "yes"
+     }
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "assumption",
+  "a.two": "assumption"
+ },
+ "expectRejected": []
+}

@@ -1,0 +1,118 @@
+{
+  "name": "Old logs cannot use unregistered origins to corroborate or prove",
+  "now": "2026-10-05",
+  "events": [
+    {
+      "id": "e1",
+      "at": "2026-10-01",
+      "actor": {
+        "kind": "person",
+        "id": "person:jan"
+      },
+      "type": "answer.proposed",
+      "atom": "a.old",
+      "value": "yes"
+    },
+    {
+      "id": "e2",
+      "at": "2026-10-02",
+      "actor": {
+        "kind": "person",
+        "id": "person:jan"
+      },
+      "type": "evidence.attached",
+      "atom": "a.old",
+      "evidence": {
+        "id": "ev-old-1",
+        "source": "old reported source",
+        "observer": {
+          "kind": "person",
+          "id": "person:jan"
+        },
+        "mode": "observed",
+        "lineage": "origin:alpha",
+        "supports": true
+      }
+    },
+    {
+      "id": "e3",
+      "at": "2026-10-02",
+      "actor": {
+        "kind": "person",
+        "id": "person:piet"
+      },
+      "type": "evidence.attached",
+      "atom": "a.old",
+      "evidence": {
+        "id": "ev-old-2",
+        "source": "old reported source",
+        "observer": {
+          "kind": "person",
+          "id": "person:piet"
+        },
+        "mode": "observed",
+        "lineage": "origin:beta",
+        "supports": true
+      }
+    },
+    {
+      "id": "e4",
+      "at": "2026-10-01",
+      "actor": {
+        "kind": "person",
+        "id": "person:jan"
+      },
+      "type": "answer.proposed",
+      "atom": "a.check",
+      "value": "yes"
+    },
+    {
+      "id": "e5",
+      "at": "2026-10-02",
+      "actor": {
+        "kind": "person",
+        "id": "person:jan"
+      },
+      "type": "evidence.attached",
+      "atom": "a.check",
+      "evidence": {
+        "id": "ev-old-3",
+        "source": "old form",
+        "observer": {
+          "kind": "person",
+          "id": "person:jan"
+        },
+        "mode": "observed",
+        "lineage": "origin:form",
+        "supports": true
+      }
+    },
+    {
+      "id": "e6",
+      "at": "2026-10-02",
+      "actor": {
+        "kind": "check",
+        "id": "check:calc"
+      },
+      "type": "check.passed",
+      "atom": "a.check",
+      "evidence": {
+        "id": "ev-old-4",
+        "source": "old calculation",
+        "observer": {
+          "kind": "check",
+          "id": "check:calc"
+        },
+        "mode": "observed",
+        "lineage": "origin:check",
+        "supports": true,
+        "deterministic": true
+      }
+    }
+  ],
+  "expect": {
+    "a.old": "observed",
+    "a.check": "observed"
+  },
+  "expectRejected": []
+}
