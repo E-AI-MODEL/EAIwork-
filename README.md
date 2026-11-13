@@ -76,6 +76,50 @@ person / worker capsule / check        ├── review signals
 
 The core package has no network access. The server owns actor identity, event ids and time. Attempts to bypass status rules are rejected and stay observable through the event flow.
 
+## EAIwork lokaal met Ollama
+
+EAIwork kan een **lokaal Ollama-model** gebruiken om een conceptwerkplan voor te stellen. De gewone taakuitvoering en controle blijven bij EAIwork. Het model krijgt geen extra rechten.
+
+1. Installeer Node.js 22.18+ en [Ollama](https://ollama.com/). Start Ollama en download minstens één model, bijvoorbeeld `ollama pull qwen2.5:1.5b`.
+2. Start met `npm run local:ollama -- --model=qwen2.5:1.5b`. Bij precies één lokaal model is `npm run local:ollama` genoeg.
+3. Open het getoonde localhost-adres, kies **Meer > Contracten en registratie** en verbind met het tijdelijke token dat in je eigen terminal verschijnt.
+4. Kies **Uitvoering**, beschrijf de opdracht en vraag een voorstel van het lokale model. Controleer de taken, beperkingen en ontbrekende informatie zelf voordat je ze goedkeurt.
+
+Geen cloudmodel, externe API-sleutel of installatie van een browser-LLM nodig. Het modelendpoint is uitsluitend een lokaal loopback-adres en het programma publiceert niets. Een Ollama-model kan onjuiste of niet-uitvoerbare taken voorstellen. Niet-ondersteunde taken worden door de server geblokkeerd; een planvoorstel is geen bewijs van zelfstandig uitgevoerde softwareontwikkeling.
+
+**Lokale opslag:** `npm run local:ollama` bewaart het operationslog en ondertekeningssleutels standaard in `~/.eaiwork/local`. Na herstart lees je dezelfde opdrachten terug. Er zijn nog geen automatische back-ups. Een beschadigd log wordt niet stilzwijgend gereset. Zie [Ollama lokaal starten](docs/local-ollama-first-run.md).
+
+**Herstel na een onderbreking:** na een herstart laat **Meer > Codeworker > Onderbroken acties** zien of een eerder goedgekeurde bestandswijziging op schijf is terug te vinden. EAIwork blokkeert nieuwe codewijzigingen totdat je de status hebt gecontroleerd. Onbekende bestandsinhoud wordt niet automatisch overschreven. Zie [de herstelprocedure](docs/local-ollama-first-run.md#onderbroken-bestandswijzigingen-controleren).
+
+**Codeworker (afgeschermde proef):** geef een bestaande lokale projectmap vrij met `npm run local:ollama -- --model=qwen2.5:1.5b --worktree=/pad/naar/project`. Onder **Meer > Codeworker** kun je voor één bestaand bronbestand een volledige vervanging laten voorstellen. Pas na het bekijken van de code en een afzonderlijke bevestiging kan EAIwork die ene wijziging toepassen. De oorspronkelijke inhoud wordt bewaard. Er is nog geen automatische testuitvoering, git-commit of algemene autonome codeproductie.
+
+**Optionele echte JavaScript-tests:** installeer Docker en voer vooraf `docker pull node:22-alpine` uit. Kies bij een voorstel een bestaand `.test.js`-bestand. Met **Test in Docker** draait alleen de tijdelijke kopie van de voorgestelde JavaScript-bron en het gekozen testbestand in een afgeschermde container. Een mislukte test blokkeert het toepassen. Dit is geen projectbrede test of volledig beveiligingsonderzoek. Zie de [lokale handleiding](docs/local-ollama-first-run.md).
+
+## EAIwork-dashboard lokaal uitproberen
+
+De nieuwe operationsomgeving staat voorlopig in [concept-PR #23](https://github.com/E-AI-MODEL/EAIwork-/pull/23). Je kunt een afgeschermde, tijdelijke proef starten zonder eerst tokens en een witnessbestand aan te maken:
+
+```bash
+npm run demo:dashboard
+```
+
+Open het adres dat in de terminal verschijnt, normaal `http://127.0.0.1:8788/dashboard`. Kies **Contracten en registratie**, vul het tijdelijke token uit diezelfde terminal in en verbind de server. Er zijn vier toegelaten lokale workers, vier echte voorbeeldmissies en een eerdere uitvoering beschikbaar. Via **Echte uitvoering**, **Planner en taken**, **Workerleger**, **Bewijs en herkomst**, **Bronnen en RepoSearch** en **Logboek** kun je het verloop onderzoeken. De lokale proef biedt geen algemene autonome AI-agent of online workerhost.
+
+De missie **Automatische tekstverwerking uitproberen** laat twee lokale tekstworkers zelfstandig achter elkaar uitvoeren. Kies bij **Echte uitvoering** een taakmaximum van twee, geef expliciet toestemming en volg het resultaat. Na een serverherstart vervalt de automatische toestemming standaard. Een missie-eigenaar kan via de API vooraf expliciet instemmen met voortzetting van nog niet begonnen lokale taken en met begrensd herstel van bijwerkingsvrije berekeningen. Een onderbroken externe actie wordt nooit automatisch herhaald. Dit is nog geen duurzame, parallelle AI-workerpool.
+
+Deze proef draait uitsluitend op `127.0.0.1`, bewaart gegevens in een tijdelijke map en verwijdert die na normaal afsluiten met Ctrl+C. Gebruik alleen niet-vertrouwelijke voorbeeldinformatie. De publieke HTML-demo op eaimodel.nl bevat geen toegang tot deze lokale server en doet geen modelaanroepen.
+
+
+De ontwikkelbranches voegen ook revisies van missieplannen en een alleen-lezen plancontrole toe. De beveiligde route `POST /ops/plans/preflight` toont fases, afhankelijkheden en eventuele blokkades voordat een persoon een plan goedkeurt. Zie [de controle van het missieplan](docs/plan-preflight-v0.1.md), [duurzaam herstel](docs/durable-execution-v0.2.md) en [planversies](docs/plan-extensions-v0.1.md). Deze functies staan nog in concept-PR's en zijn geen online productieomgeving.
+
+Een aanvullende, beperkte proef kan twee onafhankelijke lokale teksttaken in afzonderlijke childprocessen uitvoeren via `POST /ops/missions/:id/parallel/run`. Dit is een door een persoon gestarte route, geen automatische parallelle workerpool. De bestaande bewijsregels en herstelbeperkingen blijven gelden. Zie [parallelle uitvoering van vaste tekstworkers](docs/parallel-pure-local-v0.1.md).
+
+Een tweede uitvoeringsproef verbindt een los tekstworkerproces via een beperkt localhost-HTTP-protocol. De missie-eigenaar keurt een taakmaximum goed; de server registreert de claim vóór uitvoering en controleert het resultaat opnieuw. De worker krijgt een apart token zonder toegang tot beheer- of bewijsgegevens. Zie [tekstworker via localhost](docs/local-executor-channel-v0.1.md). Dit is geen gedeelde workerpool over meerdere machines.
+
+Een afgeronde missie kan nu ook een **opleverdossier** krijgen met exacte commit, artifacthash en aangeleverde testverwijzingen. Een andere persoon beoordeelt dat voorstel. De server controleert de externe gegevens nog niet zelfstandig; vrijgave en publicatie blijven uitgeschakeld. Zie [opleverdossier en beoordeling](docs/release-dossier-v0.1.md). De server kan op expliciet verzoek ook de opgegeven GitHub Actions-run bij GitHub vergelijken met de vastgelegde commit. Dat bevestigt alleen de CI-run, niet de inhoud van het kandidaatbestand of toestemming tot publicatie. Zie [GitHub CI-controle](docs/github-ci-verification-v0.1.md). De gebruiker kan vervolgens ook een lokaal kandidaatbestand laten vergelijken met de opgegeven SHA-256. De bytes worden niet uitgevoerd of in het log bewaard. Een match bewijst nog niet dat het bestand uit de GitHub-run komt. Zie [controle van kandidaatbestanden](docs/local-artifact-byte-check-v0.1.md). Een extra controle kan een ZIP-artifact rechtstreeks bij de bevestigde GitHub Actions-run ophalen en één gekozen bestand daaruit met de SHA-256 van de kandidaat vergelijken. De download is begrensd en weigert onveilige ZIP-inhoud. Dit bevestigt de koppeling aan de GitHub-run, niet dat de workflow het bestand reproduceerbaar heeft gebouwd. Zie [GitHub-run-artifacts controleren](docs/github-actions-artifact-v0.1.md). Een [echte GitHub-artifactproef](docs/github-artifact-real-proof-2026-11-10.md) heeft op een aparte ontwikkelbranch een gebouwde JavaScript-module via de EAIwork-server opnieuw opgehaald en geverifieerd. De proef gaf geen vrijgave- of publicatierechten.
+
+Zie [de actuele stand van de uitvoeringsproef](docs/mission-execution-v0.1.md) en [het volledige bouwplan](docs/buildplan-eaiwork-2026-11-10.md). Het oorspronkelijke bewijsgericht werken hieronder blijft van toepassing.
+
 ## Quickstart
 
 Requires Node `22.18+`. No runtime dependencies are required.
@@ -161,6 +205,12 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 - **Answer provenance:** the inspector names who proposed the current answer. That is provenance only and never an input to status.
 
 The normative behavior of the status ladder lives in `conformance/vectors/`. The server trust boundaries in [SECURITY.md](SECURITY.md) are normative as well and are enforced by `tests/server.test.ts`; they are not yet expressed as vectors. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.
+
+## Uitvoerbare codeproef (0.2.0-rc.1)
+
+De lokale codeplan-API geeft bij elk plan een `proof` terug. Alleen na een geslaagde, werkelijk uitgevoerde Docker-projecttest op de huidige geplande bron- en testbestanden staat `proof.status` op `current`. Bij gewijzigde of ongeteste bestanden binnen dat manifest wordt dit `stale`. Een testverklaring geldt niet voor bestanden buiten het plan en maakt geen willekeurige inhoudelijke atoomclaim `proven`.
+
+`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef zijn modelantwoorden nagebootst. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
 
 ## Current limits
 
