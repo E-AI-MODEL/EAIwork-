@@ -10,7 +10,7 @@ export function inspectNodeTestOutput(output: string, minimumNamedTests = 1) {
   const tests = count("tests"), passed = count("pass"), failed = count("fail");
   const skipped = count("skipped"), cancelled = count("cancelled"), todo = count("todo");
   const names = [...output.matchAll(/^# Subtest: (.+)$/gm)].map(match => match[1].trim());
-  const fileOnly = names.some(name => /(?:^|[/\\])[^/\\]+\\.test\\.[cm]?js$/.test(name));
+  const fileOnly = names.some(name => /(?:^|[/\\])[^/\\]+\.test\.[cm]?js$/.test(name));
   const testsExecuted = tests !== null && tests >= minimumNamedTests &&
     names.length >= minimumNamedTests && !fileOnly;
   return { testsExecuted, passed: testsExecuted && passed === tests &&
