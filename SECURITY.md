@@ -10,6 +10,7 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 
 - Actor identity and authorization come from the server-side principal map, never from the request body.
 - Read/write/check/worker/audit permissions are explicit and default-deny. Write scope must stay inside read scope.
+- Local code proposals and changes require a separate `code: true` token capability, in addition to a person actor and audit access. Audit-only and worker tokens cannot read or operate on the local code workspace.
 - State and derived metadata are filtered before being returned, so hidden atoms do not leak through dependencies, rule output, checksums or audit counters. Global rejection counts are exposed only when the principal can read every atom.
 - Deterministic checks declare their input atoms. The caller must be allowed to read all inputs and the check receives only that scoped state, preventing check results from becoming an oracle over hidden atoms.
 - Public API tokens may not represent model actors. Model events are produced only by server-owned worker execution.

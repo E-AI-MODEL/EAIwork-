@@ -8,6 +8,8 @@ export interface AccessPolicy {
   checks?: Scope;
   workers?: Scope;
   audit?: boolean;
+  /** Explicit capability for reading and changing local code proposals. Audit alone is insufficient. */
+  code?: boolean;
 }
 
 export interface Principal {
@@ -23,6 +25,8 @@ export const canWrite = (principal: Principal, atom: string) => inScope(principa
 export const canRunCheck = (principal: Principal, id: string) => inScope(principal.access.checks, id);
 export const canRunWorker = (principal: Principal, atom: string) => inScope(principal.access.workers, atom);
 export const canAudit = (principal: Principal) => principal.access.audit === true;
+export const canManageCode = (principal: Principal) =>
+  principal.actor.kind === "person" && canAudit(principal) && principal.access.code === true;
 
 const validateScope = (scope: unknown, allowed: Set<string>, label: string, required: boolean) => {
   if (scope === undefined && !required) return;
@@ -69,5 +73,9 @@ export function validatePrincipals(
     if (principal.access.audit !== undefined && typeof principal.access.audit !== "boolean") {
       throw new Error("audit permission must be boolean");
     }
+    if (principal.access.code !== undefined && typeof principal.access.code !== "boolean")
+      throw new Error("code permission must be boolean");
+    if (principal.access.code === true && (principal.actor.kind !== "person" || principal.access.audit !== true))
+      throw new Error("code permission requires an audited person token");
   }
 }
