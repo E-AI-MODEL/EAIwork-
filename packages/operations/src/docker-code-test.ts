@@ -8,6 +8,7 @@ import {spawn,spawnSync} from "node:child_process";
 import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
+import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
 
 export type DockerTestResult={
   status:"passed"|"failed"|"unavailable";
@@ -86,7 +87,7 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
       "--tmpfs","/tmp:rw,nosuid,nodev,size=16m,mode=1777",
       "--mount","type=bind,src="+stage+",dst=/work,readonly",
       "--workdir","/work",imageId,
-      "node","--test",testPath
+      "node","--test","--test-reporter=tap",testPath
     ];
     const result=await new Promise<{code:number|null;error?:string}>(resolve=>{
       const processHandle=spawn("docker",args,{
@@ -114,11 +115,11 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
     });
     rmSync(stage,{recursive:true,force:true});
   }
-  const testSummary=/^# tests [1-9][0-9]*\s*$/m.test(output);
+  const summary=inspectNodeTestOutput(output,1);
   return {
-    status:!testSummary?"unavailable":timedOut||exitCode!==0?"failed":"passed",
+    status:!summary.testsExecuted?"unavailable":timedOut||exitCode!==0||!summary.passed?"failed":"passed",
     runner:"docker-node-test-v1",candidateSha256:sha(candidateSource),
-    testSha256:sha(testSource),imageId,testsExecuted:testSummary,
+    testSha256:sha(testSource),imageId,testsExecuted:summary.testsExecuted,
     exitCode,timedOut,output:output.slice(0,12000),
     recordedAt:new Date().toISOString()
   };

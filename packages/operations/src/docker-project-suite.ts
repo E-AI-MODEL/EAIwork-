@@ -6,6 +6,7 @@ import {spawn,spawnSync} from "node:child_process";
 import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
+import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
 
 export type ProjectTestFile={path:string;content:string};
 export type ProjectTestInput={files:ProjectTestFile[];testPaths:string[]};
@@ -100,7 +101,7 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
       "--pids-limit=64","--memory=384m","--cpus=1",
       "--tmpfs","/tmp:rw,nosuid,nodev,size=16m,mode=1777",
       "--mount","type=bind,src="+stage+",dst=/work,readonly",
-      "--workdir","/work",imageId,"node","--test",...input.testPaths];
+      "--workdir","/work",imageId,"node","--test","--test-reporter=tap",...input.testPaths];
     const outcome=await new Promise<{code:number|null;error?:string}>(resolve=>{
       const child=spawn("docker",args,{
         stdio:["ignore","pipe","pipe"],shell:false,windowsHide:true,env:environment()
@@ -123,10 +124,10 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
     });
     rmSync(stage,{recursive:true,force:true});
   }
-  const testsExecuted=/^# tests [1-9][0-9]*\s*$/m.test(output);
+  const summary=inspectNodeTestOutput(output,input.testPaths.length);
   return {runner:"docker-project-node-v1",
-    status:!testsExecuted?"unavailable":timedOut||exitCode!==0?"failed":"passed",
+    status:!summary.testsExecuted?"unavailable":timedOut||exitCode!==0||!summary.passed?"failed":"passed",
     manifestSha256:fingerprint,fileCount:input.files.length,
-    testPaths:input.testPaths,imageId,testsExecuted,exitCode,timedOut,
+    testPaths:input.testPaths,imageId,testsExecuted:summary.testsExecuted,exitCode,timedOut,
     output:output.slice(0,12000),recordedAt:new Date().toISOString()};
 }
