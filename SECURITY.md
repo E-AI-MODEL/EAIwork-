@@ -37,6 +37,8 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Review signals (`needs-person`, `confidence-lowered`) and answer provenance are derived views. They are filtered to the atoms a principal may read and never feed back into status.
 - No public HTTP path produces `confidence.lowered` or a model-raised flag today: model actors hold no tokens and the worker route writes answers only. Those event types exist in the core and in replayed logs.
 
+Local code tests force a verified Unix-domain Docker socket. Remote `DOCKER_HOST` URLs and Docker contexts are not forwarded, so the code copied for testing is not sent to a deliberately configured remote daemon. This does not protect against a compromised local Docker daemon, a local socket proxy, or a compromised host. Model-generated acceptance tests also run in networkless, read-only Docker; they are never run directly by the host Node process.
+
 Legacy events without an explicit registered `source_ref` do not corroborate, even if they have distinct actor IDs or lineages. The Docker codeplan proof is bound to a full SHA-256 manifest of explicitly planned source and test files and is checked again on every read. It does not grant runtime rights, publication rights or semantic `proven` status to unrelated atoms.
 
 Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits, source-handle scope, provider-side session reuse and injection through evidence text.

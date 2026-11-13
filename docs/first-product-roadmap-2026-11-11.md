@@ -69,6 +69,10 @@ Deze inventaris is geen bewijs dat de afgetakte wijzigingen veilig geïntegreerd
 
 Zolang dit niet is getest, mag het dashboard geen voltooiing of bewezen werking suggereren.
 
+### Waar de codeproef wordt uitgevoerd
+
+De door Ollama voorgestelde code draait uitsluitend in een netwerkloze Docker-container met alleen-lezen bestanden. Ook de afsluitende acceptatietest en de controle van de gekopieerde oplevering gebruiken Docker. De GitHub-runner voert de gegenereerde code niet zelf uit. Het script gebruikt een automatisch aangemaakt testtoken om de gebruikersgoedkeuring na te bootsen; dat is **geen menselijke codebeoordeling**. Buiten de gecontroleerde proef blijft goedkeuring door een persoon verplicht.
+
 ## Stopregels
 
 Stop de productproef bij een mislukte Docker-test, ontbrekende modelreactie, ontbrekende menselijke toestemming of gewijzigde bronbestanden. Geen stilzwijgende publicatie en geen goedkeuring op basis van een voorgesteld, maar niet uitgevoerd, testresultaat.

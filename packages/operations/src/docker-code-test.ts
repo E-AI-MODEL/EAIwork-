@@ -9,6 +9,7 @@ import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
+import {localDockerEnvironment} from "./docker-local-transport.ts";
 
 export type DockerTestResult={
   status:"passed"|"failed"|"unavailable";
@@ -28,13 +29,7 @@ export type DockerTestInput={
   testPath:string;testSource:string;
 };
 const sha=(s:string)=>createHash("sha256").update(s,"utf8").digest("hex");
-const environment=()=>({
-  PATH:process.env.PATH||"",
-  HOME:process.env.HOME||"",
-  ...(process.env.DOCKER_HOST?{DOCKER_HOST:process.env.DOCKER_HOST}:{}),
-  ...(process.env.DOCKER_CONFIG?{DOCKER_CONFIG:process.env.DOCKER_CONFIG}:{}),
-  ...(process.env.XDG_RUNTIME_DIR?{XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR}:{}),
-});
+
 const safePath=(path:string)=>typeof path==="string" && path.length<=240 &&
   path.split("/").every(x=>x.length>0&&x!=="."&&x!==".."&&!x.startsWith(".")&&
     /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(x)) &&
@@ -57,9 +52,13 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
   if(process.platform==="win32")
     return unavailable(candidateSource,testSource,
       "Deze eerste Docker-test is getest voor macOS en Linux. Windows nog niet gecontroleerd.");
+  let dockerEnv:ReturnType<typeof localDockerEnvironment>;
+  try{dockerEnv=localDockerEnvironment()}catch{
+    return unavailable(candidateSource,testSource,"Lokale Docker-socket ontbreekt of is niet toegestaan.");
+  }
   const inspected=spawnSync("docker",[
     "image","inspect","--format","{{.Id}}","node:22-alpine"
-  ],{encoding:"utf8",timeout:4000,maxBuffer:2000,windowsHide:true,env:environment()});
+  ],{encoding:"utf8",timeout:4000,maxBuffer:2000,windowsHide:true,env:dockerEnv});
   if(inspected.error||inspected.status!==0)
     return unavailable(candidateSource,testSource,
       "Docker is niet bereikbaar of node:22-alpine staat niet lokaal. Installeer Docker en voer docker pull node:22-alpine uit.");
@@ -92,7 +91,7 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
     ];
     const result=await new Promise<{code:number|null;error?:string}>(resolve=>{
       const processHandle=spawn("docker",args,{
-        stdio:["ignore","pipe","pipe"],windowsHide:true,shell:false,env:environment()
+        stdio:["ignore","pipe","pipe"],windowsHide:true,shell:false,env:dockerEnv
       });
       let settled=false;
       const finish=(result:{code:number|null;error?:string})=>{
@@ -112,7 +111,7 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
   }finally{
     // A timed-out Docker client must not leave its container running.
     spawnSync("docker",["rm","-f",name],{
-      timeout:4000,encoding:"utf8",stdio:"ignore",windowsHide:true,env:environment()
+      timeout:4000,encoding:"utf8",stdio:"ignore",windowsHide:true,env:dockerEnv
     });
     rmSync(stage,{recursive:true,force:true});
   }

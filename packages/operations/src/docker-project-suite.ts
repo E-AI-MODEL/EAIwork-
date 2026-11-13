@@ -7,6 +7,7 @@ import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
+import {localDockerEnvironment} from "./docker-local-transport.ts";
 
 export type ProjectTestFile={path:string;content:string};
 export type ProjectTestInput={files:ProjectTestFile[];testPaths:string[]};
@@ -20,12 +21,7 @@ export type ProjectTestResult={
   timedOut:boolean;output:string;recordedAt:string;
 };
 const sha=(value:string)=>createHash("sha256").update(value,"utf8").digest("hex");
-const environment=()=>({
-  PATH:process.env.PATH||"",HOME:process.env.HOME||"",
-  ...(process.env.DOCKER_HOST?{DOCKER_HOST:process.env.DOCKER_HOST}:{}),
-  ...(process.env.DOCKER_CONFIG?{DOCKER_CONFIG:process.env.DOCKER_CONFIG}:{}),
-  ...(process.env.XDG_RUNTIME_DIR?{XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR}:{})
-});
+
 const safe=(path:string)=>typeof path==="string"&&path.length<=240&&
   !path.includes("\\")&&!path.includes("\0")&&
   path.split("/").every(p=>p&&p!=="."&&p!==".."&&!p.startsWith(".")&&
@@ -75,8 +71,12 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
   const fingerprint=projectManifestSha256(input);
   if(process.platform==="win32")return absent(input,
     "De afgeschermde Docker-tests zijn voor macOS en Linux gemaakt. Windows is nog niet gecontroleerd.");
+  let dockerEnv:ReturnType<typeof localDockerEnvironment>;
+  try{dockerEnv=localDockerEnvironment()}catch{
+    return absent(input,"Lokale Docker-socket ontbreekt of is niet toegestaan.");
+  }
   const inspected=spawnSync("docker",["image","inspect","--format","{{.Id}}","node:22-alpine"],{
-    encoding:"utf8",timeout:4000,maxBuffer:2000,windowsHide:true,env:environment()
+    encoding:"utf8",timeout:4000,maxBuffer:2000,windowsHide:true,env:dockerEnv
   });
   if(inspected.error||inspected.status!==0)return absent(input,
     "Docker of de lokale afbeelding node:22-alpine ontbreekt. Er is niets uitgevoerd.");
@@ -105,7 +105,7 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
       "--workdir","/work",imageId,"node","--test","--test-reporter=tap",...input.testPaths];
     const outcome=await new Promise<{code:number|null;error?:string}>(resolve=>{
       const child=spawn("docker",args,{
-        stdio:["ignore","pipe","pipe"],shell:false,windowsHide:true,env:environment()
+        stdio:["ignore","pipe","pipe"],shell:false,windowsHide:true,env:dockerEnv
       });
       let finished=false;
       const finish=(value:{code:number|null;error?:string})=>{
@@ -121,7 +121,7 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
     if(outcome.error)output+="\n"+outcome.error.slice(0,500);
   }finally{
     spawnSync("docker",["rm","-f",container],{
-      timeout:4000,encoding:"utf8",stdio:"ignore",windowsHide:true,env:environment()
+      timeout:4000,encoding:"utf8",stdio:"ignore",windowsHide:true,env:dockerEnv
     });
     rmSync(stage,{recursive:true,force:true});
   }
