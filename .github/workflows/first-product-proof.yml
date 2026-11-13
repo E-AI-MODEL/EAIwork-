@@ -1,27 +1,15 @@
 name: first-product-proof
 on:
   pull_request:
-    paths:
-      - '.github/workflows/first-product-proof.yml'
-      - 'package.json'
-      - 'tests/first-product-smoke.test.ts'
-      - 'scripts/local-ollama.ts'
-      - 'scripts/local-demo.ts'
-      - 'packages/operations/src/code-worker.ts'
-      - 'packages/operations/src/ordered-code-plans.ts'
-      - 'packages/operations/src/docker-project-suite.ts'
-      - 'packages/operations/src/docker-test-outcome.ts'
-      - 'packages/operations/src/checked-code-evidence.ts'
-      - 'tests/docker-test-outcome.test.ts'
-      - 'packages/server/src/server.ts'
-      - 'examples/multifile-smoke/**'
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   first-product:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -29,16 +17,40 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - name: Prepare exact local test environment
+      - name: Prepare real Docker tests
         run: |
           set -euo pipefail
           docker version
           docker pull node:22-alpine
-      - name: Build the first product and check it
+      - name: Install pinned Ollama build with checksum
+        run: |
+          set -euo pipefail
+          url="https://github.com/ollama/ollama/releases/download/v0.40.16/ollama-linux-amd64.tar.zst"
+          curl -fL --retry 3 "$url" -o "$RUNNER_TEMP/ollama.tar.zst"
+          printf '%s  %s\n' '87bfafb2acbc89b2e6a1be0a9043de6aa75fb450696f86bc426e65fc448f788d' "$RUNNER_TEMP/ollama.tar.zst" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/ollama-dist"
+          tar --zstd -xf "$RUNNER_TEMP/ollama.tar.zst" -C "$RUNNER_TEMP/ollama-dist"
+          echo "$RUNNER_TEMP/ollama-dist/bin" >> "$GITHUB_PATH"
+          echo "$RUNNER_TEMP/ollama-dist/lib" >> "$LD_LIBRARY_PATH"
+      - name: Start real Ollama on loopback
+        run: |
+          set -euo pipefail
+          OLLAMA_HOST=127.0.0.1:11434 ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &
+          for i in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:11434/api/tags > /dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo 'Ollama did not start'
+          exit 1
+      - name: Pull actual coding model
+        run: ollama pull qwen2.5-coder:1.5b
+      - name: Produce and check a real model-generated product
         env:
+          EAI_FIRST_PRODUCT_MODEL: qwen2.5-coder:1.5b
+          EAI_FIRST_PRODUCT_OLLAMA_HOST: http://127.0.0.1:11434
           EAI_FIRST_PRODUCT_OUTPUT_DIR: dist/first-product-proof
         run: npm run proof:first-product
-      - name: Save the finished example, tests and proof
+      - name: Save tested product and measured model provenance
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eaiwork-first-product-proof

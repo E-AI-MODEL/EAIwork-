@@ -210,7 +210,7 @@ The normative behavior of the status ladder lives in `conformance/vectors/`. The
 
 De lokale codeplan-API geeft bij elk plan een `proof` terug. Alleen na een geslaagde, werkelijk uitgevoerde Docker-projecttest op de huidige geplande bron- en testbestanden staat `proof.status` op `current`. Bij gewijzigde of ongeteste bestanden binnen dat manifest wordt dit `stale`. Een testverklaring geldt niet voor bestanden buiten het plan en maakt geen willekeurige inhoudelijke atoomclaim `proven`.
 
-`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef zijn modelantwoorden nagebootst. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
+`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef is een echt Ollama-model verplicht. Zonder model stopt de proef. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
 
 ## Current limits
 

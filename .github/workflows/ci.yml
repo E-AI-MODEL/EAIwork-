@@ -51,5 +51,5 @@ jobs:
           node --test tests/docker-sandbox-smoke.test.ts tests/project-docker-smoke.test.ts | tee docker-smoke.tap
           grep -q '^# skipped 0$' docker-smoke.tap
           grep -q '^# fail 0$' docker-smoke.tap
-      - name: Build and verify actual first-product example
-        run: npm run proof:first-product
+      # The actual coding model is required in the separate first-product-proof workflow.
+      # This job checks Docker isolation only and must not claim a model-built product.

@@ -1,6 +1,6 @@
 # Live Ollama smoke test
 
-This is an **opt-in** test with a real locally running Ollama model. Normal CI does not run a real model.
+This test runs three isolated workers against a real Ollama model when started explicitly. The first-product-proof workflow runs a separate, required real coding-model test on every pull request and main push. A missing Ollama model fails that product proof instead of falling back to prepared answers.
 
 ## Prerequisites
 

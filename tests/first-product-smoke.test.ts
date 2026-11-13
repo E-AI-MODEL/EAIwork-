@@ -2,12 +2,11 @@
  * A complete, non-publishing first-product proof:
  * two HTTP-approved code changes, real Docker checks on both stages,
  * and an independent final user-requirement test.
- * The Ollama chat response is stubbed; this proves the execution route,
- * not model quality or autonomous planning.
+ * A real locally running Ollama model must propose the code. No canned answers,
+ * fallback replacements or silent pass when the model is unavailable.
  */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {createServer} from "node:http";
 import {spawnSync} from "node:child_process";
 import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
@@ -17,6 +16,7 @@ import {fileURLToPath} from "node:url";
 import {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
 import {runIsolatedProjectSuite} from "../packages/operations/src/docker-project-suite.ts";
 import {createDemoServer} from "../scripts/local-demo.ts";
+import {localOllamaHost,discoverLocalOllamaModels} from "../packages/gateway/src/ollama-provider.ts";
 
 const enabled=process.env.EAI_FIRST_PRODUCT_SMOKE==="1";
 const example=fileURLToPath(new URL("../examples/multifile-smoke/",import.meta.url));
@@ -29,10 +29,6 @@ const steps=[
 // Remove the parent node:test marker: otherwise a nested Node runner silently skips tests.
 const acceptanceEnv=()=>Object.fromEntries(Object.entries(process.env)
   .filter(([key])=>key!=="NODE_TEST_CONTEXT"));
-const replacements:Record<string,string>={
-  "src/amount.js":"export const amount = 12;\n",
-  "src/invoice.js":'import {amount} from "./amount.js";\nexport const total = amount * 2;\nexport function totalWithShipping(shipping = 0) {\n  return amount * 2 + shipping;\n}\n'
-};
 test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-test → akkoord → eindproduct",{
   skip:enabled?false:"Deze proef draait apart met EAI_FIRST_PRODUCT_SMOKE=1 en Docker."
 },async()=>{
@@ -40,27 +36,24 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
   const project=join(root,"project"),profile=join(root,"profile");
   cpSync(example,project,{recursive:true});
   mkdirSync(profile);
-  const generated:string[]=[];
+  const model=process.env.EAI_FIRST_PRODUCT_MODEL?.trim();
+  assert.ok(model,"Productproef vereist EAI_FIRST_PRODUCT_MODEL: er is geen nagebootst model.");
+  const host=localOllamaHost(process.env.EAI_FIRST_PRODUCT_OLLAMA_HOST);
+  const models=await discoverLocalOllamaModels(host,10000);
+  assert.ok(models.includes(model),"Het echte Ollama-model staat niet klaar: "+model);
+  const tagsResponse=await fetch(host+"/api/tags",{signal:AbortSignal.timeout(10000)});
+  assert.equal(tagsResponse.ok,true,"Ollama kan de gebruikte modelversie niet bevestigen");
+  const tags=await tagsResponse.json() as any;
+  const modelDigest=tags.models?.find((item:any)=>item.name===model)?.digest;
+  assert.match(modelDigest||"",/^[a-f0-9]{64}$/,"Onbekende modelhash");
+  const versionResponse=await fetch(host+"/api/version",{signal:AbortSignal.timeout(10000)});
+  assert.equal(versionResponse.ok,true);
+  const ollamaVersion=(await versionResponse.json() as any).version;
+  assert.equal(typeof ollamaVersion,"string");
+  const generated:Array<{path:string;sha256:string}>=[];
   const checks:Array<{step:number;phase:string;status:string;imageId:string|null;manifestSha256:string}>=[];
-  const ollama=createServer(async(req,res)=>{
-    if(req.method!=="POST"||req.url!=="/api/chat"){res.writeHead(404);res.end();return}
-    let body="";
-    for await(const chunk of req)body+=chunk;
-    const call=JSON.parse(body);
-    const input=JSON.parse(call.messages[0].content);
-    const replacement=replacements[input.path];
-    if(!replacement){res.writeHead(400);res.end();return}
-    generated.push(input.path);
-    res.writeHead(200,{"content-type":"application/json"});
-    res.end(JSON.stringify({message:{content:JSON.stringify({
-      replacement,explanation:"Voer de gevraagde wijziging door",
-      checks:["Controleer de twee modules samen"]
-    })}}));
-  });
-  await new Promise<void>(resolve=>ollama.listen(0,"127.0.0.1",resolve));
-  const host="http://127.0.0.1:"+((ollama.address() as AddressInfo).port);
   const workspace=new LocalCodeWorkspace({workspaceDir:project,profileDir:profile,
-    host,model:"lokale-test"});
+    host,model,timeoutMs:120000});
   const app=createDemoServer({codeWorkspace:workspace,persistentDir:profile,
     schedulerIntervalMs:0,projectSuiteRunner:runIsolatedProjectSuite,
     seedDemoData:false,localLiveView:true});
@@ -99,6 +92,8 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       const item=await call("/ops/code/proposal?id="+proposalId);
       assert.equal(item.status,200);
       assert.equal(item.data.path,steps[i].path);
+      assert.match(item.data.replacementSha256,/^[a-f0-9]{64}$/);
+      generated.push({path:item.data.path,sha256:item.data.replacementSha256});
       const permission={planId:id,proposalId,
         expectedSha256:item.data.replacementSha256,approve:true};
       assert.equal((await call("/ops/code/plan/apply",permission)).status,409,
@@ -122,8 +117,8 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
         imageId:post.data.result.imageId,manifestSha256:post.data.result.manifestSha256});
       assert.equal(post.data.plan.steps[i].status,"done");
     }
-    assert.deepEqual(generated,steps.map(step=>step.path),
-      "Precies twee modelvoorstellen, in de opgegeven volgorde.");
+    assert.deepEqual(generated.map(item=>item.path),steps.map(step=>step.path),
+      "Precies twee echte Ollama-voorstellen, in de opgegeven volgorde.");
     const plans=await call("/ops/code/plans");
     assert.equal(plans.status,200);
     const completed=plans.data.plans.find((p:any)=>p.id===id);
@@ -141,7 +136,8 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     assert.match(proof.manifestSha256,/^[a-f0-9]{64}$/);
     const result={
       opdracht:"Eerste bruikbare product",status:"opgeleverd binnen deze afgebakende proef",
-      model:"nagebootst Ollama-antwoord",docker:"werkelijk uitgevoerd",
+      model,modelDigest,ollamaVersion,modelCalls:generated.length,
+      generated,docker:"werkelijk uitgevoerd",
       gecontroleerdeBestanden:steps.map(step=>step.path),
       eindtest:"geslaagd",publicatie:"niet uitgevoerd"
     };
@@ -166,7 +162,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
         "De eindcontrole is apart uitgevoerd op het gekopieerde resultaat.\\n\\n"+
         "**Controleer zelf:** voer in deze map uit: \\n\\n"+
         "\\`\\`\\`sh\\nnode --test acceptance/final-product.test.js\\n\\`\\`\\`\\n\\n"+
-        "De AI-antwoorden waren voor deze herhaalbare test nagebootst. Er is niets gepubliceerd.\\n");
+        "Alle codevoorstellen kwamen van het genoemde echte Ollama-model. Er is niets gepubliceerd.\\n");
       writeFileSync(join(target,"PROEFRESULTAAT.json"),JSON.stringify({
         ...result,tests:checks,acceptatietest:"geslaagd op gekopieerde bestanden",
         omvang:"twee bestanden, geen compleet product"
@@ -176,7 +172,6 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     process.stdout.write("EAIwork eerste productproef: "+JSON.stringify(result)+"\\n");
   }finally{
     await app.close();
-    await new Promise<void>(resolve=>ollama.close(()=>resolve()));
     rmSync(root,{force:true,recursive:true});
   }
 });
