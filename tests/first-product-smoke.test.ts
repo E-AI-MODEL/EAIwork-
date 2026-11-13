@@ -141,6 +141,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     const result={
       opdracht:"Eerste bruikbare product",status:"opgeleverd binnen deze afgebakende proef",
       model,modelDigest,ollamaVersion,modelCalls:generated.length,
+      approval:"automatische testautorisatie, geen menselijke review",
       generated,docker:"werkelijk uitgevoerd",
       gecontroleerdeBestanden:steps.map(step=>step.path),
       eindtest:"geslaagd in afgeschermde Docker-container",
@@ -162,9 +163,8 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
         "# EAIwork eerste productproef\\n\\n"+
         "Dit is een klein JavaScript-voorbeeld, geen complete gebruikersapplicatie.\\n"+
         "Twee bestanden zijn via EAIwork gewijzigd en vóór en na het toepassen samen in Docker getest.\\n"+
-        "De eindcontrole is apart uitgevoerd op het gekopieerde resultaat.\\n\\n"+
-        "**Controleer zelf:** voer in deze map uit: \\n\\n"+
-        "\\`\\`\\`sh\\nnode --test acceptance/final-product.test.js\\n\\`\\`\\`\\n\\n"+
+        "De eindcontrole is apart in een netwerkloze Docker-container uitgevoerd.\\n\\n"+
+        "**Voer de gegenereerde code alleen uit in een afgeschermde Docker-container, niet rechtstreeks op je computer.**\\n\\n"+
         "Alle codevoorstellen kwamen van het genoemde echte Ollama-model. Er is niets gepubliceerd.\\n");
       writeFileSync(join(target,"PROEFRESULTAAT.json"),JSON.stringify({
         ...result,tests:checks,
