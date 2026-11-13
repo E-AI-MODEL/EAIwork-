@@ -206,6 +206,12 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 
 The normative behavior of the status ladder lives in `conformance/vectors/`. The server trust boundaries in [SECURITY.md](SECURITY.md) are normative as well and are enforced by `tests/server.test.ts`; they are not yet expressed as vectors. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.
 
+## Uitvoerbare codeproef (0.2.0-rc.1)
+
+De lokale codeplan-API geeft bij elk plan een `proof` terug. Alleen na een geslaagde, werkelijk uitgevoerde Docker-projecttest op de huidige geplande bron- en testbestanden staat `proof.status` op `current`. Bij gewijzigde of ongeteste bestanden binnen dat manifest wordt dit `stale`. Een testverklaring geldt niet voor bestanden buiten het plan en maakt geen willekeurige inhoudelijke atoomclaim `proven`.
+
+`npm test` voert de gewone controles uit. De CI voert daarnaast verplichte Docker-proeven en de afzonderlijke eerste productproef uit. Voor die productproef zijn modelantwoorden nagebootst. Zie [documentatie](docs/index.md) en [wijzigingen](CHANGELOG.md).
+
 ## Current limits
 
 Not built yet: production authentication, a database, full schema enforcement at runtime, pack authoring UI, user testing or an independently reviewed end-to-end source-provenance/semantic verification flow. A local Ollama provider, synthetic DEV benchmarks and an experimental atom-versus-whole comparator exist, but they do not establish real-world benefit.

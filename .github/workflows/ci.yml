@@ -29,3 +29,27 @@ jobs:
         run: "! grep -rnE \"fetch\\(|node:http|node:https|node:net\" packages/core/src"
       - name: Bibliography has a type for every source
         run: "! grep -n 'type: *$' evidence/bibliography.yaml"
+
+  docker-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - name: Prepare Docker image
+        run: |
+          set -euo pipefail
+          docker version
+          docker pull node:22-alpine
+      - name: Require real, unskipped sandbox and project tests
+        env:
+          EAI_DOCKER_SMOKE: "1"
+        run: |
+          set -euo pipefail
+          node --test tests/docker-sandbox-smoke.test.ts tests/project-docker-smoke.test.ts | tee docker-smoke.tap
+          grep -q '^# skipped 0$' docker-smoke.tap
+          grep -q '^# fail 0$' docker-smoke.tap
+      - name: Build and verify actual first-product example
+        run: npm run proof:first-product

@@ -1,5 +1,5 @@
 # EAIwork: eerste volledige productproef
-Datum: 11 november 2026. Status: werk in concept-PR, geen release.
+Datum: 11 november 2026, bijgewerkt 13 november. Status: geïntegreerde kandidaat in PR #60, geen release.
 
 ## Wat we bouwen
 EAIwork blijft één product. Het moet een opdracht in gewone taal omzetten naar werk dat zoveel mogelijk zelfstandig wordt uitgevoerd en gecontroleerd. De gebruiker krijgt een bruikbaar resultaat met de werkelijk uitgevoerde controles, de resterende onzekerheden en de momenten waarop een mens besliste.
@@ -32,7 +32,7 @@ De eindcontrole staat in `examples/multifile-smoke/acceptance/final-product.test
 
 ### Twee onafhankelijke manieren om te testen
 
-- `npm test`: test de gewone repositoryfunctionaliteit; de productproef met Docker wordt hierbij overgeslagen als Docker niet is aangezet.
+- `npm test`: test de gewone repositoryfunctionaliteit; de productproef met Docker wordt hierbij overgeslagen als Docker niet is aangezet. De CI heeft afzonderlijk een verplichte Docker-controle.
 - `npm run proof:first-product`: voert via de echte lokale HTTP-API de twee voorstel-, test- en akkoordstappen uit, gebruikt de bestaande Docker-runner, en controleert als laatste met een afzonderlijke Node-test het complete resultaat. Deze proef gebruikt een **nagebootst Ollama-antwoord** om de uitvoeringsroute herhaalbaar te testen. Dit is geen bewijs dat een lokaal AI-model de code zelfstandig correct maakt.
 
 De proef voert het werk in een tijdelijke projectmap uit. GitHub Actions slaat na geslaagde controles ook een **downloadbare kopie van de gewijzigde bestanden**, de testbestanden, de onafhankelijke eindtest, `OPLEVERING.md` en `PROEFRESULTAAT.json` op als `eaiwork-first-product-proof`. Het artifact is een controleerbaar voorbeeld, geen publicatie of zelfstandige complete applicatie. De testmap wordt na afloop verwijderd. Een werkelijk model en de Mac-interface worden apart beproefd. De artifact-download staat bij de bijbehorende geslaagde GitHub Actions-run.

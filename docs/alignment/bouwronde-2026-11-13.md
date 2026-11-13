@@ -63,7 +63,7 @@ De afleiding rekent premissen van onderaf door tot er niets meer verandert. Twee
 
 - **De opgegeven bron van een check wordt geloofd.** De server kan niet nagaan of de checkcode die bron echt raadpleegt. Het vertrouwen verschuift naar het registreren van checks; dat gebeurt bij installatie en is te reviewen.
 - **Een check op premissen is zo goed als zijn regel.** De werkbank toont de omschrijving en de gelezen waarden, maar beoordeelt de regel niet.
-- **Oude logs kunnen zakken bij herberekening** als een check geen vastgelegde grond en geen onafhankelijke steun heeft. Oud bewijs van twee actoren blijft tellen; nieuw bewijs heeft een geregistreerde bron nodig.
+- **Oude logs kunnen zakken bij herberekening.** Bewijs zonder expliciet geregistreerde bron telt ook bij twee verschillende actoren niet meer als onafhankelijke bevestiging. Een check zonder vastgelegde grond bewijst evenmin iets. De regressies staan in vectoren 007, 008 en 029.
 - **Packs moeten bronnen registreren.** Zonder bronnen is `checked` onbereikbaar. Hoe werkbaar dat is in echte dossiers is niet gemeten.
 - **Beperkte, geaccepteerde onthulling:** een lezer van een vraag ziet óf een check nog klopt met zijn inputs, niet welke inputs of waarden. Dat staat in `SECURITY.md`.
 

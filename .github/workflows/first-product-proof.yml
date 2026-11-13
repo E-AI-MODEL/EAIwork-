@@ -10,6 +10,9 @@ on:
       - 'packages/operations/src/code-worker.ts'
       - 'packages/operations/src/ordered-code-plans.ts'
       - 'packages/operations/src/docker-project-suite.ts'
+      - 'packages/operations/src/docker-test-outcome.ts'
+      - 'packages/operations/src/checked-code-evidence.ts'
+      - 'tests/docker-test-outcome.test.ts'
       - 'packages/server/src/server.ts'
       - 'examples/multifile-smoke/**'
   workflow_dispatch:
