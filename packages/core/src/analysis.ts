@@ -2,6 +2,7 @@ import type { Derived, State, Status } from "./types.ts";
 import { LADDER } from "./types.ts";
 import { rank } from "./derive.ts";
 import type { Pack } from "./pack.ts";
+import { route } from "./calibrate.ts";
 
 type D = Record<string, Derived>;
 const st = (d: D, id: string): Status => d[id]?.status ?? "unknown";
@@ -56,4 +57,55 @@ export function coverage(p: Pack, state: State, d: D) {
     if (c.atoms.length && unknown / c.atoms.length >= 0.8) notes.push(`cluster ${c.id}: ${unknown} of ${c.atoms.length} atoms unanswered`);
   }
   return { notes, disclaimer: "Prompts for review, not a guarantee of completeness." };
+}
+
+export interface ReviewSignal {
+  atom: string;
+  kind: "confidence-lowered" | "needs-person" | "check-stale" | "proposal-outdated";
+  message: string;
+}
+
+/**
+ * Review prompts that come from the asymmetry rule itself. They never change status.
+ * - confidence-lowered: an actor (usually a model) recorded doubt about the current answer.
+ * - needs-person: the current answer is an unevidenced model proposal that the routing
+ *   policy sends to a person (high impact, "unknown" winning, or low self-reported probability).
+ * - check-stale: a deterministic check no longer matches the values it read; it must be re-run.
+ * - proposal-outdated: a model proposal was made from input values that have since changed.
+ * Self-reported model probability is a routing input only. It is not shown as a score.
+ *
+ * `p` and `canSee` limit what is reported; `state` must be the full state so that a comparison
+ * against an atom outside `p` is correct. A proposal-outdated signal is only reported when the
+ * reader may see every input it compares.
+ */
+export function reviewSignals(
+  p: Pack, state: State, d: D, minConfidence = 0.8, canSee: (atom: string) => boolean = () => true,
+): ReviewSignal[] {
+  const out: ReviewSignal[] = [];
+  for (const a of p.atoms) {
+    const s = state[a.id];
+    if (!s) continue;
+    if (s.lowered.length) {
+      out.push({ atom: a.id, kind: "confidence-lowered", message: `confidence lowered on ${a.id}: ${s.lowered.join("; ")}` });
+    }
+    if (d[a.id]?.stale.length) {
+      out.push({ atom: a.id, kind: "check-stale", message: `a deterministic check on ${a.id} no longer matches its inputs: re-run it` });
+    }
+    const reads = Object.entries(s.answerBasis?.reads ?? {});
+    if (s.answeredBy?.kind === "model" && reads.length && reads.every(([id]) => canSee(id)) &&
+        reads.some(([id, value]) => (state[id]?.value ?? null) !== value)) {
+      out.push({ atom: a.id, kind: "proposal-outdated", message: `the model proposal on ${a.id} was made from input values that have since changed: re-run the worker` });
+    }
+    if (s.answeredBy?.kind !== "model" || st(d, a.id) !== "assumption") continue;
+    const impact = a.impact ?? "low";
+    const probabilities = s.probabilities && Object.keys(s.probabilities).length ? s.probabilities : undefined;
+    if (impact === "high") {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} is high impact and its answer is an unevidenced model proposal` });
+    } else if (!probabilities) {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} holds a model proposal without a usable probability distribution` });
+    } else if (route(probabilities, impact, minConfidence) === "ask-person") {
+      out.push({ atom: a.id, kind: "needs-person", message: `${a.id} holds a model proposal below the routing threshold` });
+    }
+  }
+  return out;
 }

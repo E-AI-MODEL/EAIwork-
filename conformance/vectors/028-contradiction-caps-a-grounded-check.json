@@ -1,0 +1,72 @@
+{
+ "name": "Contradicting evidence caps even a grounded check at claim",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "check:calc",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:calc",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:piet"
+   },
+   "type": "evidence.attached",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:piet"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": false
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "claim"
+ },
+ "expectRejected": []
+}

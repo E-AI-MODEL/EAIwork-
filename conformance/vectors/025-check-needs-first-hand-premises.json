@@ -1,0 +1,175 @@
+{
+ "name": "A check that derives from other atoms proves only when every premise is first-hand or stronger",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.base",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.base",
+   "evidence": {
+    "id": "ev2",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": true
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.guess",
+   "value": "yes"
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.solid",
+   "value": "yes"
+  },
+  {
+   "id": "e5",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.solid",
+   "evidence": {
+    "id": "ev5",
+    "source": "check:solid",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:solid",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.solid": "yes",
+      "a.base": "yes"
+     }
+    }
+   }
+  },
+  {
+   "id": "e6",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.shaky",
+   "value": "yes"
+  },
+  {
+   "id": "e7",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.shaky",
+   "evidence": {
+    "id": "ev7",
+    "source": "check:shaky",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:shaky",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.shaky": "yes",
+      "a.base": "yes",
+      "a.guess": "yes"
+     }
+    }
+   }
+  },
+  {
+   "id": "e8",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.next",
+   "value": "yes"
+  },
+  {
+   "id": "e9",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.next",
+   "evidence": {
+    "id": "ev9",
+    "source": "check:next",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:next",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.next": "yes",
+      "a.solid": "yes"
+     }
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.base": "observed",
+  "a.guess": "assumption",
+  "a.solid": "proven",
+  "a.shaky": "assumption",
+  "a.next": "proven"
+ },
+ "expectRejected": []
+}

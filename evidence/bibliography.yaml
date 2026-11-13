@@ -44,3 +44,15 @@
   claim: Typed judgments with calibrated probabilities over fixed options, fast and cheap.
   ref: "TypeSafe / Jev (vendor material)"
   type: vendor-claim
+- id: fever-2018
+  claim: Claim verification can be labelled supported, refuted or not enough information against retrieved evidence.
+  ref: "Thorne et al., NAACL 2018, arXiv 1803.05355"
+  type: peer-reviewed
+- id: dspy-2023
+  claim: Declarative signatures separate a task's inputs and outputs from hand-written prompts.
+  ref: "Khattab et al., ICLR 2024, arXiv 2310.03714"
+  type: peer-reviewed
+- id: umdt-repo
+  claim: A deterministic observe, classify and route pipeline keeps source observation apart from classification.
+  ref: "E-AI-MODEL/umdt repository, inspected 2026-10-14"
+  type: our-own

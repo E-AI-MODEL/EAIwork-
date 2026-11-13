@@ -2,6 +2,8 @@ import { LADDER } from "./types.ts";
 
 export interface PackSource {
   id: string;
+  /** Human-readable name shown where evidence cites this source. */
+  title?: string;
 }
 
 export interface WorkerRead {
