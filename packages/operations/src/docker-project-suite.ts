@@ -126,7 +126,7 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
     rmSync(stage,{recursive:true,force:true});
   }
   const summary=inspectNodeTestOutput(output,input.testPaths.length);
-  return {runner:"docker-project-node-v1",
+  return {runner:"docker-project-node-v1",proofFormat:"tap-named-v2",
     status:!summary.testsExecuted?"unavailable":timedOut||exitCode!==0||!summary.passed?"failed":"passed",
     manifestSha256:fingerprint,fileCount:input.files.length,
     testPaths:input.testPaths,imageId,testsExecuted:summary.testsExecuted,exitCode,timedOut,

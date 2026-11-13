@@ -107,6 +107,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       assert.equal(pre.status,200,JSON.stringify(pre.data));
       assert.equal(pre.data.result.status,"passed",pre.data.result.output);
       assert.equal(pre.data.result.testsExecuted,true);
+      assert.equal(pre.data.result.proofFormat,"tap-named-v2");
       assert.match(pre.data.result.imageId,/^sha256:[a-f0-9]{64}$/);
       checks.push({step:i+1,phase:"voor toepassing",status:pre.data.result.status,
         imageId:pre.data.result.imageId,manifestSha256:pre.data.result.manifestSha256});
@@ -116,6 +117,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       assert.equal(post.status,200,JSON.stringify(post.data));
       assert.equal(post.data.result.status,"passed",post.data.result.output);
       assert.equal(post.data.result.testsExecuted,true);
+      assert.equal(post.data.result.proofFormat,"tap-named-v2");
       checks.push({step:i+1,phase:"na toepassing",status:post.data.result.status,
         imageId:post.data.result.imageId,manifestSha256:post.data.result.manifestSha256});
       assert.equal(post.data.plan.steps[i].status,"done");

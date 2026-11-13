@@ -15,6 +15,7 @@ test("real Docker runs related modules and both tests without network or write a
     const good=await runIsolatedProjectSuite(input);
     assert.equal(good.status,"passed",JSON.stringify(good));
     assert.equal(good.testsExecuted,true);
+    assert.equal(good.proofFormat,"tap-named-v2");
     assert.equal(good.manifestSha256,projectManifestSha256(input));
     assert.match(good.imageId||"",/^sha256:[0-9a-f]{64}$/);
     const changed={...input,files:input.files.map(file=>file.path==="src/math.js"?

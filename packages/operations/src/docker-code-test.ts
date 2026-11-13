@@ -119,7 +119,7 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
   const summary=inspectNodeTestOutput(output,1);
   return {
     status:!summary.testsExecuted?"unavailable":timedOut||exitCode!==0||!summary.passed?"failed":"passed",
-    runner:"docker-node-test-v1",candidateSha256:sha(candidateSource),
+    runner:"docker-node-test-v1",proofFormat:"tap-named-v2",candidateSha256:sha(candidateSource),
     testSha256:sha(testSource),imageId,testsExecuted:summary.testsExecuted,
     exitCode,timedOut,output:output.slice(0,12000),
     recordedAt:new Date().toISOString()

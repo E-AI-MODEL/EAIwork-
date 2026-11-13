@@ -162,7 +162,7 @@ export class LocalCodeWorkspace {
     if(sha(candidate)!==initial.replacementSha256||
        sha(initial.replacement)!==initial.replacementSha256)
       throw new Error("De toegepaste code wijkt af van het goedgekeurde voorstel");
-    if(!validSingleFilePass(initial.testReport)||
+    if(!initial.testReport||!validSingleFilePass(initial.testReport)||
        initial.testReport.candidateSha256!==initial.replacementSha256||
        initial.testReport.testSha256!==sha(testSource))
       throw new Error("De oorspronkelijke Docker-test is niet aantoonbaar geslaagd");

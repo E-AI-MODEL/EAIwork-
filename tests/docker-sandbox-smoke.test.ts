@@ -11,6 +11,7 @@ test("real Docker node:test runs candidate in read-only networkless container",
     const passed=await runIsolatedNodeTest(input);
     assert.equal(passed.status,"passed",JSON.stringify(passed));
     assert.equal(passed.testsExecuted,true);
+    assert.equal(passed.proofFormat,"tap-named-v2");
     assert.match(passed.imageId||"",/^sha256:[0-9a-f]{64}$/);
     assert.equal(passed.exitCode,0);
     const failed=await runIsolatedNodeTest({...input,candidateSource:"export const count = 3;\n"});
