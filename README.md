@@ -17,7 +17,7 @@ The browser workbench is built around the parts that matter during review:
 - a visible **status distribution**, never one aggregate score;
 - **dependency markers** on each atomic question;
 - a separate **evidence inspector** with observer, source, lineage and validity;
-- a **review queue** for rule flags, weak prerequisites and coverage prompts;
+- a **review queue** for rule flags, weak prerequisites, coverage prompts, model proposals that need a person and lowered confidence;
 - an **append-only log integrity** indicator.
 
 <p align="center">
@@ -32,7 +32,11 @@ Status follows this ladder:
 
 `unknown → assumption → claim → observed → checked → proven`
 
-The transition is asymmetric. A model answer can create an assumption. A person report can create a claim. First-hand observation can create observed status. Independent trusted actors can create checked status. A deterministic server-registered check can create proven status. Status is recalculated from the event log and current evidence each time.
+The transition is asymmetric. A model answer can create an assumption. A person report can create a claim. First-hand observation can create observed status. A first-hand observation plus a second independent origin creates checked status. A deterministic server-registered check plus at least one other independent origin creates proven status; a check on its own is observed, not proven. Contradicting evidence caps an atom at claim. Status is recalculated from the event log and current evidence each time.
+
+**What "independent" means today:** two evidence items are independent when their lineages differ, and the server derives lineage from the authenticated actor. Two different people count as two origins even when they looked at the same document. Whether the origin should instead be the underlying source is an open design decision, see [proposal 0001](proposals/0001-independence-and-proven.md).
+
+A model cannot raise status, but it is not silent either. An unevidenced model proposal on a high-impact atom, with `unknown` winning or with a low self-reported probability is listed in the review queue as **needs a person**. Lowered confidence is listed the same way. Both are review signals: they never change status and the probability itself is never shown as a score.
 
 In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
 
@@ -140,8 +144,9 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 - **Signed rollback detection:** event and rejection heads are Ed25519-signed into cryptographically chained witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
 - **Review wording:** no flags means “not detected”, not “safe”.
+- **Answer provenance:** the inspector names who proposed the current answer. That is provenance only and never an input to status.
 
-The normative behavior lives in `conformance/vectors/`. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.
+The normative behavior of the status ladder lives in `conformance/vectors/`. The server trust boundaries in [SECURITY.md](SECURITY.md) are normative as well and are enforced by `tests/server.test.ts`; they are not yet expressed as vectors. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.
 
 ## Current limits
 

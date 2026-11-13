@@ -19,7 +19,6 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - Worker execution is a separate capability from read/write access. An execute-only scheduler can run atoms without seeing `/state` or writing `/events`; completed worker calls return bodyless 204 responses and do not reveal model output or internal acceptance/rejection.
 - Global event sequence/hash receipts are returned only to principals with `audit: true` and read access to every atom. Scoped writers and scoped check runners receive no global sequence metadata.
 - HTTP-issued event, evidence and flag identifiers are opaque random UUID-based IDs, not global event sequence counters. Internal log sequence numbers stay available for audit and integrity verification.
-- If a principal can read a worker target, it must also be able to read every declared worker input before executing that worker. This prevents the readable target from becoming an oracle over hidden dependencies.
 - If a principal can read a worker target, it must also be allowed to read every dependency value declared in that worker policy. Otherwise worker execution is denied, preventing a readable target from becoming an oracle over hidden inputs.
 - Public `/events` requests cannot create `check.passed` events.
 - Person/system evidence lineage is derived by the server from actor identity. Client-supplied lineage is ignored.
@@ -30,5 +29,8 @@ Confirmed bypass sequences are added to `conformance/vectors/` as rejection case
 - The server holds an exclusive writer lock for the lifetime of the process. `EAI_DIR` is restricted to `0700`, tracked files to `0600`, and the witness directory to `0700`. Run the service under a dedicated OS account; another process with direct write access as that same account is a host compromise and is outside the supported multi-writer model.
 - The signing private key must not live in the datastore or witness directory. The witness store should be on separate, rollback-resistant storage. A host-level attacker with the signing key or control of both rollback domains remains outside this threat model.
 - Direct server startup requires an explicit token file and binds to `127.0.0.1` unless `EAI_HOST` is set deliberately.
+
+- Review signals (`needs-person`, `confidence-lowered`) and answer provenance are derived views. They are filtered to the atoms a principal may read and never feed back into status.
+- No public HTTP path produces `confidence.lowered` or a model-raised flag today: model actors hold no tokens and the worker route writes answers only. Those event types exist in the core and in replayed logs.
 
 Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits, source-handle scope, provider-side session reuse and injection through evidence text.
