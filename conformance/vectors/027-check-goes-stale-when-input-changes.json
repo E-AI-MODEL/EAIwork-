@@ -1,0 +1,135 @@
+{
+ "name": "A check stops supporting when a value it read changes, until it is re-run",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.base",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.base",
+   "evidence": {
+    "id": "ev2",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": true
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.sum",
+   "value": "yes"
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.sum",
+   "evidence": {
+    "id": "ev4",
+    "source": "check:sum",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:sum",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.sum": "yes",
+      "a.base": "yes"
+     }
+    }
+   }
+  },
+  {
+   "id": "e5",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.kept",
+   "value": "yes"
+  },
+  {
+   "id": "e6",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.kept",
+   "evidence": {
+    "id": "ev6",
+    "source": "check:kept",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:kept",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.kept": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e7",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.base",
+   "value": "no"
+  }
+ ],
+ "expect": {
+  "a.base": "assumption",
+  "a.sum": "assumption",
+  "a.kept": "proven"
+ },
+ "expectRejected": []
+}

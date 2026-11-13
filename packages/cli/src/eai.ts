@@ -37,7 +37,9 @@ if (cmd === "lint-pack") {
   const r = replay(readLog(args[1]), now, validFor(p));
   const d = r.derived[args[2]];
   console.log(args[2], "->", d?.status ?? "unknown");
+  if (d) console.log(" rule:", d.rule, d.basis.length ? `(carried by ${d.basis.join(", ")})` : "");
   (d?.reasons ?? []).forEach((x) => console.log(" -", x));
+  if (d?.next) console.log(" next status needs:", d.next);
   const answeredBy = r.state[args[2]]?.answeredBy;
   if (answeredBy) console.log(" answer proposed by", `${answeredBy.kind}/${answeredBy.id}`);
   r.state[args[2]]?.lowered.forEach((x) => console.log(" confidence lowered:", x));

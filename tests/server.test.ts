@@ -66,6 +66,7 @@ const checks = {
   "budget-approved": {
     atom: "a.fin.017",
     reads: ["a.fin.017"],
+    sources: ["s.fin.approval"],
     source: "server-side deterministic budget check",
     allowedActorId: "check:calc",
     run: ({ state }: any) => state["a.fin.017"]?.value === "yes",

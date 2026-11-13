@@ -13,6 +13,7 @@ export function apply(state: State, e: EaiEvent): State {
       if (a.value !== undefined && a.value !== e.value) { a.evidence = []; a.lowered = []; }
       a.value = e.value;
       a.answeredBy = e.actor;
+      a.answerBasis = e.basis;
       a.probabilities = e.probabilities;
       break;
     case "evidence.attached":

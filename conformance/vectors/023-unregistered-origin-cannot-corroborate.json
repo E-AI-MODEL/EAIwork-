@@ -1,0 +1,118 @@
+{
+ "name": "Evidence without a registered source supports but cannot corroborate",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": true
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:piet"
+   },
+   "type": "evidence.attached",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "actor:person:person:piet",
+    "observer": {
+     "kind": "person",
+     "id": "person:piet"
+    },
+    "mode": "observed",
+    "lineage": "actor:person:person:piet",
+    "supports": true,
+    "origin_unverified": true
+   }
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.two",
+   "value": "yes"
+  },
+  {
+   "id": "e5",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.two",
+   "evidence": {
+    "id": "ev5",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": true
+   }
+  },
+  {
+   "id": "e6",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:piet"
+   },
+   "type": "evidence.attached",
+   "atom": "a.two",
+   "evidence": {
+    "id": "ev6",
+    "source": "source:s.ledger",
+    "observer": {
+     "kind": "person",
+     "id": "person:piet"
+    },
+    "mode": "reported",
+    "lineage": "source:s.ledger",
+    "supports": true
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "observed",
+  "a.two": "checked"
+ },
+ "expectRejected": []
+}

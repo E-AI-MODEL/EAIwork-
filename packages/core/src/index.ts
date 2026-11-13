@@ -1,5 +1,5 @@
 export * from "./types.ts";
-export { derive, deriveAll, rank } from "./derive.ts";
+export { derive, deriveAll, independent, rank } from "./derive.ts";
 export { validate } from "./validate.ts";
 export { apply, replay } from "./replay.ts";
 export { runRules, type Rule } from "./rules.ts";

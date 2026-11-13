@@ -1,0 +1,63 @@
+{
+ "name": "One observer cannot corroborate themself across two sources: observed, not checked",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "source:s.form",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.form",
+    "supports": true
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "evidence.attached",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "source:s.ledger",
+    "observer": {
+     "kind": "person",
+     "id": "person:jan"
+    },
+    "mode": "observed",
+    "lineage": "source:s.ledger",
+    "supports": true
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "observed"
+ },
+ "expectRejected": []
+}

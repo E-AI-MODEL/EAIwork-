@@ -1,0 +1,51 @@
+{
+ "name": "A deterministic check that consulted a registered source proves on its own",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "check:calc",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:calc",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "proven"
+ },
+ "expectRejected": []
+}

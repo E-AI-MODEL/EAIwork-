@@ -1,0 +1,89 @@
+{
+ "name": "Two checks that only lean on each other prove nothing",
+ "now": "2026-10-05",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "model",
+    "id": "model:x"
+   },
+   "type": "answer.proposed",
+   "atom": "a.two",
+   "value": "yes"
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "check:one",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:one",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes",
+      "a.two": "yes"
+     }
+    }
+   }
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.two",
+   "evidence": {
+    "id": "ev4",
+    "source": "check:two",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:two",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes",
+      "a.two": "yes"
+     }
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "assumption",
+  "a.two": "assumption"
+ },
+ "expectRejected": []
+}

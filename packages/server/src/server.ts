@@ -14,6 +14,12 @@ import { SignedFileAnchorWitness, type AnchorWitness } from "./witness.ts";
 export interface DeterministicCheck {
   atom: string;
   reads: string[];
+  /**
+   * Registered pack sources this check consults outside the atom state. A check that declares
+   * one is grounded in that source and can prove on its own; one that declares none must build
+   * on first-hand premises or stand next to independent evidence.
+   */
+  sources?: string[];
   source: string;
   allowedActorId: string;
   run(input: { pack: Pack; state: State }): boolean;
@@ -123,7 +129,22 @@ function normalizeProbabilities(value: unknown, allowed: string[]): Record<strin
   return out;
 }
 
-function canonicalEvidence(raw: any, actor: Actor, eventId: string) {
+/**
+ * A source that feeds a worker is as visible as the atoms it feeds. A source no worker uses is
+ * general. This keeps source names from hinting at atoms a principal cannot read.
+ */
+function sourceScope(pack: Pack) {
+  const feeds = new Map<string, string[]>();
+  for (const atom of pack.atoms) for (const source of atom.worker?.sources ?? []) {
+    feeds.set(source, [...(feeds.get(source) ?? []), atom.id]);
+  }
+  return (principal: Principal) => (pack.sources ?? []).filter((source) => {
+    const atoms = feeds.get(source.id);
+    return !atoms || atoms.some((atom) => canRead(principal, atom));
+  });
+}
+
+function canonicalEvidence(raw: any, actor: Actor, eventId: string, citable: Set<string>) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new HttpError(422, "evidence must be an object");
   const mode = raw.mode;
   if (mode !== "reported" && mode !== "observed") throw new HttpError(422, "evidence mode must be reported or observed");
@@ -131,12 +152,20 @@ function canonicalEvidence(raw: any, actor: Actor, eventId: string) {
   if (raw.valid_until !== undefined && (typeof raw.valid_until !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(raw.valid_until))) {
     throw new HttpError(422, "valid_until must be an ISO date");
   }
+  if (raw.source_ref !== undefined && (typeof raw.source_ref !== "string" || !citable.has(raw.source_ref))) {
+    throw new HttpError(422, "source_ref must be a registered source available to this principal");
+  }
+  // Origin comes from a registered source when one is cited. Without one the item still
+  // supports the answer, but it is marked so that it can never count as corroboration.
+  const origin = raw.source_ref
+    ? { lineage: `source:${raw.source_ref}`, source_ref: raw.source_ref as string }
+    : { lineage: `actor:${actor.kind}:${actor.id}`, origin_unverified: true };
   return {
     id: `${eventId}:evidence`,
     source: requiredString(raw.source, "evidence source", 2048),
     observer: actor,
     mode,
-    lineage: `actor:${actor.kind}:${actor.id}`,
+    ...origin,
     supports: raw.supports,
     ...(raw.valid_until ? { valid_until: raw.valid_until } : {}),
   };
@@ -146,6 +175,8 @@ export function makeServer(cfg: Config) {
   const problems = lintPack(cfg.pack);
   if (problems.length) throw new Error("pack is invalid:\n" + problems.join("\n"));
   const atoms = new Map(cfg.pack.atoms.map((a) => [a.id, a]));
+  const sourceIds = new Set((cfg.pack.sources ?? []).map((source) => source.id));
+  const sourcesFor = sourceScope(cfg.pack);
   validatePrincipals(cfg.tokens, cfg.pack, Object.keys(cfg.checks ?? {}), ACTOR_KINDS);
 
   for (const [id, check] of Object.entries(cfg.checks ?? {})) {
@@ -156,6 +187,7 @@ export function makeServer(cfg: Config) {
       !check.reads.length ||
       !check.reads.includes(check.atom) ||
       check.reads.some((atom) => !atoms.has(atom)) ||
+      (check.sources !== undefined && (!Array.isArray(check.sources) || check.sources.some((source) => !sourceIds.has(source)))) ||
       typeof check.run !== "function" ||
       !check.source?.trim() ||
       !check.allowedActorId?.trim()
@@ -242,15 +274,18 @@ export function makeServer(cfg: Config) {
           dependsOn: a.depends_on ?? [],
           impact: a.impact ?? null,
           validForDays: a.valid_for_days ?? null,
+          options: optionsFor(a),
+          writable: canWrite(principal, a.id),
           value: visibleState[a.id]?.value ?? null,
-          ...derive(visibleState[a.id], snapshotDate, { validForDays: validFor[a.id] }),
+          ...(visibleDerived[a.id] ?? derive(undefined, snapshotDate)),
         }])),
         clusters: visiblePack.clusters,
         distribution: distribution(visiblePack, visibleDerived),
         flags: [...ruleFlags, ...actorFlags],
         shaky: propagate(visiblePack, visibleDerived),
         coverage: coverage(visiblePack, visibleState, visibleDerived),
-        review: reviewSignals(visiblePack, visibleState, visibleDerived),
+        sources: sourcesFor(principal),
+        review: reviewSignals(visiblePack, r.state, r.derived, undefined, (atom) => visible.has(atom)),
         checksum,
         ...(canAudit(principal) && visible.size === cfg.pack.atoms.length ? { rejectedAttempts: store.rejections.length } : {}),
         note: "Nothing flagged means not detected, not safe.",
@@ -323,7 +358,7 @@ export function makeServer(cfg: Config) {
             const probabilities = normalizeProbabilities(raw.probabilities, allowed);
             event = { id: eventId, at: today(), actor, type: "answer.proposed", atom: raw.atom, value, ...(probabilities ? { probabilities } : {}) };
           } else if (raw.type === "evidence.attached") {
-            event = { id: eventId, at: today(), actor, type: "evidence.attached", atom: raw.atom, evidence: canonicalEvidence(raw.evidence, actor, eventId) };
+            event = { id: eventId, at: today(), actor, type: "evidence.attached", atom: raw.atom, evidence: canonicalEvidence(raw.evidence, actor, eventId, new Set(sourcesFor(principal).map((source) => source.id))) };
           } else if (raw.type === "confidence.lowered") {
             event = { id: eventId, at: today(), actor, type: "confidence.lowered", atom: raw.atom, reason: requiredString(raw.reason, "reason") };
           } else if (raw.type === "flag.raised") {
@@ -421,6 +456,7 @@ export function makeServer(cfg: Config) {
             atom: atomId,
             value: result.value,
             probabilities: result.probabilities,
+            basis: { reads: basis.reads, sources: atomDef.worker.sources ?? [], capsuleSha256: result.capsuleSha256 },
           };
           const verdict = validate(event, after.state);
           if (!verdict.ok) {
@@ -490,6 +526,10 @@ export function makeServer(cfg: Config) {
             lineage: `check:${id}`,
             supports: true,
             deterministic: true,
+            basis: {
+              reads: Object.fromEntries(check.reads.map((atom) => [atom, r.state[atom]?.value ?? null])),
+              ...(check.sources?.length ? { sources: check.sources } : {}),
+            },
           },
         };
         const v = validate(event, r.state);
@@ -510,12 +550,22 @@ export function makeServer(cfg: Config) {
         const id = decodeURIComponent(url.pathname.slice(9));
         const { r, visible } = scoped(principal);
         if (!visible.has(id)) return json(res, 404, { error: "unknown or unavailable atom" });
+        // The footing of a check or a model proposal may name atoms this reader cannot see.
+        const readable = (reads: Record<string, string | null>) =>
+          Object.fromEntries(Object.entries(reads).filter(([atom]) => visible.has(atom)));
+        const citable = new Set(sourcesFor(principal).map((source) => source.id));
+        const answerBasis = r.state[id]?.answerBasis;
         return json(res, 200, {
           atom: id,
-          ...derive(r.state[id], snapshotDate, { validForDays: validFor[id] }),
-          evidence: r.state[id]?.evidence ?? [],
+          ...(r.derived[id] ?? derive(undefined, snapshotDate)),
+          evidence: (r.state[id]?.evidence ?? []).map((e) =>
+            e.basis ? { ...e, basis: {
+              reads: readable(e.basis.reads),
+              ...(e.basis.sources ? { sources: e.basis.sources.filter((source) => citable.has(source)) } : {}),
+            } } : e),
           flags: r.state[id]?.flags ?? [],
           answeredBy: r.state[id]?.answeredBy ?? null,
+          answerBasis: answerBasis ? { ...answerBasis, reads: readable(answerBasis.reads) } : null,
           lowered: r.state[id]?.lowered ?? [],
         });
       }

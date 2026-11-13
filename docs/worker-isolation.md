@@ -258,3 +258,9 @@ Wijzigingen aan workers moeten blijven aantonen dat:
 - een succesvolle workerresponse volledig bodyloos is en geen modeluitkomst of event-commitment teruglekt naar de scheduler.
 
 Deze eisen horen bij de architectuur, niet bij een specifieke provider.
+
+## Onderbouwing van een workervoorstel
+
+Bij ieder geaccepteerd workerresultaat legt de server vast waarop het model zich baseerde: de waarden van de gedeclareerde inputs, de gedeclareerde bronhandles en een SHA-256 van de exacte `AtomCapsule`. Dit staat in het event, niet in de modelrequest: het model ziet nog steeds geen handles of atom-id's.
+
+Verandert later een inputwaarde, dan verschijnt het voorstel in de reviewwachtrij als verouderd. Het signaal wordt alleen getoond aan lezers die alle vergeleken inputs mogen zien. De onderbouwing is herkomst en telt nooit mee voor de status.

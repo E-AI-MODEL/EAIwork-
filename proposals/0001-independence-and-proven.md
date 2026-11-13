@@ -1,42 +1,43 @@
 # Proposal 0001: what counts as an independent origin, and what `proven` requires
-- Status: draft
-- Affects: spec / core / server
+- Status: accepted in direction by the owner on 2026-11-13, implemented on this branch; merging confirms it
+- Affects: spec / core / server / client
 
 ## Problem
 
-Two rules of the status ladder are implemented more narrowly than the words around them suggest. Both were found in the alignment review of 2026-11-10 (`docs/alignment/`). The code is consistent and tested; the open question is whether it is the rule the project wants.
+Two steps of the status ladder were granted by counting, not by a footing that can be pointed at.
 
-1. **Independence is per actor, not per source.** The server sets evidence lineage to `actor:<kind>:<id>`. Two people who each attach the same signed form as first-hand evidence therefore produce `checked`. The spec calls lineage an "origin chain", which reads as the underlying source.
-2. **`proven` does not sit on top of `checked`.** `derive.ts` grants `proven` for a deterministic check plus at least two lineages. A single *reported* claim plus a check is `proven`, although the same atom without the check would only be `claim`. A check on its own is `observed` (vector 018).
+1. **Independence was per actor.** The server set lineage to the actor, so two people who looked at the same form produced `checked`.
+2. **`proven` was a check plus any second lineage.** A reported claim plus a check was `proven`; the check itself could be a rule that only re-read the answer.
 
-## Options
+The owner's direction: both steps are doubtful as they stand. The system may be trusted more, but only where its action has a stated basis and is not arbitrary.
 
-**Independence**
+## Decision
 
-- A. Keep actor-based lineage and say so everywhere (done in README and spec with this proposal). Cheapest; "checked" then means "two trusted actors vouch first-hand".
-- B. Derive lineage from the source: evidence names a broker-owned source handle and lineage becomes the handle (plus its version). Two people citing one document are one origin. Needs a source registry for person evidence, which does not exist yet.
-- C. Both: an item is independent only if actor *and* source differ. Strictest, and it makes `checked` unreachable for atoms with a single authoritative document unless a check exists.
+One principle for both: **a status needs a footing that can be shown, and it lasts only as long as that footing does.**
 
-**Proven**
+- **Independent** means no shared link: a different registered source and a different observer. Evidence without a registered source supports but cannot corroborate.
+- **Proven** is a deterministic check that is grounded: it consulted a registered source, or every other atom it read is first-hand or stronger, or independent evidence stands beside it. A grounded check proves without a person. A check that only restates its target is not counted.
+- **A proof expires with its inputs.** The server records what a check read; when a value changes the check stops supporting until it is re-run.
+- **Every status explains itself**: rule, carrying evidence, and what the next status needs.
+- **A model proposal records what the model was given**, and is flagged when its inputs change.
 
-- D. Keep the current rule and document it (done).
-- E. Require `checked` first: a deterministic check only lifts an atom that already has first-hand support from an origin other than the check.
-- F. Let a deterministic check prove on its own. Simplest to explain, but it removes the independent human observation from the strongest status.
+Options from the draft that this replaces: independence B and C are combined (source and observer must both differ); proven is F (a check can prove alone) made conditional on grounding, with the old corroboration path kept.
 
 ## Evidence (link bibliography ids, or say "untested")
 
-Untested. No user study or incident informs the choice. `kim-2025` (shared errors across models) and `bansal-2021` (over-reliance) argue for keeping a human, source-independent observation in the two strongest statuses, which favours B or C and E.
+Untested with users. `kim-2025` (models share errors) and `bansal-2021` (people over-rely on AI suggestions) argue against granting strength by repetition. No measurement yet shows how often real packs can register sources for person evidence.
 
 ## Conformance vectors this adds or changes
 
-- Vector 018 already pins "check alone is observed".
-- A or D: add a vector for "two actors, same source: checked" and one for "reported claim plus check: proven", so the current behaviour is deliberate.
-- B or C: vector 007 keeps passing; add "two actors, same source handle: observed".
-- E: add "reported claim plus check: claim"; vector 008 keeps passing.
-- F: vector 018 changes to `proven`.
+- 018 rewritten: an ungrounded check adds nothing.
+- 021 same source, two observers: observed. 022 one observer, two sources: observed. 023 unregistered origin cannot corroborate.
+- 024 check on a registered source proves alone. 025 check on premises needs first-hand premises. 026 premise cycle proves nothing.
+- 027 check goes stale when an input changes. 028 contradiction caps a grounded check.
+- 006, 007, 008 pass unchanged.
 
 ## Risks
 
-- B, C and E lower the status of existing logs on replay. That is the intended effect of derived status, but release notes must say so.
-- B and C need person evidence to reference a registered source; free-text `source` strings cannot carry independence.
-- Leaving both undecided is also a risk: the UI says "checked" and "proven" and readers assume the stricter meaning.
+- **Existing logs can drop on replay.** A check with no recorded basis and no independent support no longer counts. Evidence recorded before this change keeps its actor lineage and is not marked unverified, so two-actor `checked` results in old logs stand; new evidence needs a registered source.
+- **Declared sources are trusted.** The server cannot verify that a check's code really consults the source it declares. This moves trust to check registration, which is deployment-time and reviewable.
+- **Packs must register sources** for person evidence to corroborate. A pack without sources can reach `observed` and, through grounded checks, `proven`, but not `checked`.
+- **Check rules carry weight.** A check on first-hand premises is only as right as its rule. The inspector shows the rule's description and the values it read; it does not judge the rule.

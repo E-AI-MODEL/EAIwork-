@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { optionsFor, route, temperatureScale } from "../../core/src/index.ts";
 import type { Pack, PackAtom, Route, State } from "../../core/src/index.ts";
 import { observeLocalEvidence, type EvidenceObservationResult } from "../../evidence/src/observe.ts";
@@ -56,6 +57,8 @@ export interface WorkerResult {
   /** Existing provisional response route; evidence proposals do not grant authority. */
   route: Route;
   probabilities: Record<string, number>;
+  /** SHA-256 of the exact capsule the model received: the footing of this proposal. */
+  capsuleSha256: string;
   /** Present only when opt-in observation was requested. Never an evidence attachment. */
   evidence?: EvidenceSidecar;
 }
@@ -182,6 +185,7 @@ export async function executeAtomWorker(
     value,
     route: route(p, atom.impact ?? "low"),
     probabilities: p,
+    capsuleSha256: createHash("sha256").update(JSON.stringify(capsule)).digest("hex"),
     ...(evidence ? { evidence } : {}),
   };
 }

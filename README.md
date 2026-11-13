@@ -16,8 +16,9 @@ The browser workbench is built around the parts that matter during review:
 - a **work graph** grouped by cluster;
 - a visible **status distribution**, never one aggregate score;
 - **dependency markers** on each atomic question;
-- a separate **evidence inspector** with observer, source, lineage and validity;
-- a **review queue** for rule flags, weak prerequisites, coverage prompts, model proposals that need a person and lowered confidence;
+- a separate **evidence inspector** with observer, registered source, validity, the rule and evidence that carry the status, and what the next status needs;
+- **actions in place**: give an answer and attach evidence from the inspector, within the token's write scope;
+- a **review queue** for rule flags, weak prerequisites, coverage prompts, model proposals that need a person or are outdated, checks that need a re-run and lowered confidence;
 - an **append-only log integrity** indicator.
 
 <p align="center">
@@ -32,13 +33,25 @@ Status follows this ladder:
 
 `unknown → assumption → claim → observed → checked → proven`
 
-The transition is asymmetric. A model answer can create an assumption. A person report can create a claim. First-hand observation can create observed status. A first-hand observation plus a second independent origin creates checked status. A deterministic server-registered check plus at least one other independent origin creates proven status; a check on its own is observed, not proven. Contradicting evidence caps an atom at claim. Status is recalculated from the event log and current evidence each time.
+The transition is asymmetric, and every step up needs a footing that can be pointed at. Nothing is granted by count alone.
 
-**What "independent" means today:** two evidence items are independent when their lineages differ, and the server derives lineage from the authenticated actor. Two different people count as two origins even when they looked at the same document. Whether the origin should instead be the underlying source is an open design decision, see [proposal 0001](proposals/0001-independence-and-proven.md).
+| Status | What carries it |
+|---|---|
+| `assumption` | An answer with no counted support. A model answer starts here and a model can never lift it. |
+| `claim` | Supporting evidence that is reported, not seen first-hand. |
+| `observed` | At least one first-hand supporting item. |
+| `checked` | A first-hand item corroborated by an independent second item. |
+| `proven` | A deterministic, server-registered check that is grounded. |
 
-A model cannot raise status, but it is not silent either. An unevidenced model proposal on a high-impact atom, with `unknown` winning or with a low self-reported probability is listed in the review queue as **needs a person**. Lowered confidence is listed the same way. Both are review signals: they never change status and the probability itself is never shown as a score.
+**Independent** means the two items share no link: a different registered source *and* a different observer. Two people who looked at the same form are one origin. One person who looked at two documents is one observer. Evidence that cites no registered source still supports an answer, but it cannot corroborate anything, because nothing ties it to a distinct origin.
 
-In the HTTP server, person and system evidence lineage is assigned by the server from actor identity. A client cannot create extra independent origins by changing a lineage string. `check.passed` is server-generated only.
+**Grounded** means the check shows what it stands on. A check proves on its own when it consulted a registered source, or when every other atom it read is itself first-hand or stronger. A check that only re-reads the answer it is attached to restates that answer and is not counted, unless independent evidence stands beside it. The server records the values a check read; when one of them changes, the check stops supporting until it is re-run. This is how the system earns more trust without a person in every loop: its proofs are reproducible and they expire with their inputs.
+
+Contradicting evidence caps an atom at `claim`. Each derived status reports the rule that produced it, the evidence that carries it and what the next status would need. Status is recalculated from the event log and current evidence each time.
+
+A model cannot raise status, but its work is not a black box. Every worker proposal records what the model was given: the registered sources, the input values and a hash of the exact capsule. A proposal whose inputs have since changed is listed as outdated. An unevidenced model proposal on a high-impact atom, with `unknown` winning or with a low self-reported probability is listed as **needs a person**. These are review signals: they never change status, and the probability itself is never shown as a score.
+
+In the HTTP server, evidence origin is assigned by the server: from the registered source a person or system cites, or from the actor identity when none is cited. A client cannot create extra independent origins by changing a lineage string, and cannot cite a source that only feeds atoms it may not read. `check.passed` is server-generated only.
 
 Every token maps to a principal with explicit `read`, `write`, `checks`, `workers` and optional `audit` permissions. Access is default-deny. State, explanations, dependencies, rule output, checksums and review data are filtered to the atoms that principal may read. Deterministic checks declare their own `reads` set; a caller must be allowed to read every declared input, and the check receives only that scoped state.
 
@@ -136,8 +149,9 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 
 - **Derived status:** no actor edits status directly.
 - **Model asymmetry:** models may not raise status or impersonate a person.
-- **Server-controlled independence:** public clients cannot mint extra evidence origins; person/system lineage is derived from trusted actor identity.
-- **Deterministic proof:** `proven` requires a server-registered deterministic check; public clients cannot submit `check.passed`.
+- **Server-controlled independence:** public clients cannot mint extra evidence origins; origin comes from a registered source or, failing that, from the actor identity and then cannot corroborate.
+- **Grounded proof:** `proven` requires a server-registered deterministic check that is grounded in a registered source, in first-hand premises or in independent evidence. The proof lapses when a value the check read changes. Public clients cannot submit `check.passed`.
+- **No status without a footing:** every derived status names its rule, the evidence that carries it and what the next status needs.
 - **Scoped authorization:** principals only see and modify explicitly permitted atoms; audit, check and worker execution are separate permissions.
 - **Anatomical worker isolation:** model workers receive only server-built atom capsules with declared local inputs and bounded source context. No public model tokens, free caller-context or shared worker chat is available.
 - **Replayable state:** state is rebuilt from an append-only hash-chained log.

@@ -28,6 +28,14 @@
   .brand-mark i:nth-child(2){opacity:.28}.brand-mark i:nth-child(3){opacity:.5}.brand-mark i:nth-child(4){opacity:.75}
   .top-actions{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:13px}
   .integrity{display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+  .act-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .act{font:inherit;font-size:12px;font-weight:620;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:inherit;cursor:pointer}
+  .act:hover,.act:focus-visible{border-color:var(--ink)}.act.on{background:var(--ink);color:var(--panel);border-color:var(--ink)}.act.primary{align-self:flex-start;background:var(--ink);color:var(--panel);border-color:var(--ink)}
+  .ev-form{display:grid;gap:9px;margin-top:12px}.ev-form label{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+  .ev-form input,.ev-form select{font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);min-width:0;width:100%}
+  .footing{margin-top:7px;font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+  .evidence.carrying{border-color:var(--ink)}.carries{font-weight:700}
+  .reason.next{border-style:dashed}
   .integrity-dot{width:7px;height:7px;border-radius:50%;background:var(--unknown)}
   .integrity.ok .integrity-dot{background:var(--proven)}.integrity.bad .integrity-dot{background:var(--danger)}
   main{max-width:1440px;margin:auto;padding:30px 24px 56px}
@@ -126,7 +134,7 @@
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>EAI work</span></div>
       <div class="top-actions">
         <span class="hide-mobile">Evidence-first workbench</span>
-        <span id="integrity" class="integrity"><i class="integrity-dot"></i><span>not loaded</span></span>
+        <button id="refresh" class="act" hidden>Refresh</button><span id="integrity" class="integrity"><i class="integrity-dot"></i><span>not loaded</span></span>
       </div>
     </div>
   </header>
@@ -197,7 +205,7 @@
 
       <div class="principles">
         <div class="principle"><span>01</span><h4>AI can propose</h4><p>Model output enters as an assumption. The model cannot promote its own answer.</p></div>
-        <div class="principle"><span>02</span><h4>Origins stay visible</h4><p>Two confirmations only count as independent when their lineages differ.</p></div>
+        <div class="principle"><span>02</span><h4>Origins stay visible</h4><p>Two confirmations only count as independent when they share neither a registered source nor an observer.</p></div>
         <div class="principle"><span>03</span><h4>Progress stays plural</h4><p>EAI work shows a distribution over statuses instead of collapsing the job into one number.</p></div>
       </div>
     </section>
@@ -273,11 +281,51 @@ function renderWarnings(){
   for(const f of state.flags || []) items.push({title:`Flag · ${f.rule}`,body:f.message});
   for(const s of state.shaky || []) items.push({title:'Dependency mismatch',body:s.message});
   for(const c of state.coverage?.notes || []) items.push({title:'Coverage review',body:c});
-  for(const r of state.review || []) items.push({title:r.kind==='needs-person'?'Needs a person':'Confidence lowered',body:r.message});
+  for(const r of state.review || []) items.push({title:({'needs-person':'Needs a person','confidence-lowered':'Confidence lowered','check-stale':'Check needs a re-run','proposal-outdated':'Model proposal is outdated'})[r.kind]||'Review',body:r.message});
   if(!items.length){ root.innerHTML='<div class="warning"><b>No review signals detected</b><p>That does not mean the work is safe or complete. It only means the current checks did not flag anything.</p></div>'; return; }
   for(const item of items){
     const div=document.createElement('div');div.className='warning';div.innerHTML=`<b>${escapeHtml(item.title)}</b><p>${escapeHtml(item.body)}</p>`;root.append(div);
   }
+}
+
+async function send(body){
+  const r = await fetch('/events',{method:'POST',headers:{authorization:'Bearer '+currentToken},body:JSON.stringify(body)});
+  if(r.ok) return;
+  let why=`${r.status} ${r.statusText}`;
+  try{const j=await r.json(); why=j.reason||j.error||why}catch{}
+  throw new Error(why);
+}
+const sourceTitle = ref => { const s=(state.sources||[]).find(x=>x.id===ref); return s?.title ? `${s.title} (${ref})` : ref; };
+const kv = obj => Object.entries(obj||{}).map(([k,v])=>`${escapeHtml(k)} = ${escapeHtml(v ?? 'no answer')}`).join(', ');
+
+function renderActions(id,a){
+  if(!a.writable) return '<div class="section"><div class="section-title">Your actions</div><div class="empty-mini">This token can read this atom but not change it.</div></div>';
+  const answers=(a.options||[]).map(o=>`<button class="act${o===a.value?' on':''}" data-answer="${escapeHtml(o)}">${escapeHtml(o)}</button>`).join('');
+  const sources=(state.sources||[]).map(x=>`<option value="${escapeHtml(x.id)}">${escapeHtml(x.title||x.id)}</option>`).join('');
+  const canAttach=a.value!==null && a.value!==undefined && a.value!=='unknown';
+  const form=canAttach ? `<form id="ev-form" class="ev-form">
+      <label>What did you see or hear?<input id="ev-source" required maxlength="2048" placeholder="e.g. signed form dated 3 October"></label>
+      <label>Registered source<select id="ev-ref"><option value="">none (cannot corroborate)</option>${sources}</select></label>
+      <label>How do you know?<select id="ev-mode"><option value="observed">I saw it first-hand</option><option value="reported">Someone told me</option></select></label>
+      <label>It<select id="ev-supports"><option value="true">supports the answer "${escapeHtml(a.value)}"</option><option value="false">contradicts the answer "${escapeHtml(a.value)}"</option></select></label>
+      <label>Valid until (optional)<input id="ev-until" type="date"></label>
+      <button class="act primary" type="submit">Attach evidence</button>
+    </form>` : '<div class="empty-mini">Give an answer first; evidence belongs to one answer.</div>';
+  return `<div class="section"><div class="section-title">Your actions</div><div class="act-row">${answers}</div><div class="empty-mini">Changing the answer clears the evidence attached to the old one.</div>${form}<div id="act-error" class="error"></div></div>`;
+}
+
+function bindActions(id){
+  const fail=e=>{const box=$('act-error'); if(box) box.textContent='Not accepted: '+e.message};
+  const done=async()=>{ state=await api('/state'); renderWorkspace(); inspectAtom(id,document.querySelector(`.atom[data-atom="${CSS.escape(id)}"]`)); };
+  document.querySelectorAll('#inspector [data-answer]').forEach(btn=>btn.addEventListener('click',()=>
+    send({type:'answer.proposed',atom:id,value:btn.dataset.answer}).then(done,fail)));
+  $('ev-form')?.addEventListener('submit',ev=>{
+    ev.preventDefault();
+    const evidence={source:$('ev-source').value,mode:$('ev-mode').value,supports:$('ev-supports').value==='true'};
+    if($('ev-ref').value) evidence.source_ref=$('ev-ref').value;
+    if($('ev-until').value) evidence.valid_until=$('ev-until').value;
+    send({type:'evidence.attached',atom:id,evidence}).then(done,fail);
+  });
 }
 
 async function inspectAtom(id,button){
@@ -285,29 +333,38 @@ async function inspectAtom(id,button){
   button?.classList.add('active');
   const a=state.atoms[id]; const box=$('inspector');
   box.className='inspector-body';
-  box.innerHTML=`<div class="atom-id">${escapeHtml(id)}</div><h4>${escapeHtml(a.question)}</h4><span class="status-pill" style="--status:${statusVar(a.status)}">${escapeHtml(a.status)}</span><div class="section"><div class="section-title">Loading trace</div><div class="empty-mini">Reading evidence…</div></div>`;
+  const head=`<div class="atom-id">${escapeHtml(id)}</div><h4>${escapeHtml(a.question)}</h4><span class="status-pill" style="--status:${statusVar(a.status)}">${escapeHtml(a.status)}</span>`;
+  box.innerHTML=`${head}<div class="section"><div class="section-title">Loading trace</div><div class="empty-mini">Reading evidence…</div></div>`;
   try{
     const ex=await api('/explain/'+encodeURIComponent(id));
-    const reasons=(ex.reasons||[]).length ? ex.reasons.map(r=>`<div class="reason">${escapeHtml(r)}</div>`).join('') : '<div class="empty-mini">No status reasons recorded.</div>';
+    const carried=new Set(ex.basis||[]);
+    // Reasons name evidence by id; show the reader the source text instead.
+    const named=r=>(ex.evidence||[]).reduce((t,e)=>t.split(e.id).join(`"${e.source}"`),r);
+    const reasons=(ex.reasons||[]).length ? ex.reasons.map(r=>`<div class="reason">${escapeHtml(named(r))}</div>`).join('') : '<div class="empty-mini">No status reasons recorded.</div>';
+    const next=ex.next ? `<div class="reason next"><strong>For the next status:</strong> ${escapeHtml(ex.next)}</div>` : '';
     const evidence=(ex.evidence||[]).length ? ex.evidence.map(e=>{
       const support=e.supports ? 'supports' : 'contradicts';
       const expiry=e.valid_until ? `<span>valid to ${escapeHtml(e.valid_until)}</span>` : '';
-      return `<div class="evidence"><div class="evidence-top"><strong>${escapeHtml(e.source)}</strong><small>${support}</small></div><div>${escapeHtml(e.observer?.id || 'unknown observer')}</div><div class="evidence-tags"><span>${escapeHtml(e.observer?.kind || 'unknown')}</span><span>${escapeHtml(e.mode || '')}</span><span>lineage ${escapeHtml(e.lineage || '?')}</span>${e.deterministic?'<span>deterministic</span>':''}${expiry}</div></div>`;
+      const origin=e.source_ref ? `<span>source ${escapeHtml(sourceTitle(e.source_ref))}</span>` : e.origin_unverified ? '<span>no registered source</span>' : `<span>origin ${escapeHtml(e.lineage || '?')}</span>`;
+      const footing=e.basis ? `<div class="footing">Check read: ${kv(e.basis.reads) || 'inputs you cannot see'}${(e.basis.sources||[]).length?`; consulted ${e.basis.sources.map(x=>escapeHtml(sourceTitle(x))).join(', ')}`:''}</div>` : '';
+      const role=carried.has(e.id) ? '<span class="carries">carries the status</span>' : (ex.stale||[]).includes(e.id) ? '<span>stale: re-run</span>' : (ex.expired||[]).includes(e.id) ? '<span>expired</span>' : '';
+      return `<div class="evidence${carried.has(e.id)?' carrying':''}"><div class="evidence-top"><strong>${escapeHtml(e.source)}</strong><small>${support}</small></div><div>${escapeHtml(e.observer?.id || 'unknown observer')}</div><div class="evidence-tags"><span>${escapeHtml(e.observer?.kind || 'unknown')}</span><span>${escapeHtml(e.mode || '')}</span>${origin}${e.deterministic?'<span>deterministic</span>':''}${expiry}${role}</div>${footing}</div>`;
     }).join('') : '<div class="empty-mini">No evidence attached.</div>';
     const deps=(a.dependsOn||[]).length ? (a.dependsOn||[]).map(dep=>{
       const d=state.atoms[dep]; return `<div class="reason"><strong>${escapeHtml(dep)}</strong><br>${escapeHtml(d?.question || '')}<br><span style="color:var(--muted)">${escapeHtml(d?.status || 'unknown')}</span></div>`;
     }).join('') : '<div class="empty-mini">No prerequisites.</div>';
     const proposer=ex.answeredBy ? `<div class="reason">Proposed by ${escapeHtml(ex.answeredBy.id)} <span style="color:var(--muted)">(${escapeHtml(ex.answeredBy.kind)})</span></div>` : '';
+    const given=ex.answerBasis ? `<div class="footing">The model was given: ${ex.answerBasis.sources.length?`source(s) ${ex.answerBasis.sources.map(x=>escapeHtml(sourceTitle(x))).join(', ')}`:'no sources'}${Object.keys(ex.answerBasis.reads).length?`; inputs ${kv(ex.answerBasis.reads)}`:''}. Capsule ${escapeHtml(ex.answerBasis.capsuleSha256.slice(0,12))}.</div>` : '';
     const lowered=(ex.lowered||[]).length ? `<div class="section"><div class="section-title">Confidence lowered</div>${ex.lowered.map(x=>`<div class="reason">${escapeHtml(x)}</div>`).join('')}</div>` : '';
-    const expired=(ex.expired||[]).length ? `<div class="section"><div class="section-title">Expired evidence</div>${ex.expired.map(x=>`<div class="reason">${escapeHtml(x)}</div>`).join('')}</div>` : '';
-    box.innerHTML=`<div class="atom-id">${escapeHtml(id)}</div><h4>${escapeHtml(a.question)}</h4><span class="status-pill" style="--status:${statusVar(a.status)}">${escapeHtml(a.status)}</span><div class="section"><div class="section-title">Current answer</div><div>${escapeHtml(a.value ?? 'No answer')}</div>${proposer}</div><div class="section"><div class="section-title">Why this status</div>${reasons}</div>${lowered}<div class="section"><div class="section-title">Evidence</div>${evidence}</div><div class="section"><div class="section-title">Prerequisites</div>${deps}</div>${expired}`;
+    box.innerHTML=`${head}<div class="section"><div class="section-title">Current answer</div><div>${escapeHtml(a.value ?? 'No answer')}</div>${proposer}${given}</div><div class="section"><div class="section-title">Why this status</div>${reasons}${next}</div>${lowered}<div class="section"><div class="section-title">Evidence</div>${evidence}</div>${renderActions(id,a)}<div class="section"><div class="section-title">Prerequisites</div>${deps}</div>`;
+    bindActions(id);
   }catch(e){
     box.innerHTML += `<div class="section"><div class="error">Could not load evidence: ${escapeHtml(e.message)}</div></div>`;
   }
 }
 
 function renderWorkspace(){
-  $('intro').hidden=true; $('workspace').hidden=false;
+  $('intro').hidden=true; $('workspace').hidden=false; $('refresh').hidden=false;
   $('pack-title').textContent=state.pack?.id || 'EAI work';
   $('pack-domain').textContent=state.pack?.domain || 'No domain description supplied.';
   $('pack-version').textContent=`v${state.pack?.version || '?'}`;
@@ -337,6 +394,7 @@ async function load(){
   finally{btn.disabled=false;btn.textContent='Open workbench'}
 }
 $('load').addEventListener('click',load);
+$('refresh').addEventListener('click',async()=>{ try{ state=await api('/state'); renderWorkspace(); const open=document.querySelector('#inspector .atom-id')?.textContent; if(open&&state.atoms[open]) inspectAtom(open,document.querySelector(`.atom[data-atom="${CSS.escape(open)}"]`)); }catch(e){} });
 $('token').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
 </script>
 </body>
