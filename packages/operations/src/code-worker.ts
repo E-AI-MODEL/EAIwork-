@@ -119,7 +119,7 @@ export class LocalCodeWorkspace {
     this.modelId="ollama:"+config.model;
     this.host=localOllamaHost(config.host);
     this.timeoutMs=config.timeoutMs??90000;
-    if(!Number.isInteger(this.timeoutMs)||this.timeoutMs<1000||this.timeoutMs>120000)
+    if(!Number.isInteger(this.timeoutMs)||this.timeoutMs<1000||this.timeoutMs>300000)
       throw new Error("Ongeldige Ollama-timeout");
     this.maxPredictTokens=config.maxPredictTokens??5000;
     if(!Number.isInteger(this.maxPredictTokens)||this.maxPredictTokens<128||this.maxPredictTokens>5000)

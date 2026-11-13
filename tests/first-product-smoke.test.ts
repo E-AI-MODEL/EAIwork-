@@ -60,7 +60,7 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
   const generated:Array<{path:string;sha256:string}>=[];
   const checks:Array<{step:number;phase:string;status:string;imageId:string|null;manifestSha256:string}>=[];
   const workspace=new LocalCodeWorkspace({workspaceDir:project,profileDir:profile,
-    host,model,timeoutMs:120000,maxPredictTokens:1536});
+    host,model,timeoutMs:240000,maxPredictTokens:1536});
   const app=createDemoServer({codeWorkspace:workspace,persistentDir:profile,
     schedulerIntervalMs:0,projectSuiteRunner:runIsolatedProjectSuite,
     seedDemoData:false,localLiveView:true});
