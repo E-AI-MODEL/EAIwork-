@@ -24,3 +24,15 @@ Datum: 13 november 2026. Onderzocht: integratie van een echte Ollama-codeworker,
 ## Vrijgavevoorwaarde
 
 Niet mergen als de **actuele PR-head** geen groene CI, Docker-tests, CodeQL en productproef met een echt Ollama-model heeft. De eerste geslaagde proef moet aantonen dat beide modelvoorstellen via de server zijn gemaakt, vóór en na toepassen in Docker getest en afzonderlijk als geheel in Docker beoordeeld. Bij een mislukte of niet uitgevoerde check blijft de PR open.
+
+## Uitgevoerde validatie van de echte modelproef
+
+De eerste geslaagde echte modelproef is terug te vinden in [GitHub Actions-run 43512974416](https://github.com/E-AI-MODEL/EAIwork-/actions/runs/43512974416), op commit `40a17db0d99905468ad0d9612079dff1b1a6dc23`.
+
+- Ollama `0.40.16`, model `qwen2.5-coder:3b`, gemeten modelhash `f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225`.
+- Twee echte codevoorstellen op `src/amount.js` en `src/invoice.js`.
+- Voor- en natests per stap uitgevoerd in Docker; afzonderlijke acceptatie geslaagd in Docker.
+- Artifact `eaiwork-first-product-proof` aangemaakt, met `PROEFRESULTAAT.json` en bestanden: [Actions-artifact](https://github.com/E-AI-MODEL/EAIwork-/actions/runs/43512974416/artifacts/14079202327).
+- GitHub CI, Docker-sandbox en CodeQL hadden op dezelfde commit een geslaagde workflow. Een groene CodeQL-uitvoering is geen onafhankelijke handmatige penetratietest.
+
+De modelhash is nu ook een verplichte vergelijking in de GitHub-productproef. Het voorbeeld gebruikt een tijdelijke testidentiteit voor goedkeuring. Deze run toont **geen echte menselijke beoordeling**, geen algemene betrouwbaarheid van het model en geen productiepublicatie.

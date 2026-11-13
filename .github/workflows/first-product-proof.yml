@@ -54,6 +54,7 @@ jobs:
       - name: Produce and check a real model-generated product
         env:
           EAI_FIRST_PRODUCT_MODEL: qwen2.5-coder:3b
+          EAI_FIRST_PRODUCT_EXPECTED_DIGEST: f72c60cabf6237b07f6e632b2c48d533cef25eda2efbd34bed21c5e9c01e6225
           EAI_FIRST_PRODUCT_OLLAMA_HOST: http://127.0.0.1:11434
           EAI_FIRST_PRODUCT_OUTPUT_DIR: dist/first-product-proof
         run: npm run proof:first-product

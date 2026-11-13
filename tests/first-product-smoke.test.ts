@@ -53,6 +53,9 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
   const tags=await tagsResponse.json() as any;
   const modelDigest=tags.models?.find((item:any)=>item.name===model)?.digest;
   assert.match(modelDigest||"",/^[a-f0-9]{64}$/,"Onbekende modelhash");
+  const expectedDigest=process.env.EAI_FIRST_PRODUCT_EXPECTED_DIGEST;
+  if(expectedDigest)assert.equal(modelDigest,expectedDigest,
+    "De actuele Ollama-modelbytes wijken af van de gecontroleerde modelhash");
   const versionResponse=await fetch(host+"/api/version",{signal:AbortSignal.timeout(10000)});
   assert.equal(versionResponse.ok,true);
   const ollamaVersion=(await versionResponse.json() as any).version;
