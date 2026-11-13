@@ -19,7 +19,7 @@ If Ollama listens on a different loopback port, set `EAI_LIVE_OLLAMA_HOST=http:/
 
 The test executes three concurrent isolated workers. Each worker gets a distinct question and one authorized source fragment. It checks that model outputs are valid distributions, but **does not independently inspect the actual HTTP requests**. For request-level isolation use `tests/ollama-sandbox-integration.test.ts`.
 
-The code-product test bounds the synthetic example to 512 generated tokens and prewarms the actual model on CI. A timeout or incomplete JSON fails the proof. Other local code tasks retain their normal token budget. No code is replaced by a canned answer.
+The code-product test bounds the synthetic example to 1536 generated tokens and prewarms the actual model on CI. A timeout or incomplete JSON fails the proof. Other local code tasks retain their normal token budget. No code is replaced by a canned answer.
 
 ## Interpretation
 

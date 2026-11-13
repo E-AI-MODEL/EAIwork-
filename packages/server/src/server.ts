@@ -558,7 +558,10 @@ export function makeServer(cfg: Config) {
             return json(res,200,await plans.exclusive(async()=>{
               const current=plans.active(request.planId as string);
               if(current.status!=="waiting")throw new Error("Deze stap heeft al een voorstel");
-              const proposed=await workspace.propose(current.step.path,current.step.instruction,current.step.testPath);
+              const relatedPaths=current.record.steps.map(step=>step.path)
+                .filter(path=>path!==current.step.path);
+              const proposed=await workspace.propose(current.step.path,current.step.instruction,
+                current.step.testPath,relatedPaths);
               const journalSeq=recordCodeAction("proposed",proposed,"review-required");
               return {...plans.attachProposal(request.planId as string,proposed.id),proposalId:proposed.id,journalSeq};
             }));
