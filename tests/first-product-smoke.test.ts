@@ -7,7 +7,6 @@
  */
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {spawnSync} from "node:child_process";
 import {cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join,dirname,resolve} from "node:path";
@@ -26,9 +25,17 @@ const steps=[
   {path:"src/invoice.js",testPath:"tests/invoice.test.js",
     instruction:"Voeg een export function totalWithShipping(shipping = 0) toe die amount * 2 + shipping teruggeeft. Behoud de export total."}
 ];
-// Remove the parent node:test marker: otherwise a nested Node runner silently skips tests.
-const acceptanceEnv=()=>Object.fromEntries(Object.entries(process.env)
-  .filter(([key])=>key!=="NODE_TEST_CONTEXT"));
+/** Run the independent acceptance file inside the same networkless, read-only
+ * Docker boundary as the code tests. Never execute model-generated code on host.
+ */
+const acceptancePaths=["tests/amount.test.js","tests/invoice.test.js","acceptance/final-product.test.js"];
+const acceptanceFiles=["src/amount.js","src/invoice.js",...acceptancePaths];
+async function testAcceptedProduct(project:string){
+  return runIsolatedProjectSuite({
+    files:acceptanceFiles.map(path=>({path,content:readFileSync(join(project,path),"utf8")})),
+    testPaths:acceptancePaths
+  });
+}
 test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-test → akkoord → eindproduct",{
   skip:enabled?false:"Deze proef draait apart met EAI_FIRST_PRODUCT_SMOKE=1 en Docker."
 },async()=>{
@@ -59,13 +66,11 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     seedDemoData:false,localLiveView:true});
   try{
     assert.ok(existsSync(join(project,"acceptance/final-product.test.js")));
-    const premature=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
-      cwd:project,encoding:"utf8",timeout:10000,env:acceptanceEnv()
-    });
-    assert.notEqual(premature.status,0,
-      "De oplevercontrole moet vóór de wijzigingen mislukken.");
-    assert.match(premature.stdout,/^# tests [1-9][0-9]*$/m,
-      "De negatieve eindtest moet daadwerkelijk worden uitgevoerd.");
+    const premature=await testAcceptedProduct(project);
+    assert.equal(premature.status,"failed",
+      "De geïsoleerde oplevercontrole moet vóór de wijzigingen mislukken.");
+    assert.equal(premature.testsExecuted,true,
+      "De negatieve eindtest moet daadwerkelijk in Docker zijn uitgevoerd.");
     assert.equal(readFileSync(join(project,"src/amount.js"),"utf8"),"export const amount = 10;\n");
     await new Promise<void>(resolve=>app.server.listen(0,"127.0.0.1",resolve));
     const origin="http://127.0.0.1:"+((app.server.address() as AddressInfo).port);
@@ -123,11 +128,10 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     assert.equal(plans.status,200);
     const completed=plans.data.plans.find((p:any)=>p.id===id);
     assert.equal(completed?.state,"done","De codewerkopdracht moet afgerond zijn.");
-    const final=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
-      cwd:project,encoding:"utf8",timeout:10000,env:acceptanceEnv()
-    });
-    assert.equal(final.status,0,"Het opgeleverde product voldoet niet aan de vraag:\n"+final.stdout+"\n"+final.stderr);
-    assert.match(final.stdout,/^# tests [1-9][0-9]*$/m,
+    const final=await testAcceptedProduct(project);
+    assert.equal(final.status,"passed",
+      "Het opgeleverde product voldoet niet aan de vraag: "+final.output);
+    assert.equal(final.testsExecuted,true,
       "Een lege of overgeslagen test mag nooit als geslaagde oplevering tellen.");
     assert.equal((await call("/ops/verify")).data.ok,true);
     const proof=(await call("/ops/code/plan?id="+encodeURIComponent(id))).data.proof;
@@ -139,7 +143,8 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       model,modelDigest,ollamaVersion,modelCalls:generated.length,
       generated,docker:"werkelijk uitgevoerd",
       gecontroleerdeBestanden:steps.map(step=>step.path),
-      eindtest:"geslaagd",publicatie:"niet uitgevoerd"
+      eindtest:"geslaagd in afgeschermde Docker-container",
+      acceptanceManifestSha256:final.manifestSha256,publicatie:"niet uitgevoerd"
     };
     const output=process.env.EAI_FIRST_PRODUCT_OUTPUT_DIR;
     if(output){
@@ -150,11 +155,9 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
       if(existsSync(target))throw new Error("De uitvoermap bestaat al: "+target);
       mkdirSync(dirname(target),{recursive:true});
       cpSync(project,target,{recursive:true});
-      const delivered=spawnSync(process.execPath,["--test","acceptance/final-product.test.js"],{
-        cwd:target,encoding:"utf8",timeout:10000,env:acceptanceEnv()
-      });
-      assert.equal(delivered.status,0,"De gekopieerde oplevering werkt niet: "+delivered.stdout);
-      assert.match(delivered.stdout,/^# tests [1-9][0-9]*$/m);
+      const delivered=await testAcceptedProduct(target);
+      assert.equal(delivered.status,"passed","De gekopieerde oplevering werkt niet: "+delivered.output);
+      assert.equal(delivered.testsExecuted,true);
       writeFileSync(join(target,"OPLEVERING.md"),
         "# EAIwork eerste productproef\\n\\n"+
         "Dit is een klein JavaScript-voorbeeld, geen complete gebruikersapplicatie.\\n"+
@@ -164,7 +167,10 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
         "\\`\\`\\`sh\\nnode --test acceptance/final-product.test.js\\n\\`\\`\\`\\n\\n"+
         "Alle codevoorstellen kwamen van het genoemde echte Ollama-model. Er is niets gepubliceerd.\\n");
       writeFileSync(join(target,"PROEFRESULTAAT.json"),JSON.stringify({
-        ...result,tests:checks,acceptatietest:"geslaagd op gekopieerde bestanden",
+        ...result,tests:checks,
+        acceptatietest:{status:"geslaagd in Docker op gekopieerde bestanden",
+          manifestSha256:delivered.manifestSha256,imageId:delivered.imageId,
+          testsExecuted:delivered.testsExecuted},
         omvang:"twee bestanden, geen compleet product"
       },null,2)+"\\n");
       process.stdout.write("EAIwork bewijsbestanden opgeslagen in "+target+"\\n");

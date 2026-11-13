@@ -31,7 +31,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ollama-dist"
           tar --zstd -xf "$RUNNER_TEMP/ollama.tar.zst" -C "$RUNNER_TEMP/ollama-dist"
           echo "$RUNNER_TEMP/ollama-dist/bin" >> "$GITHUB_PATH"
-          echo "$RUNNER_TEMP/ollama-dist/lib" >> "$LD_LIBRARY_PATH"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/ollama-dist/lib" >> "$GITHUB_ENV"
       - name: Start real Ollama on loopback
         run: |
           set -euo pipefail

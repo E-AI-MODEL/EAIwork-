@@ -48,7 +48,7 @@ export function validateProjectInput(input:ProjectTestInput):ProjectTestInput{
     paths.add(file.path);
     if(!file.path.endsWith(".test.js"))sourceCount++;
   }
-  if(total>16*32768||sourceCount<2||sourceCount!==input.testPaths.length||
+  if(total>16*32768||sourceCount<2||sourceCount>input.testPaths.length||
      input.testPaths.some(path=>!safe(path)||!path.endsWith(".test.js")||!paths.has(path))||
      new Set(input.testPaths).size!==input.testPaths.length||
      input.files.filter(file=>file.path.endsWith(".test.js")).length!==input.testPaths.length)
