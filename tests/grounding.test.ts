@@ -197,3 +197,28 @@ test("deriveAll does not depend on atom order and never lets a premise cycle gro
     assert.deepEqual(Object.fromEntries(Object.keys(expected).map((id) => [id, d[id].status])), expected);
   }
 });
+
+test("replaying legacy evidence without registered source never corroborates or proves", () => {
+  const witness = (id: string, observer: string) => ({
+    id, source: "old form", observer: { kind: "person" as const, id: observer },
+    mode: "observed" as const, lineage: "legacy:" + id, supports: true,
+  });
+  const oldCheck = {
+    id: "old-check", source: "old calculation",
+    observer: { kind: "check" as const, id: "check:old" },
+    mode: "observed" as const, lineage: "legacy:check",
+    deterministic: true, supports: true,
+  };
+  const legacy: State = {
+    "a.legacy": { value: "yes", evidence: [witness("first", "jan"), witness("second", "piet")], flags: [], lowered: [] },
+    "a.proof": { value: "yes", evidence: [witness("third", "jan"), oldCheck], flags: [], lowered: [] },
+  };
+  const old = deriveAll(legacy, "2026-10-05");
+  assert.equal(old["a.legacy"].status, "observed");
+  assert.equal(old["a.proof"].status, "observed");
+  legacy["a.legacy"].evidence[0].source_ref = "s.form";
+  legacy["a.legacy"].evidence[0].lineage = "source:s.form";
+  legacy["a.legacy"].evidence[1].source_ref = "s.ledger";
+  legacy["a.legacy"].evidence[1].lineage = "source:s.ledger";
+  assert.equal(deriveAll(legacy, "2026-10-05")["a.legacy"].status, "checked");
+});

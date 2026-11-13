@@ -20,10 +20,23 @@ export interface DeriveOpts {
  * a different origin, a different observer, and both origins registered.
  * Anything less could be one fact counted twice.
  */
-export const independent = (a: Evidence, b: Evidence) =>
-  a.lineage !== b.lineage && a.observer.id !== b.observer.id && !a.origin_unverified && !b.origin_unverified;
-
 const isCheck = (e: Evidence) => e.observer.kind === "check" && e.deterministic === true;
+
+/**
+ * Legacy evidence has no source_ref or origin_unverified flag. Missing flags must not
+ * turn unsigned legacy lineages into registered origins. A check is a separate case:
+ * it must carry the server-recorded values it read, not just an arbitrary lineage.
+ */
+const hasVerifiedOrigin = (e: Evidence): boolean => {
+  if (e.origin_unverified === true) return false;
+  if (isCheck(e)) return e.lineage.startsWith("check:") && !!e.basis?.reads;
+  return typeof e.source_ref === "string" &&
+    e.source_ref.length > 0 && e.lineage === `source:${e.source_ref}`;
+};
+
+export const independent = (a: Evidence, b: Evidence) =>
+  a.lineage !== b.lineage && a.observer.id !== b.observer.id &&
+  hasVerifiedOrigin(a) && hasVerifiedOrigin(b);
 
 const NEXT: Record<Status, string> = {
   unknown: "propose an answer",
