@@ -44,6 +44,13 @@ jobs:
           exit 1
       - name: Pull actual coding model
         run: ollama pull qwen2.5-coder:1.5b
+      - name: Prewarm the real coding model with a bounded request
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 180 \
+            -H 'Content-Type: application/json' \
+            --data '{"model":"qwen2.5-coder:1.5b","prompt":"Say ready.","stream":false,"options":{"num_predict":12}}' \
+            http://127.0.0.1:11434/api/generate > /dev/null
       - name: Produce and check a real model-generated product
         env:
           EAI_FIRST_PRODUCT_MODEL: qwen2.5-coder:1.5b

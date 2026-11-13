@@ -104,9 +104,10 @@ export class LocalCodeWorkspace {
   private readonly host:string;
   private readonly model:string;
   private readonly timeoutMs:number;
+  private readonly maxPredictTokens:number;
   private readonly testRunner:(input:DockerTestInput)=>Promise<DockerTestResult>;
   private readonly activeTests=new Set<string>();
-  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
+  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;maxPredictTokens?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
     this.root=safeRoot(config.workspaceDir);
     const profile=safeRoot(config.profileDir);
     if(this.root===profile||this.root.startsWith(profile+sep)||profile.startsWith(this.root+sep))
@@ -120,6 +121,9 @@ export class LocalCodeWorkspace {
     this.timeoutMs=config.timeoutMs??90000;
     if(!Number.isInteger(this.timeoutMs)||this.timeoutMs<1000||this.timeoutMs>120000)
       throw new Error("Ongeldige Ollama-timeout");
+    this.maxPredictTokens=config.maxPredictTokens??5000;
+    if(!Number.isInteger(this.maxPredictTokens)||this.maxPredictTokens<128||this.maxPredictTokens>5000)
+      throw new Error("Ongeldige limiet voor modeltokens");
     this.storage=join(profile,"code-proposals");
     if(existsSync(this.storage)){
       if(lstatSync(this.storage).isSymbolicLink()||!lstatSync(this.storage).isDirectory())
@@ -210,7 +214,7 @@ export class LocalCodeWorkspace {
           explanation:{type:"string",maxLength:3000},
           checks:{type:"array",maxItems:8,items:{type:"string",maxLength:200}},
         },required:["replacement","explanation","checks"],additionalProperties:false},
-        options:{temperature:0,num_predict:5000},
+        options:{temperature:0,num_predict:this.maxPredictTokens},
         messages:[{role:"user",content:JSON.stringify({
           instruction:"Propose the COMPLETE replacement for the single existing source file. Do not request shell commands, other file access, network, or publication. Give suggested checks but do not claim tests were executed.",
           userRequest:instruction,path,original,
