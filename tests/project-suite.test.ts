@@ -136,6 +136,13 @@ test("combined suite covers imports and gates every step before and after apply"
     assert.equal(staged(f.calls[2],"src/b.js"),replacementB);
     assert.equal(staged(f.calls[3],"src/b.js"),replacementB);
     assert.equal(new OrderedCodePlans(f.workspace,{suiteRunner:f.suiteRunner}).view(id).state,"done");
+    const verified=plans.view(id);
+    assert.equal(verified.proof.status,"current");
+    assert.match(verified.proof.manifestSha256||"",/^[a-f0-9]{64}$/);
+    writeFileSync(join(f.project,"src","a.js"),"export const total = 999;\n");
+    assert.equal(plans.view(id).state,"blocked");
+    assert.equal(plans.view(id).proof.status,"stale");
+    assert.equal(new OrderedCodePlans(f.workspace,{suiteRunner:f.suiteRunner}).view(id).proof.status,"stale");
   }finally{await f.close()}
 });
 test("failed joint post-test halts later files without overwriting them",async()=>{

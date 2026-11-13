@@ -7,6 +7,7 @@ import {join} from "node:path";
 import type {LocalCodeWorkspace} from "./code-worker.ts";
 import type {DockerTestResult} from "./docker-code-test.ts";
 import {runIsolatedProjectSuite,projectManifestSha256,type ProjectTestInput,type ProjectTestResult} from "./docker-project-suite.ts";
+import {evidenceForProject,validProjectPass} from "./checked-code-evidence.ts";
 
 type StepInput={path:string;instruction:string;testPath:string};
 type PlannedStep=StepInput & {
@@ -90,7 +91,7 @@ export class OrderedCodePlans {
           else if(proposal.status==="applied"){
             if(suiteRequired){
               if(proposal.sourceChanged){status="blocked";detail="Toegepaste bron is gewijzigd"}
-              else if(step.projectPostTest?.status==="passed"&&step.projectPostTest.testsExecuted)
+              else if(validProjectPass(step.projectPostTest))
                 status="done";
               else if(step.projectPostTest){status="blocked";detail="Gezamenlijke projecttest is niet geslaagd"}
               else status="needs-project-test";
@@ -127,10 +128,23 @@ export class OrderedCodePlans {
       (!!plan.stoppedAt);
     const state=plan.stoppedAt?"stopped":blocked?"blocked":next<0?"done":"active";
     if(state==="active"&&next>=0)steps[next].active=true;
+    // A final, recorded Docker result is usable only while the exact test manifest
+    // still matches all planned files. A later untested edit makes this stale.
+    const last=plan.steps.at(-1);
+    let currentManifest:string|null=null;
+    if(suiteRequired && last?.proposalId){
+      try{
+        currentManifest=projectManifestSha256(
+          this.projectInput(plan,plan.steps.length-1,last.proposalId,"post"));
+      }catch{ /* Missing, changed or unapproved bytes invalidate the recorded proof. */ }
+    }
+    const proof=evidenceForProject(
+      suiteRequired?last?.projectPostTest:undefined,currentManifest,
+      plan.steps.length*2,plan.steps.map(step=>step.testPath),state==="done");
     return {id:plan.id,title:plan.title,createdAt:plan.createdAt,
       createdBy:plan.createdBy,stoppedAt:plan.stoppedAt??null,
       state,nextStep:state==="active"?next:null,
-      suitePolicy:plan.suitePolicy??"single-file-v1",steps};
+      suitePolicy:plan.suitePolicy??"single-file-v1",steps,proof};
   }
   create(input:{title:string;steps:StepInput[];suitePolicy?:"single-file-v1"|"project-node-v1"},actorId:string){
     if(this.busy)throw new Error("Er loopt al een codeactie");
@@ -230,7 +244,7 @@ export class OrderedCodePlans {
       if(i<index){
         if(!step.proposalId)throw new Error("Een eerdere wijziging heeft geen voorstel");
         const prior=this.workspace.inspect(step.proposalId);
-        if(prior.status!=="applied"||step.projectPostTest?.status!=="passed"||!step.projectPostTest.testsExecuted)
+        if(prior.status!=="applied"||!validProjectPass(step.projectPostTest))
           throw new Error("Een eerdere bestandsstap is niet volledig goedgekeurd");
         expected=prior.replacementSha256;
       }else if(i===index&&phase==="post"){
@@ -249,7 +263,7 @@ export class OrderedCodePlans {
     const {record,index,step,status}=this.active(id);
     if(record.suitePolicy!=="project-node-v1")return true;
     if(status!=="review"||step.proposalId!==proposalId||
-       step.projectPreTest?.status!=="passed"||!step.projectPreTest.testsExecuted)
+       !validProjectPass(step.projectPreTest))
       return false;
     const manifest=projectManifestSha256(this.projectInput(record,index,proposalId,"pre"));
     return step.projectPreTest.manifestSha256===manifest;
@@ -281,7 +295,7 @@ export class OrderedCodePlans {
        result.fileCount!==input.files.length||
        JSON.stringify(result.testPaths)!==JSON.stringify([...input.testPaths].sort())||
        !["passed","failed","unavailable"].includes(result.status)||
-       (result.status==="passed"&&!result.testsExecuted))
+       (result.status==="passed"&&!validProjectPass(result)))
       throw new Error("De gezamenlijke testuitslag hoort niet bij deze bronversies");
     // Write the measured outcome to the operations journal before advancing the plan.
     onResult?.(result);

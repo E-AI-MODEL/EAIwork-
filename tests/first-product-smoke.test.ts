@@ -133,6 +133,10 @@ test("eerste volledige productproef: lokaal HTTP → voorstel → echte Docker-t
     assert.match(final.stdout,/^# tests [1-9][0-9]*$/m,
       "Een lege of overgeslagen test mag nooit als geslaagde oplevering tellen.");
     assert.equal((await call("/ops/verify")).data.ok,true);
+    const proof=(await call("/ops/code/plan?id="+encodeURIComponent(id))).data.proof;
+    assert.equal(proof.status,"current");
+    assert.equal(proof.scope,"planned-files-only");
+    assert.match(proof.manifestSha256,/^[a-f0-9]{64}$/);
     const result={
       opdracht:"Eerste bruikbare product",status:"opgeleverd binnen deze afgebakende proef",
       model:"nagebootst Ollama-antwoord",docker:"werkelijk uitgevoerd",
