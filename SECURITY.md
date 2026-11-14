@@ -42,4 +42,9 @@ Local code tests force a verified Unix-domain Docker socket. Remote `DOCKER_HOST
 
 Legacy events without an explicit registered `source_ref` do not corroborate, even if they have distinct actor IDs or lineages. The Docker codeplan proof is bound to a full SHA-256 manifest of explicitly planned source and test files and is checked again on every read. It does not grant runtime rights, publication rights or semantic `proven` status to unrelated atoms.
 
+- A check has one current verdict per atom. A failing run of a check that previously supported an atom is recorded as `check.failed`, which contradicts the answer and withdraws the proof. Only check actors can emit either verdict, and only the server writes them.
+- A check marked `auto` is run by the server itself after operations events, as that check's own actor. With `auto.answer`, the fixed actor `system:evidence-bridge` proposes the answer the check verifies, only on an atom nobody has answered. Neither path takes input from a request body.
+- The operations journal has no evidence authority. A finished task, a green Docker test or an applied change never writes to the evidence log; only the verdict of a registered check does. Because the journal is not yet signed into a witness, a journal-backed proof is only as strong as the local account that owns the journal files.
+- Proposed code shares a process with the test that imports it. Before anything runs, a candidate that ends or manipulates the process, touches process output, imports the test harness or a process-control module, or evaluates code from strings is refused. This stops the direct ways to fake a pass; it is not a sandbox against hostile code inside the test process.
+
 Other sensitive areas: token handling, evidence provenance, log integrity, request-size limits, source-handle scope, provider-side session reuse and injection through evidence text.

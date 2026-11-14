@@ -76,51 +76,28 @@ person / worker capsule / check        ├── review signals
 
 The core package has no network access. The server owns actor identity, event ids and time. Attempts to bypass status rules are rejected and stay observable through the event flow.
 
-## EAIwork lokaal met Ollama
+## Run it locally
 
-EAIwork kan een **lokaal Ollama-model** gebruiken om een conceptwerkplan voor te stellen. De gewone taakuitvoering en controle blijven bij EAIwork. Het model krijgt geen extra rechten.
+Three ways to start, all bound to `127.0.0.1`. Requires Node `22.18+`.
 
-1. Installeer Node.js 22.18+ en [Ollama](https://ollama.com/). Start Ollama en download minstens één model, bijvoorbeeld `ollama pull qwen2.5:1.5b`.
-2. Start met `npm run local:ollama -- --model=qwen2.5:1.5b`. Bij precies één lokaal model is `npm run local:ollama` genoeg.
-3. Open het getoonde localhost-adres, kies **Meer > Contracten en registratie** en verbind met het tijdelijke token dat in je eigen terminal verschijnt.
-4. Kies **Uitvoering**, beschrijf de opdracht en vraag een voorstel van het lokale model. Controleer de taken, beperkingen en ontbrekende informatie zelf voordat je ze goedkeurt.
+| Goal | Command | What you get |
+|---|---|---|
+| Look around with example data | `npm run demo:dashboard` | A temporary server with four tested local workers and four example missions. Data is deleted on exit. |
+| Work with your own local model | `npm run local:ollama` | Ollama proposes work plans; you approve them. Missions and logs are kept in `~/.eaiwork/local`. |
+| Let a model change code under control | `npm run local:ollama -- --example` | Adds the code worker on a fresh example project: proposal, syntax check, isolated Docker test, your yes or no, apply, restore. Use `--worktree=/path/to/project` for your own project. |
 
-Geen cloudmodel, externe API-sleutel of installatie van een browser-LLM nodig. Het modelendpoint is uitsluitend een lokaal loopback-adres en het programma publiceert niets. Een Ollama-model kan onjuiste of niet-uitvoerbare taken voorstellen. Niet-ondersteunde taken worden door de server geblokkeerd; een planvoorstel is geen bewijs van zelfstandig uitgevoerde softwareontwikkeling.
+Open the address printed in the terminal and connect with the one-time token shown there. Ollama must be running with at least one model (`ollama pull qwen2.5-coder:3b`); the Docker test needs `docker pull node:22-alpine` and a local Docker socket. Nothing is sent to a cloud model and nothing is published.
 
-**Lokale opslag:** `npm run local:ollama` bewaart het operationslog en ondertekeningssleutels standaard in `~/.eaiwork/local`. Na herstart lees je dezelfde opdrachten terug. Er zijn nog geen automatische back-ups. Een beschadigd log wordt niet stilzwijgend gereset. Zie [Ollama lokaal starten](docs/local-ollama-first-run.md).
+What the local server does and does not do:
 
-**Herstel na een onderbreking:** na een herstart laat **Meer > Codeworker > Onderbroken acties** zien of een eerder goedgekeurde bestandswijziging op schijf is terug te vinden. EAIwork blokkeert nieuwe codewijzigingen totdat je de status hebt gecontroleerd. Onbekende bestandsinhoud wordt niet automatisch overschreven. Zie [de herstelprocedure](docs/local-ollama-first-run.md#onderbroken-bestandswijzigingen-controleren).
+- **A model proposes; it never approves.** Plans, code changes and releases wait for a person, or for a task maximum a person set in advance.
+- **Code is tested before it is applied.** The proposed bytes run against the chosen test in a container without network, without your project mounted and without write access, on a local Docker socket only. A change that reaches into the process or the test harness is refused, and only named tests that really ran count as a pass.
+- **Interrupted work is not repeated blindly.** After a restart, unfinished file changes are shown for review and new changes are blocked until that is done.
+- **Recorded work becomes evidence by a rule, not by assertion.** With a code workspace the evidence view carries one extra question: *does every applied code change have a passing isolated test for exactly the applied bytes?* A deterministic rule over the operations journal answers it. When it holds, the atom is `proven` with the journal as its registered source. When an untested change is applied, the proof is withdrawn; it returns when the rule holds again. No person and no model sets that status.
 
-**Codeworker (afgeschermde proef):** geef een bestaande lokale projectmap vrij met `npm run local:ollama -- --model=qwen2.5:1.5b --worktree=/pad/naar/project`. Onder **Meer > Codeworker** kun je voor één bestaand bronbestand een volledige vervanging laten voorstellen. Pas na het bekijken van de code en een afzonderlijke bevestiging kan EAIwork die ene wijziging toepassen. De oorspronkelijke inhoud wordt bewaard. Er is nog geen automatische testuitvoering, git-commit of algemene autonome codeproductie.
+Step-by-step guides (Dutch): [first local run](docs/local-ollama-first-run.md), [the example software package](docs/local-demo-softwarepakket.md). All documents: [docs/index.md](docs/index.md).
 
-**Optionele echte JavaScript-tests:** installeer Docker en voer vooraf `docker pull node:22-alpine` uit. Kies bij een voorstel een bestaand `.test.js`-bestand. Met **Test in Docker** draait alleen de tijdelijke kopie van de voorgestelde JavaScript-bron en het gekozen testbestand in een afgeschermde container. Een mislukte test blokkeert het toepassen. Dit is geen projectbrede test of volledig beveiligingsonderzoek. Zie de [lokale handleiding](docs/local-ollama-first-run.md).
-
-## EAIwork-dashboard lokaal uitproberen
-
-De nieuwe operationsomgeving staat voorlopig in [concept-PR #23](https://github.com/E-AI-MODEL/EAIwork-/pull/23). Je kunt een afgeschermde, tijdelijke proef starten zonder eerst tokens en een witnessbestand aan te maken:
-
-```bash
-npm run demo:dashboard
-```
-
-Open het adres dat in de terminal verschijnt, normaal `http://127.0.0.1:8788/dashboard`. Kies **Contracten en registratie**, vul het tijdelijke token uit diezelfde terminal in en verbind de server. Er zijn vier toegelaten lokale workers, vier echte voorbeeldmissies en een eerdere uitvoering beschikbaar. Via **Echte uitvoering**, **Planner en taken**, **Workerleger**, **Bewijs en herkomst**, **Bronnen en RepoSearch** en **Logboek** kun je het verloop onderzoeken. De lokale proef biedt geen algemene autonome AI-agent of online workerhost.
-
-De missie **Automatische tekstverwerking uitproberen** laat twee lokale tekstworkers zelfstandig achter elkaar uitvoeren. Kies bij **Echte uitvoering** een taakmaximum van twee, geef expliciet toestemming en volg het resultaat. Na een serverherstart vervalt de automatische toestemming standaard. Een missie-eigenaar kan via de API vooraf expliciet instemmen met voortzetting van nog niet begonnen lokale taken en met begrensd herstel van bijwerkingsvrije berekeningen. Een onderbroken externe actie wordt nooit automatisch herhaald. Dit is nog geen duurzame, parallelle AI-workerpool.
-
-Deze proef draait uitsluitend op `127.0.0.1`, bewaart gegevens in een tijdelijke map en verwijdert die na normaal afsluiten met Ctrl+C. Gebruik alleen niet-vertrouwelijke voorbeeldinformatie. De publieke HTML-demo op eaimodel.nl bevat geen toegang tot deze lokale server en doet geen modelaanroepen.
-
-
-De ontwikkelbranches voegen ook revisies van missieplannen en een alleen-lezen plancontrole toe. De beveiligde route `POST /ops/plans/preflight` toont fases, afhankelijkheden en eventuele blokkades voordat een persoon een plan goedkeurt. Zie [de controle van het missieplan](docs/plan-preflight-v0.1.md), [duurzaam herstel](docs/durable-execution-v0.2.md) en [planversies](docs/plan-extensions-v0.1.md). Deze functies staan nog in concept-PR's en zijn geen online productieomgeving.
-
-Een aanvullende, beperkte proef kan twee onafhankelijke lokale teksttaken in afzonderlijke childprocessen uitvoeren via `POST /ops/missions/:id/parallel/run`. Dit is een door een persoon gestarte route, geen automatische parallelle workerpool. De bestaande bewijsregels en herstelbeperkingen blijven gelden. Zie [parallelle uitvoering van vaste tekstworkers](docs/parallel-pure-local-v0.1.md).
-
-Een tweede uitvoeringsproef verbindt een los tekstworkerproces via een beperkt localhost-HTTP-protocol. De missie-eigenaar keurt een taakmaximum goed; de server registreert de claim vóór uitvoering en controleert het resultaat opnieuw. De worker krijgt een apart token zonder toegang tot beheer- of bewijsgegevens. Zie [tekstworker via localhost](docs/local-executor-channel-v0.1.md). Dit is geen gedeelde workerpool over meerdere machines.
-
-Een afgeronde missie kan nu ook een **opleverdossier** krijgen met exacte commit, artifacthash en aangeleverde testverwijzingen. Een andere persoon beoordeelt dat voorstel. De server controleert de externe gegevens nog niet zelfstandig; vrijgave en publicatie blijven uitgeschakeld. Zie [opleverdossier en beoordeling](docs/release-dossier-v0.1.md). De server kan op expliciet verzoek ook de opgegeven GitHub Actions-run bij GitHub vergelijken met de vastgelegde commit. Dat bevestigt alleen de CI-run, niet de inhoud van het kandidaatbestand of toestemming tot publicatie. Zie [GitHub CI-controle](docs/github-ci-verification-v0.1.md). De gebruiker kan vervolgens ook een lokaal kandidaatbestand laten vergelijken met de opgegeven SHA-256. De bytes worden niet uitgevoerd of in het log bewaard. Een match bewijst nog niet dat het bestand uit de GitHub-run komt. Zie [controle van kandidaatbestanden](docs/local-artifact-byte-check-v0.1.md). Een extra controle kan een ZIP-artifact rechtstreeks bij de bevestigde GitHub Actions-run ophalen en één gekozen bestand daaruit met de SHA-256 van de kandidaat vergelijken. De download is begrensd en weigert onveilige ZIP-inhoud. Dit bevestigt de koppeling aan de GitHub-run, niet dat de workflow het bestand reproduceerbaar heeft gebouwd. Zie [GitHub-run-artifacts controleren](docs/github-actions-artifact-v0.1.md). Een [echte GitHub-artifactproef](docs/github-artifact-real-proof-2026-11-10.md) heeft op een aparte ontwikkelbranch een gebouwde JavaScript-module via de EAIwork-server opnieuw opgehaald en geverifieerd. De proef gaf geen vrijgave- of publicatierechten.
-
-Zie [de actuele stand van de uitvoeringsproef](docs/mission-execution-v0.1.md) en [het volledige bouwplan](docs/buildplan-eaiwork-2026-11-10.md). Het oorspronkelijke bewijsgericht werken hieronder blijft van toepassing.
-
-## Quickstart
+## Run the evidence server
 
 Requires Node `22.18+`. No runtime dependencies are required.
 
@@ -182,6 +159,10 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 | `packages/gateway` | AtomCapsule builder, local-only Ollama provider, mock adapter and optional citation proposals. |
 | `packages/evidence` | Pure source-reference integrity observer. No semantic proof or status writer. |
 | `packages/cli` | Pack linting, replay, explanation, reports, agreement and log verification. |
+| `packages/operations` | Execution layer: worker registry, missions, scheduler, leases, local code worker, isolated Docker tests, release dossier, and the rule that turns recorded work into evidence. Its own hash-chained journal. |
+| `prototypes/dashboard` | The task-first dashboard served at `/dashboard` by the local launchers. |
+| `scripts` | Local launchers (`demo:dashboard`, `local:ollama`) and the separate local text executor. |
+| `examples` | The small example project used by the code worker proof. |
 | `schema/v0.1` | Draft JSON Schema. Not yet enforced in code. |
 | `conformance` | Behavioral vectors any compatible implementation should pass. |
 | `packs` | Example packs. Current data is invented demo data. |
@@ -189,7 +170,7 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 | `proposals` | Design proposals. |
 | `docs` | Architecture and interface notes. |
 
-## Guarantees in v0.1
+## Guarantees
 
 - **Derived status:** no actor edits status directly.
 - **Model asymmetry:** models may not raise status or impersonate a person.
@@ -202,6 +183,7 @@ eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem
 - **Signed rollback detection:** event and rejection heads are Ed25519-signed into cryptographically chained witness journals outside the datastore. Datastore rollback is detected while the witness store remains outside the rollback domain.
 - **Visible uncertainty:** reporting is a distribution over atom statuses, not one score.
 - **Review wording:** no flags means “not detected”, not “safe”.
+- **Execution earns no authority by running:** a finished task or a green test is a journal entry. It reaches the ladder only through a registered deterministic check, which states its source and is withdrawn when its rule stops holding.
 - **Answer provenance:** the inspector names who proposed the current answer. That is provenance only and never an input to status.
 
 The normative behavior of the status ladder lives in `conformance/vectors/`. The server trust boundaries in [SECURITY.md](SECURITY.md) are normative as well and are enforced by `tests/server.test.ts`; they are not yet expressed as vectors. If this README, the specification and a conformance vector disagree, the mismatch should be fixed explicitly in a PR.
@@ -214,7 +196,7 @@ De lokale codeplan-API geeft bij elk plan een `proof` terug. Alleen na een gesla
 
 ## Current limits
 
-Not built yet: production authentication, a database, full schema enforcement at runtime, pack authoring UI, user testing or an independently reviewed end-to-end source-provenance/semantic verification flow. A local Ollama provider, synthetic DEV benchmarks and an experimental atom-versus-whole comparator exist, but they do not establish real-world benefit.
+Not built yet: production authentication, a database, full schema enforcement at runtime, pack authoring UI, user testing or an independently reviewed end-to-end source-provenance/semantic verification flow. The execution layer is a local, single-machine proof: no general autonomous planner, no web search, no shared worker pool across machines, and its operations journal is hash-chained but not yet signed into a witness the way the evidence log is. The test guards stop a change that fakes a pass in the direct ways; they are not a sandbox against hostile code inside the test process, which is why a person still reads a change before it is applied. Work from pull requests #33-#37 and #48 is not included: it overlaps with the release dossier and code worker that are, and needs a deliberate comparison. A local Ollama provider, synthetic DEV benchmarks and an experimental atom-versus-whole comparator exist, but they do not establish real-world benefit.
 
 ## Interface direction
 

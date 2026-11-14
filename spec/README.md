@@ -8,6 +8,7 @@
    - Two supporting items are *independent* only if their lineages differ, their observers differ, and neither has an unverified origin. The HTTP server sets lineage to the registered source an actor cites; without one it falls back to the actor identity and marks the origin unverified.
    - A deterministic check is *grounded* if it consulted a registered source, or if every other atom it read is `observed` or stronger. Grounding is computed bottom-up to a fixed point, so a premise cycle never grounds itself.
    - A check carries the values it read. It stops supporting when one of them changes, until it is re-run.
+   - A check has one current verdict. `check.passed` supports and `check.failed` contradicts; the latest run of a check replaces its earlier ones, so a failure withdraws a proof and a later pass restores it.
    - `claim`: supporting non-model evidence, reported only.
    - `observed`: at least one first-hand supporting item. A grounded check is first-hand.
    - `checked`: a first-hand item plus an independent second item.
@@ -22,9 +23,10 @@
 11. **Authorization.** Every principal has explicit read, write, check, worker and audit scopes; access is default-deny and every derived view is filtered to readable atoms. Model actors hold no tokens.
 12. **Worker isolation.** A model worker receives one server-built atom capsule: the local question, an optional local claim contract, fixed options, declared dependency values and bounded source snippets. Its output is a probability distribution over the fixed options and can only become an `answer.proposed` event.
 13. **Log integrity.** Event and rejection logs are hash-chained and their heads are signed into a witness journal outside the datastore.
+14. **Execution and evidence.** The operations journal records work; it holds no evidence authority. Recorded work reaches the ladder only through a registered deterministic check whose rule reads the journal and which names the journal as its registered source. Such a check may run by itself after operations events, and a fixed system actor may propose the answer it verifies.
 
 ## What is normative
 
 - Points 1-10 are defined by `conformance/vectors/`, with `tests/core.test.ts` and `tests/review-signals.test.ts` for what a status-only vector cannot express. If this text and the vectors disagree, fix one of them in a PR.
-- Points 11-13 are defined by the trust boundaries in `SECURITY.md` and enforced by `tests/server.test.ts` and `tests/gateway.test.ts`. They are not yet expressed as vectors.
+- Points 11-14 are defined by the trust boundaries in `SECURITY.md` and enforced by `tests/server.test.ts` and `tests/gateway.test.ts`. They are not yet expressed as vectors.
 - Everything under `packages/evaluation`, `packages/evidence` and `benchmarks/` is experimental and grants no evidence authority.
