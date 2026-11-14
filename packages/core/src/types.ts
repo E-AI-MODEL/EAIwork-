@@ -39,6 +39,7 @@ export type EaiEvent =
   | { id: string; at: string; actor: Actor; type: "answer.proposed"; atom: string; value: string; probabilities?: Record<string, number>; basis?: AnswerBasis }
   | { id: string; at: string; actor: Actor; type: "evidence.attached"; atom: string; evidence: Evidence }
   | { id: string; at: string; actor: Actor; type: "check.passed"; atom: string; evidence: Evidence }
+  | { id: string; at: string; actor: Actor; type: "check.failed"; atom: string; evidence: Evidence }
   | { id: string; at: string; actor: Actor; type: "confidence.lowered"; atom: string; reason: string }
   | { id: string; at: string; actor: Actor; type: "flag.raised"; atom: string; message: string }
   | { id: string; at: string; actor: Actor; type: "flag.dismissed"; atom: string; flag: string; reason: string }

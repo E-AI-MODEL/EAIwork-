@@ -9,6 +9,7 @@ import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
+import {harnessInterference} from "./test-integrity.ts";
 import {localDockerEnvironment} from "./docker-local-transport.ts";
 
 export type DockerTestResult={
@@ -34,6 +35,12 @@ const safePath=(path:string)=>typeof path==="string" && path.length<=240 &&
   path.split("/").every(x=>x.length>0&&x!=="."&&x!==".."&&!x.startsWith(".")&&
     /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(x)) &&
   !path.includes("\\")&&!path.includes("\0");
+const DUTCH:Record<string,string>={
+  "ends or manipulates the process":"beëindigt of manipuleert het proces",
+  "touches process output or exit handling":"grijpt in op de uitvoer of het afsluiten van het proces",
+  "imports the test harness or a process-control module":"laadt de testomgeving of een module voor procesbesturing",
+  "reaches for the global object or evaluates code from strings":"gebruikt het globale object of voert code uit tekst uit",
+};
 const unavailable=(candidate:string,test:string,detail:string):DockerTestResult=>({
   status:"unavailable",runner:"docker-node-test-v1",proofFormat:"tap-named-v2",
   candidateSha256:sha(candidate),testSha256:sha(test),imageId:null,
@@ -49,6 +56,10 @@ export async function runIsolatedNodeTest(input:DockerTestInput):Promise<DockerT
       Buffer.byteLength(candidateSource)>32768||
       Buffer.byteLength(testSource)>32768)
     throw new Error("Docker-test vereist een bestaand .js-bestand en een apart .test.js-bestand");
+  const interference=harnessInterference(candidateSource);
+  if(interference)return {...unavailable(candidateSource,testSource,
+    "Niet getest: de voorgestelde code "+DUTCH[interference]+". Zo'n bestand kan een test laten slagen zonder dat er iets getest is."),
+    status:"failed"};
   if(process.platform==="win32")
     return unavailable(candidateSource,testSource,
       "Deze eerste Docker-test is getest voor macOS en Linux. Windows nog niet gecontroleerd.");

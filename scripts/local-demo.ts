@@ -18,6 +18,7 @@ import type {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts
 import type {DockerConnectionStatus} from "../packages/operations/src/local-docker-status.ts";
 import type {ProjectTestInput,ProjectTestResult} from "../packages/operations/src/docker-project-suite.ts";
 import type {GitHubReader} from "../packages/operations/src/github-actions.ts";
+import {appliedChangesAreTested,codeEvidencePack,CODE_TESTED_ATOM,CODE_TESTED_CHECK,OPERATIONS_JOURNAL_SOURCE} from "../packages/operations/src/evidence-bridge.ts";
 
 const person:OpsActor={kind:"person",id:"person:demo"};
 const check:OpsActor={kind:"check",id:"check:builtins"};
@@ -43,9 +44,23 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   const workerToken=randomBytes(32).toString("hex");
   const reviewerToken=randomBytes(32).toString("hex");
   const pack=JSON.parse(readFileSync(new URL("../packs/sow-demo/pack.json",import.meta.url),"utf8"));
+  // With a code workspace the evidence workbench also shows what the recorded work supports:
+  // one atom that a deterministic rule over the operations journal proves or withdraws.
+  if(options.codeWorkspace){
+    pack.sources=[...(pack.sources??[]),codeEvidencePack.source];
+    pack.clusters=[...pack.clusters,codeEvidencePack.cluster];
+    pack.atoms=[...pack.atoms,codeEvidencePack.atom];
+  }
   const {server,store,operations,scheduler}=makeServer({
     dir:profile?.evidenceDir??join(root,"evidence"),operationsDir:profile?.operationsDir??join(root,"operations"),
-    pack,witness,repoSearchRoot:resolve("."),schedulerIntervalMs:options.schedulerIntervalMs,
+    pack,witness,repoSearchRoot:resolve("."),
+    ...(options.codeWorkspace?{checks:{[CODE_TESTED_CHECK]:{
+      atom:CODE_TESTED_ATOM,reads:[CODE_TESTED_ATOM],sources:[OPERATIONS_JOURNAL_SOURCE],
+      source:"Every applied code change has a passing isolated test for the applied bytes (rule over the operations journal)",
+      allowedActorId:"check:operations-journal",auto:{answer:"yes"},
+      run:({state,operations}:{state:any;operations?:readonly any[]})=>
+        state[CODE_TESTED_ATOM]?.value==="yes"&&appliedChangesAreTested(operations??[]),
+    }}}:{}),schedulerIntervalMs:options.schedulerIntervalMs,
     planningModel:options.planningModel,
     codeWorkspace:options.codeWorkspace,
     dockerConnectionProbe:options.dockerConnectionProbe,

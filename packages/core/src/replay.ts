@@ -16,8 +16,13 @@ export function apply(state: State, e: EaiEvent): State {
       a.answerBasis = e.basis;
       a.probabilities = e.probabilities;
       break;
-    case "evidence.attached":
-    case "check.passed": a.evidence.push({ ...e.evidence, attached_at: e.at }); break;
+    case "evidence.attached": a.evidence.push({ ...e.evidence, attached_at: e.at }); break;
+    case "check.passed":
+    case "check.failed":
+      // A deterministic check has one current verdict: its latest run replaces its earlier ones.
+      a.evidence = a.evidence.filter((x) => !(x.observer.kind === "check" && x.lineage === e.evidence.lineage));
+      a.evidence.push({ ...e.evidence, attached_at: e.at });
+      break;
     case "confidence.lowered": a.lowered.push(e.reason); break;
     case "flag.raised": a.flags.push({ id: e.id, message: e.message, by: e.actor }); break;
     case "flag.dismissed": { const f = a.flags.find((x) => x.id === e.flag); if (f) f.dismissed = true; break; }

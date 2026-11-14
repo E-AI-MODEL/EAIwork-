@@ -7,6 +7,7 @@ import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
+import {harnessInterference} from "./test-integrity.ts";
 import {localDockerEnvironment} from "./docker-local-transport.ts";
 
 export type ProjectTestFile={path:string;content:string};
@@ -69,6 +70,10 @@ const absent=(input:ProjectTestInput,detail:string):ProjectTestResult=>({
 export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<ProjectTestResult>{
   const input=validateProjectInput(raw);
   const fingerprint=projectManifestSha256(input);
+  const suspect=input.files.find(file=>!file.path.endsWith(".test.js")&&harnessInterference(file.content));
+  if(suspect)return {...absent(input,
+    "Niet getest: "+suspect.path+" grijpt in op het proces of de testomgeving. Zo'n bestand kan tests laten slagen zonder dat er iets getest is."),
+    status:"failed"};
   if(process.platform==="win32")return absent(input,
     "De afgeschermde Docker-tests zijn voor macOS en Linux gemaakt. Windows is nog niet gecontroleerd.");
   let dockerEnv:ReturnType<typeof localDockerEnvironment>;

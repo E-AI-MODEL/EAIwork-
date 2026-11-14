@@ -4,7 +4,7 @@ export type Verdict = { ok: true } | { ok: false; reason: string };
 const no = (reason: string): Verdict => ({ ok: false, reason });
 
 const KNOWN_TYPES = new Set([
-  "answer.proposed", "evidence.attached", "check.passed", "confidence.lowered",
+  "answer.proposed", "evidence.attached", "check.passed", "check.failed", "confidence.lowered",
   "flag.raised", "flag.dismissed", "status.raised",
 ]);
 const ACTOR_KINDS = new Set<ActorKind>(["person", "system", "model", "check"]);
@@ -12,7 +12,7 @@ const ALLOWED: Record<ActorKind, Set<string>> = {
   model: new Set(["answer.proposed", "confidence.lowered", "flag.raised"]),
   person: new Set(["answer.proposed", "evidence.attached", "flag.raised", "flag.dismissed"]),
   system: new Set(["answer.proposed", "evidence.attached", "flag.raised"]),
-  check: new Set(["check.passed"]),
+  check: new Set(["check.passed", "check.failed"]),
 };
 
 /** The one gate every event passes. Public HTTP ingestion applies an additional server-side trust boundary. */
@@ -36,8 +36,10 @@ export function validate(e: EaiEvent | any, state: State): Verdict {
     }
   }
 
-  if (e.type === "check.passed") {
-    if (!e.evidence || typeof e.evidence !== "object") return no("check.passed needs evidence");
+  if (e.type === "check.passed" || e.type === "check.failed") {
+    if (!e.evidence || typeof e.evidence !== "object") return no(`${e.type} needs evidence`);
+    // A verdict says what it is: a pass supports the answer, a failure contradicts it.
+    if (e.evidence.supports !== (e.type === "check.passed")) return no("check verdict and evidence direction must agree");
     if (e.evidence.observer?.kind !== "check" || e.evidence.observer?.id !== e.actor.id) {
       return no("check evidence observer must match the check runner");
     }
