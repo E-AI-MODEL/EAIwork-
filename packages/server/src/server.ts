@@ -381,6 +381,9 @@ export function makeServer(cfg: Config) {
       } catch { /* the operations action already succeeded; evidence catches up on the next event */ }
     }
   };
+  // Reconcile once at start. If the process stopped after an operations event was written but
+  // before its check ran, a proof that no longer holds would otherwise survive the restart.
+  runAutoChecks();
 
   const scoped = (principal: Principal) => {
     const r = currentSnapshot();

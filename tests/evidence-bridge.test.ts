@@ -11,6 +11,8 @@ import {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
 import type {DockerTestResult,DockerTestInput} from "../packages/operations/src/docker-code-test.ts";
 import {createDemoServer} from "../scripts/local-demo.ts";
 import {appliedChanges,appliedChangesAreTested,CODE_TESTED_ATOM} from "../packages/operations/src/evidence-bridge.ts";
+import {OpsStore} from "../packages/operations/src/store.ts";
+import {randomUUID} from "node:crypto";
 
 const hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const row=(action:string,proposalId:string,path:string,replacementSha256:string,result:string)=>
@@ -95,6 +97,26 @@ test("recorded code work becomes proven evidence by itself, and the proof is wit
     assert.equal(a.status,"proven");
     assert.equal((await get("/log/verify")).ok,true);
   }finally{
-    await demo.close();fake.close();rmSync(root,{recursive:true,force:true});
+    await demo.close();fake.close();
+  }
+
+  // Crash window: an untested change reached the operations journal, but the process stopped
+  // before its check ran. The evidence journal still says proven. A restart must reconcile it.
+  const ops=new OpsStore(openLocalProfile(profile).operationsDir);
+  const proposalId=randomUUID(),person={kind:"person" as const,id:"person:demo"};
+  const detail={proposalId,path:"src/other.js",sourceSha256:hash("export const other = 1;\n"),replacementSha256:hash("export const other = 3;\n"),modelId:"local-test"};
+  for(const [action,result] of [["proposed","review-required"],["apply-started","pending"],["applied","applied"]] as const){
+    ops.append({id:"ops-"+randomUUID(),at:new Date().toISOString(),actor:person,event:{type:"code.activity",action,...detail,result} as any});
+  }
+  ops.close();
+  const again=createDemoServer({codeWorkspace:new LocalCodeWorkspace({workspaceDir:work,profileDir:profile,host:"http://127.0.0.1:1",model:"local-test",testRunner:runner}),
+    persistentDir:profile,schedulerIntervalMs:0,seedDemoData:false});
+  try{
+    await new Promise<void>(ok=>again.server.listen(0,"127.0.0.1",ok));
+    const address="http://127.0.0.1:"+((again.server.address() as AddressInfo).port);
+    const state=await(await fetch(address+"/state",{headers:{Authorization:"Bearer "+again.token}})).json() as any;
+    assert.notEqual(state.atoms[CODE_TESTED_ATOM].status,"proven","a proof that stopped holding does not survive a restart");
+  }finally{
+    await again.close();rmSync(root,{recursive:true,force:true});
   }
 });

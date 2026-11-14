@@ -7,7 +7,7 @@ import {chmodSync,mkdirSync,mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {dirname,join} from "node:path";
 import {inspectNodeTestOutput} from "./docker-test-outcome.ts";
-import {harnessInterference} from "./test-integrity.ts";
+import {HARNESS_PRELOAD,HARNESS_PRELOAD_FILE,harnessInterference} from "./test-integrity.ts";
 import {localDockerEnvironment} from "./docker-local-transport.ts";
 
 export type ProjectTestFile={path:string;content:string};
@@ -101,13 +101,15 @@ export async function runIsolatedProjectSuite(raw:ProjectTestInput):Promise<Proj
       writeFileSync(target,file.content,{flag:"wx",mode:0o644});
     }
     writeFileSync(join(stage,"package.json"),'{"type":"module"}\n',{flag:"wx",mode:0o644});
+    // Freeze assert and node:test before any candidate code can load (see test-integrity.ts).
+    writeFileSync(join(stage,HARNESS_PRELOAD_FILE),HARNESS_PRELOAD,{mode:0o644,flag:"wx"});
     const args=["run","--rm","--pull=never","--name",container,
       "--network=none","--read-only","--cap-drop=ALL",
       "--security-opt=no-new-privileges","--user=65534:65534",
       "--pids-limit=64","--memory=384m","--cpus=1",
       "--tmpfs","/tmp:rw,nosuid,nodev,size=16m,mode=1777",
       "--mount","type=bind,src="+stage+",dst=/work,readonly",
-      "--workdir","/work",imageId,"node","--test","--test-reporter=tap",...input.testPaths];
+      "--workdir","/work",imageId,"node","--import","./"+HARNESS_PRELOAD_FILE,"--test","--test-reporter=tap",...input.testPaths];
     const outcome=await new Promise<{code:number|null;error?:string}>(resolve=>{
       const child=spawn("docker",args,{
         stdio:["ignore","pipe","pipe"],shell:false,windowsHide:true,env:dockerEnv
