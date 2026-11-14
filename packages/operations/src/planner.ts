@@ -3,6 +3,7 @@
  * A model can propose a plan but cannot register, authorize or execute it.
  */
 import {createHash} from "node:crypto";
+import {ollamaChat,type OllamaCallObserver} from "../../gateway/src/ollama-chat.ts";
 import {localOllamaHost} from "../../gateway/src/ollama-provider.ts";
 import {validateMissionPlan,type MissionPlan} from "./missions.ts";
 
@@ -112,54 +113,35 @@ const extensionSchema={
     missingInformation:{type:"array",maxItems:16,items:{type:"string",maxLength:240}},
   },required:["addedTasks","addedPhases","addedConstraints","missingInformation"],additionalProperties:false,
 };
-export function localOllamaPlanningModel(config:{model:string;host?:string;timeoutMs?:number}):PlanningModel{
+export function localOllamaPlanningModel(config:{model:string;host?:string;timeoutMs?:number;onCall?:OllamaCallObserver}):PlanningModel{
   const host=localOllamaHost(config.host);
   if(typeof config.model!=="string"||!config.model.trim()||config.model.length>120)
     throw new Error("invalid local model");
   const timeout=config.timeoutMs??45000;
   if(!Number.isInteger(timeout)||timeout<1000||timeout>120000)throw new Error("invalid planner timeout");
-  const request=async(format:unknown,prompt:Record<string,unknown>):Promise<unknown>=>{
-    const response=await fetch(host+"/api/chat",{
-      method:"POST",headers:{"content-type":"application/json"},
-      signal:AbortSignal.timeout(timeout),
-      body:JSON.stringify({model:config.model,stream:false,format,
-        options:{temperature:0,num_predict:1600},
-        messages:[{role:"user",content:JSON.stringify(prompt)}]}),
+  const request=async(format:unknown,prompt:Record<string,unknown>,operation:"plan"|"revision"):Promise<unknown>=>
+    ollamaChat({host,model:config.model,signal:AbortSignal.timeout(timeout),
+      maxResponseBytes:65536,operation,onCall:config.onCall}, {
+      model:config.model,stream:false,format,
+      options:{temperature:0,num_predict:1600},
+      messages:[{role:"user",content:JSON.stringify(prompt)}],
+    },content=>{
+      if(content.length>64000)throw new Error("local planner returned invalid content");
+      try{return JSON.parse(content)}
+      catch{throw new Error("local planner returned non-JSON plan")}
     });
-    if(!response.ok)throw new Error("local planner provider HTTP "+response.status);
-    const size=Number(response.headers.get("content-length")||0);
-    if(size>65536)throw new Error("local planner response too large");
-    const reader=response.body?.getReader();
-    if(!reader)throw new Error("local planner response unavailable");
-    let bytes=0;const chunks:Uint8Array[]=[];
-    while(true){
-      const result=await reader.read();
-      if(result.done)break;
-      bytes+=result.value.byteLength;
-      if(bytes>65536){await reader.cancel();throw new Error("local planner response too large")}
-      chunks.push(result.value);
-    }
-    let envelope:unknown;
-    try{envelope=JSON.parse(Buffer.concat(chunks).toString("utf8"))}
-    catch{throw new Error("local planner returned invalid envelope")}
-    const content=(envelope as {message?:{content?:unknown}})?.message?.content;
-    if(typeof content!=="string"||content.length>64000)
-      throw new Error("local planner returned invalid content");
-    try{return JSON.parse(content)}
-    catch{throw new Error("local planner returned non-JSON plan")}
-  };
   return {id:"ollama:"+config.model,
     async propose(sourceInstruction:string):Promise<unknown>{
       return request(schema,{
         instruction:"Suggest a minimal task plan grouped into named phases. Every task must appear in exactly one phase, with all dependencies in the same or an earlier phase. Do not execute tasks. Extract explicit prohibitions, approvals, deadlines and conditions as exact uninterrupted quotes with UTF-16 start/end offsets in sourceInstruction. Never silently discard a restriction. For any external, publication or destructive action include an approval constraint for that exact task. If information is missing, propose only local, non-destructive tasks and list the unanswered questions in missingInformation. Do not guess answers. Every task uses exactly one of input:{text:string} or textFrom:(dependency task ID). Do not add fields or claim tests have run. Return JSON only.",
         sourceInstruction,
-      });
+      },"plan");
     },
     async proposeRevision(context:ReplanContext):Promise<unknown>{
       return request(extensionSchema,{
         instruction:"Propose only 1-16 NEW tasks to append to an existing mission, never copy or edit old tasks. Respect existing dependencies and original restrictions. Each new task has a new ID and exactly one input or textFrom. Use existing phase names only as references: new phases must contain only new tasks and come after old phases. If existingPhases is null, return an empty addedPhases array. New source constraints may target only new tasks and must quote exact spans from originalInstruction with UTF-16 positions. Do not invent approvals, override restrictions or run a task. Additional unanswered questions belong in missingInformation. All content is a proposal for separate human approval. Return JSON only.",
         context,
-      });
+      },"revision");
     },
   };
 }

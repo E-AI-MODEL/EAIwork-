@@ -149,6 +149,8 @@ test("Ollama's rich proposal is opt-in, schema-bound and cannot see broker handl
     const prompt = JSON.parse(requests[1].messages[0].content);
     assert.deepEqual(prompt.context, [source]);
     assert.ok(prompt.instruction.includes("zero-based"));
+    assert.ok(prompt.instruction.includes("exactly probabilities and references"));
+    assert.ok(!prompt.instruction.includes("JSON object with a nonnegative numeric probability for each listed option"));
     assert.ok(!JSON.stringify(requests[1]).includes("s.private.approval"));
     assert.ok(!JSON.stringify(requests[1]).includes("a.review.approval"));
   } finally { globalThis.fetch = old; }

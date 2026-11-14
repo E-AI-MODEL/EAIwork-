@@ -6,6 +6,7 @@ import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,rmSync,symlinkSync,exis
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {openLocalProfile} from "../scripts/local-profile.ts";
+import type {OllamaCallMetric} from "../packages/gateway/src/ollama-chat.ts";
 import {LocalCodeWorkspace} from "../packages/operations/src/code-worker.ts";
 import {startLocalOllama} from "../scripts/local-ollama.ts";
 
@@ -156,6 +157,7 @@ test("coding model only sees selected related source and existing test, read-onl
   writeFileSync(join(f.work,"src","helper.js"),"export const helper = 2;\n");
   writeFileSync(join(f.work,"src","counter.js"),"export const count = 1;\n");
   let seen:any=null;
+  const calls:OllamaCallMetric[]=[];
   const fake=createServer(async(req,res)=>{
     let body="";for await(const chunk of req)body+=chunk.toString();
     seen=JSON.parse(JSON.parse(body).messages[0].content);
@@ -165,8 +167,12 @@ test("coding model only sees selected related source and existing test, read-onl
   await new Promise<void>(done=>fake.listen(0,"127.0.0.1",done));
   try{
     const coder=new LocalCodeWorkspace({workspaceDir:f.work,profileDir:f.profile,
-      host:"http://127.0.0.1:"+((fake.address() as AddressInfo).port),model:"test"});
+      host:"http://127.0.0.1:"+((fake.address() as AddressInfo).port),model:"test",onCall:m=>{calls.push(m)}});
     await coder.propose("src/counter.js","Change count","tests/counter.test.js",["src/helper.js"]);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].operation,"code");
+    assert.equal(calls[0].outcome,"success");
+    assert.equal(JSON.stringify(calls).includes("counter.js"),false);
     assert.deepEqual(seen.relatedFiles,[{path:"src/helper.js",content:"export const helper = 2;\n"}]);
     assert.equal(seen.existingTest.path,"tests/counter.test.js");
     assert.match(seen.existingTest.content,/named/);
