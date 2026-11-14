@@ -1,0 +1,174 @@
+{
+ "name": "A re-run that passes restores the proof; a verdict must match its direction and only a check may give one",
+ "now": "2026-10-09",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-03",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.failed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": false,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e4",
+   "at": "2026-10-04",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev4",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e5",
+   "at": "2026-10-05",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.failed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev5",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e6",
+   "at": "2026-10-06",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "check.failed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev6",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": false,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "proven"
+ },
+ "expectRejected": [
+  4,
+  5
+ ]
+}

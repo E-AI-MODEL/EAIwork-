@@ -8,6 +8,7 @@ import {
 } from "../../core/src/index.ts";
 import { Store } from "./store.ts";
 import { OpsStore } from "../../operations/src/store.ts";
+import type { OpsEnvelope } from "../../operations/src/registry.ts";
 import {localStateWithoutDemo} from "../../operations/src/legacy-demo-view.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
@@ -47,7 +48,14 @@ export interface DeterministicCheck {
   sources?: string[];
   source: string;
   allowedActorId: string;
-  run(input: { pack: Pack; state: State }): boolean;
+  /**
+   * Run this check by itself after operations events, as the check's own actor. With `answer`
+   * the server also proposes that answer as a system actor when the check passes on an atom
+   * nobody has answered. This is how recorded work becomes visible evidence without a person.
+   */
+  auto?: { answer?: string };
+  /** `operations` is the read-only history of the operations journal, when one is configured. */
+  run(input: { pack: Pack; state: State; operations?: readonly OpsEnvelope[] }): boolean;
 }
 
 export interface WorkerRuntime {
@@ -303,6 +311,80 @@ export function makeServer(cfg: Config) {
     }
   };
 
+  /**
+   * Run a registered check and record its verdict. A pass supports the answer; a failure is
+   * recorded as contradicting evidence, so a proof is withdrawn the moment its rule stops holding.
+   * The latest verdict of a check replaces its earlier ones; an unchanged verdict is not re-recorded.
+   */
+  const runCheck = (id: string, actor: Actor) => {
+    const check = cfg.checks![id];
+    const r = currentSnapshot();
+    const checkVisible = new Set(check.reads);
+    const checkPack: Pack = {
+      ...cfg.pack,
+      atoms: cfg.pack.atoms
+        .filter((atom) => checkVisible.has(atom.id))
+        .map((atom) => ({ ...atom, depends_on: (atom.depends_on ?? []).filter((dep) => checkVisible.has(dep)) })),
+      clusters: cfg.pack.clusters
+        .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((atom) => checkVisible.has(atom)) }))
+        .filter((cluster) => cluster.atoms.length > 0),
+      rules: visibleRules(cfg.pack.rules, checkVisible),
+    };
+    const checkState = Object.fromEntries(Object.entries(r.state).filter(([atom]) => checkVisible.has(atom)));
+    const history = operations ? operations.snapshot().history : undefined;
+    const passed = check.run({ pack: checkPack, state: structuredClone(checkState), ...(history ? { operations: history } : {}) }) === true;
+    if (!(check.atom in r.state)) return { passed, line: null, unanswered: true };
+
+    const basis = {
+      reads: Object.fromEntries(check.reads.map((atom) => [atom, r.state[atom]?.value ?? null])),
+      ...(check.sources?.length ? { sources: check.sources } : {}),
+    };
+    const lineage = `check:${id}`;
+    const previous = r.state[check.atom].evidence.find((e) => e.observer.kind === "check" && e.lineage === lineage);
+    if (previous && previous.supports === passed && JSON.stringify(previous.basis?.reads) === JSON.stringify(basis.reads)) {
+      return { passed, line: null };
+    }
+    // Nothing to withdraw: a failure on an atom this check never supported is not evidence against it.
+    if (!passed && !previous) return { passed, line: null };
+    const eventId = `ev-${randomUUID()}`;
+    const event: EaiEvent = {
+      id: eventId, at: today(), actor, type: passed ? "check.passed" : "check.failed", atom: check.atom,
+      evidence: {
+        id: `${eventId}:evidence`, source: check.source, observer: actor, mode: "observed",
+        lineage, supports: passed, deterministic: true, basis,
+      },
+    };
+    const v = validate(event, r.state);
+    if (!v.ok) throw new HttpError(500, v.reason, false);
+    return { passed, line: appendStateEvent(event) };
+  };
+
+  /** After operations events: let self-running checks re-evaluate. Never breaks the caller. */
+  const runAutoChecks = () => {
+    for (const [id, check] of Object.entries(cfg.checks ?? {})) {
+      if (!check.auto) continue;
+      try {
+        if (!store.verifyCurrent().ok) return;
+        const actor: Actor = { kind: "check", id: check.allowedActorId };
+        const current = currentSnapshot().state[check.atom]?.value;
+        if (check.auto.answer && optionsFor(atoms.get(check.atom)!).includes(check.auto.answer) &&
+            (current === undefined || current === "unknown")) {
+          const probe = check.run({ pack: cfg.pack, state: { [check.atom]: { value: check.auto.answer, evidence: [], flags: [], lowered: [] } }, ...(operations ? { operations: operations.snapshot().history } : {}) }) === true;
+          if (!probe) continue;
+          const answer: EaiEvent = {
+            id: `ev-${randomUUID()}`, at: today(), actor: { kind: "system", id: "system:evidence-bridge" },
+            type: "answer.proposed", atom: check.atom, value: check.auto.answer,
+          };
+          if (validate(answer, currentSnapshot().state).ok) appendStateEvent(answer);
+        }
+        runCheck(id, actor);
+      } catch { /* the operations action already succeeded; evidence catches up on the next event */ }
+    }
+  };
+  // Reconcile once at start. If the process stopped after an operations event was written but
+  // before its check ran, a proof that no longer holds would otherwise survive the restart.
+  runAutoChecks();
+
   const scoped = (principal: Principal) => {
     const r = currentSnapshot();
     const visible = new Set(cfg.pack.atoms.filter((a) => canRead(principal, a.id)).map((a) => a.id));
@@ -485,6 +567,7 @@ export function makeServer(cfg: Config) {
               ...(testSha256?{testSha256}:{}),
               ...(projectManifestSha256?{projectManifestSha256}:{})}
           });
+          runAutoChecks();
           return entry.seq;
         };
         const pendingCodeActions=()=>{
@@ -1636,51 +1719,18 @@ export function makeServer(cfg: Config) {
         }
         if (check.allowedActorId !== actor.id) return json(res, 403, { error: "check runner is not allowed for this check" });
 
-        const r = currentSnapshot();
-        const checkVisible = new Set(check.reads);
-        const checkPack: Pack = {
-          ...cfg.pack,
-          atoms: cfg.pack.atoms
-            .filter((atom) => checkVisible.has(atom.id))
-            .map((atom) => ({ ...atom, depends_on: (atom.depends_on ?? []).filter((dep) => checkVisible.has(dep)) })),
-          clusters: cfg.pack.clusters
-            .map((cluster) => ({ ...cluster, atoms: cluster.atoms.filter((atom) => checkVisible.has(atom)) }))
-            .filter((cluster) => cluster.atoms.length > 0),
-          rules: visibleRules(cfg.pack.rules, checkVisible),
-        };
-        const checkState = Object.fromEntries(Object.entries(r.state).filter(([atom]) => checkVisible.has(atom)));
-        let passed = false;
+        let verdict;
         try {
-          passed = check.run({ pack: checkPack, state: structuredClone(checkState) }) === true;
-        } catch {
+          verdict = runCheck(id, actor);
+        } catch (e) {
+          if (e instanceof HttpError) throw e;
           throw new HttpError(500, "deterministic check failed", false);
         }
-        if (!passed) return json(res, 422, { passed: false });
-
-        const eventId = `ev-${randomUUID()}`;
-        const event: EaiEvent = {
-          id: eventId,
-          at: today(),
-          actor,
-          type: "check.passed",
-          atom: check.atom,
-          evidence: {
-            id: `${eventId}:evidence`,
-            source: check.source,
-            observer: actor,
-            mode: "observed",
-            lineage: `check:${id}`,
-            supports: true,
-            deterministic: true,
-            basis: {
-              reads: Object.fromEntries(check.reads.map((atom) => [atom, r.state[atom]?.value ?? null])),
-              ...(check.sources?.length ? { sources: check.sources } : {}),
-            },
-          },
-        };
-        const v = validate(event, r.state);
-        if (!v.ok) throw new HttpError(500, v.reason, false);
-        const line = appendStateEvent(event);
+        // A check verifies an answer. With no answer there is nothing to record, so nothing passed.
+        if (verdict.unanswered) return json(res, 409, { passed: false, error: "the target atom has no answer yet" });
+        if (!verdict.passed) return json(res, 422, { passed: false });
+        const line = verdict.line;
+        if (!line) return json(res, 201, { passed: true });
         const fullAudit = canAudit(principal) && cfg.pack.atoms.every((atom) => canRead(principal, atom.id));
         if (fullAudit) return json(res, 201, { passed: true, seq: line.seq, hash: line.hash });
         return json(res, 201, { passed: true });

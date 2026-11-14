@@ -1,14 +1,6 @@
 name: local-docker-code-smoke
 on:
-  push:
-    branches:
-      - feature/docker-isolated-code-test-v01-20261110
-    paths:
-      - '.github/workflows/local-docker-code-smoke.yml'
-      - 'packages/operations/src/docker-code-test.ts'
-      - 'packages/operations/src/docker-project-suite.ts'
-      - 'tests/docker-sandbox-smoke.test.ts'
-      - 'tests/project-docker-smoke.test.ts'
+  workflow_dispatch:
   pull_request:
     paths:
       - '.github/workflows/local-docker-code-smoke.yml'

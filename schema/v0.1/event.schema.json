@@ -15,7 +15,7 @@
         "id": {"type": "string"}
       }
     },
-    "type": {"enum": ["answer.proposed", "evidence.attached", "check.passed",
+    "type": {"enum": ["answer.proposed", "evidence.attached", "check.passed", "check.failed",
                        "confidence.lowered", "flag.raised", "flag.dismissed", "status.raised"]},
     "atom": {"type": "string", "pattern": "^a\\.[a-z0-9.]+$"}
   }

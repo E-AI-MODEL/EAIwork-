@@ -1,0 +1,81 @@
+{
+ "name": "A check's latest verdict replaces its earlier one: a later failure withdraws the proof",
+ "now": "2026-10-09",
+ "events": [
+  {
+   "id": "e1",
+   "at": "2026-10-01",
+   "actor": {
+    "kind": "person",
+    "id": "person:jan"
+   },
+   "type": "answer.proposed",
+   "atom": "a.one",
+   "value": "yes"
+  },
+  {
+   "id": "e2",
+   "at": "2026-10-02",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.passed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev2",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": true,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  },
+  {
+   "id": "e3",
+   "at": "2026-10-03",
+   "actor": {
+    "kind": "check",
+    "id": "check:calc"
+   },
+   "type": "check.failed",
+   "atom": "a.one",
+   "evidence": {
+    "id": "ev3",
+    "source": "recomputed from the ledger",
+    "observer": {
+     "kind": "check",
+     "id": "check:calc"
+    },
+    "mode": "observed",
+    "lineage": "check:ledger",
+    "supports": false,
+    "deterministic": true,
+    "basis": {
+     "reads": {
+      "a.one": "yes"
+     },
+     "sources": [
+      "s.ledger"
+     ]
+    }
+   }
+  }
+ ],
+ "expect": {
+  "a.one": "assumption"
+ },
+ "expectRejected": []
+}
