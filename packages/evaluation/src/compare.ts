@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { executeAtomWorker, type ModelProvider } from "../../gateway/src/gateway.ts";
 import { validateBenchmarkSuite, type BenchmarkCase, type BenchmarkSuite, type FailureKind } from "./evaluate.ts";
+import { ollamaChat, type OllamaCallObserver } from "../../gateway/src/ollama-chat.ts";
 import { localOllamaHost, OllamaOutputError, type OllamaOutputIssue } from "../../gateway/src/ollama-provider.ts";
 import type { PackAtom } from "../../core/src/index.ts";
 import { localDecisionInstruction } from "../../gateway/src/decision-contract.ts";
@@ -190,19 +191,17 @@ export async function compareAtomVsWhole(
 }
 
 /** Ollama-backed, EVALUATOR-ONLY whole-task comparator. Never import into server workers. */
-export function ollamaWholeTaskProvider(config: { model: string; host?: string; timeoutMs?: number }): WholeTaskProvider {
+export function ollamaWholeTaskProvider(config: { model: string; host?: string; timeoutMs?: number; onCall?: OllamaCallObserver }): WholeTaskProvider {
   const host = localOllamaHost(config.host);
   if (!config.model?.trim()) throw new Error("model required");
   const timeoutMs = config.timeoutMs ?? 120000;
-  if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) throw new Error("invalid timeout");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600000) throw new Error("invalid timeout");
   return {
     id: "whole:ollama:" + config.model,
     async answerAll(questions) {
-      const response = await fetch(host + "/api/chat", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: AbortSignal.timeout(timeoutMs),
-        body: JSON.stringify({
+      return ollamaChat({ host, model: config.model, signal: AbortSignal.timeout(timeoutMs),
+        maxResponseBytes: 1000000, operation: "whole-task", onCall: config.onCall,
+      }, {
           model: config.model, stream: false,
           format: {
             type: "object",
@@ -217,18 +216,15 @@ export function ollamaWholeTaskProvider(config: { model: string; host?: string; 
           },
           options: { temperature: 0, num_predict: 1200 },
           messages: [{ role: "user", content: JSON.stringify({
-            instruction: "For each caseId, assess only that local question and its context. " + localDecisionInstruction(questions.some(q => q.decision?.kind === "verify-claim")) + " Return a JSON object keyed by caseId, with one nonnegative probability per allowed option. Do not emit any other text.",
+            instruction: "For each caseId, assess only that local question and its context. " + localDecisionInstruction(questions.some(q => q.decision?.kind === "verify-claim"), "batch"),
             questions,
           }) }],
-        }),
+      }, content => {
+        let parsed: unknown;
+        try { parsed = JSON.parse(content); } catch { throw new OllamaOutputError("non-json"); }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new OllamaOutputError("invalid-object");
+        return parsed as Record<string, Record<string, number>>;
       });
-      if (!response.ok) throw new Error("whole-task HTTP error " + response.status);
-      const payload = await response.json() as { message?: { content?: string } };
-      if (typeof payload.message?.content !== "string" || !payload.message.content.trim()) throw new OllamaOutputError("empty-content");
-      let parsed: unknown;
-      try { parsed = JSON.parse(payload.message.content); } catch { throw new OllamaOutputError("non-json"); }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new OllamaOutputError("invalid-object");
-      return parsed as Record<string, Record<string, number>>;
     },
   };
 }

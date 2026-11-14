@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { ollamaProvider } from "../packages/gateway/src/ollama-provider.ts";
 import { compareAtomVsWhole, ollamaWholeTaskProvider } from "../packages/evaluation/src/compare.ts";
+import type { OllamaCallMetric } from "../packages/gateway/src/ollama-chat.ts";
 import type { BenchmarkSuite } from "../packages/evaluation/src/evaluate.ts";
 
 const suitePath = process.argv[2];
@@ -16,11 +17,14 @@ if (!suitePath || !model) {
     const host = process.env.EAI_BENCH_OLLAMA_HOST;
     const wholeTimeoutMs = Number(process.env.EAI_BENCH_WHOLE_TIMEOUT_MS ?? "300000");
     if (!Number.isInteger(wholeTimeoutMs) || wholeTimeoutMs < 10000 || wholeTimeoutMs > 600000) throw new Error("Whole batch timeout must be 10000–600000 ms");
-    const report = await compareAtomVsWhole(
-      ollamaProvider({ model, host, timeoutMs: 120000, disableThinking: true }),
-      ollamaWholeTaskProvider({ model, host, timeoutMs: wholeTimeoutMs }),
+    const calls: OllamaCallMetric[] = [];
+    const onCall = (metric: Readonly<OllamaCallMetric>) => { calls.push(metric); };
+    const comparison = await compareAtomVsWhole(
+      ollamaProvider({ model, host, timeoutMs: 120000, disableThinking: true, onCall }),
+      ollamaWholeTaskProvider({ model, host, timeoutMs: wholeTimeoutMs, onCall }),
       suite,
     );
+    const report = { ...comparison, calls };
     const line = (name: string, arm: typeof report.atom) =>
       name.padEnd(15) + " valid " + arm.valid + "/" + arm.total +
       ", correct " + arm.correct + "/" + arm.valid +

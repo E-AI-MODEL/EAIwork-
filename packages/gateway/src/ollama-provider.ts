@@ -6,26 +6,11 @@ export interface OllamaConfig {
   model: string;
   timeoutMs?: number;
   disableThinking?: boolean;
+  onCall?: OllamaCallObserver;
 }
 
-/** Fixed, non-sensitive diagnostics. Never place raw generated text in exception messages. */
-export type OllamaOutputIssue =
-  | "non-json"
-  | "invalid-object"
-  | "missing-option"
-  | "invalid-probability"
-  | "extra-option"
-  | "zero-probability"
-  | "empty-content";
-
-export class OllamaOutputError extends Error {
-  readonly code: OllamaOutputIssue;
-  constructor(code: OllamaOutputIssue) {
-    super("Invalid model response: " + code);
-    this.name = "OllamaOutputError";
-    this.code = code;
-  }
-}
+export { OllamaOutputError, type OllamaOutputIssue } from "./ollama-chat.ts";
+import { ollamaChat, OllamaOutputError, type OllamaCallObserver } from "./ollama-chat.ts";
 
 const unsupportedThinking = new Set<string>();
 
@@ -43,7 +28,7 @@ export function localOllamaHost(value = "http://127.0.0.1:11434"): string {
 
 export async function discoverLocalOllamaModels(host?: string, timeoutMs = 5000): Promise<string[]> {
   const base = localOllamaHost(host);
-  const response = await fetch(base + "/api/tags", { signal: AbortSignal.timeout(timeoutMs) });
+  const response = await fetch(base + "/api/tags", { redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) throw new Error("Ollama model discovery failed: " + response.status);
   const data = await response.json() as { models?: Array<{ name?: string }> };
   if (!Array.isArray(data.models)) throw new Error("Invalid Ollama model list");
@@ -133,7 +118,7 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
   const host = localOllamaHost(config.host);
   if (!config.model.trim()) throw new Error("Model is required");
   const timeoutMs = config.timeoutMs ?? 30000;
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Invalid timeout");
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 600000) throw new Error("Invalid timeout");
   return {
     id: "ollama:" + config.model,
     openSession: () => {
@@ -142,16 +127,17 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
         if (used) throw new Error("Model session already used");
         used = true;
         const key = host + "::" + config.model;
+        const signal = AbortSignal.timeout(timeoutMs);
+        let attempt = 0;
         const send = async (withThink: boolean) => {
           const instruction = withReferences
-            ? localDecisionInstruction(capsule.decision?.kind === "verify-claim") +
+            ? localDecisionInstruction(capsule.decision?.kind === "verify-claim", "proposal") +
               " Respond with probabilities and an array of OPTIONAL exact citations. Each citation uses contextIndex, a zero-based index into the provided context array; start/end are UTF-16 offsets into that context item (end exclusive), and quote must match exactly. Use [] if no passage can be quoted. A citation is a proposal, not verified support."
             : localDecisionInstruction(capsule.decision?.kind === "verify-claim");
-          const response = await fetch(host + "/api/chat", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            signal: AbortSignal.timeout(timeoutMs),
-            body: JSON.stringify({
+          return ollamaChat({ host, model: config.model, signal, maxResponseBytes: 100000,
+            operation: withReferences ? "atom-proposal" : "atom-answer", attempt: ++attempt,
+            onCall: config.onCall,
+          }, {
               model: config.model,
               stream: false,
               format: withReferences ? proposalSchema(capsule.options) : probabilitySchema(capsule.options),
@@ -168,24 +154,9 @@ export function ollamaProvider(config: OllamaConfig): ModelProvider {
                   context: capsule.context,
                 }),
               }],
-            }),
-          });
-          const raw = await response.text();
-          if (!response.ok) {
-            // Never embed raw provider output or source snippets in exception fields.
-            const error = new Error("Ollama HTTP " + response.status) as Error & {
-              status?: number; thinkUnsupported?: boolean;
-            };
-            error.status = response.status;
-            error.thinkUnsupported = response.status === 400 && /think/i.test(raw);
-            throw error;
-          }
-          let payload: { message?: { content?: string } };
-          try { payload = JSON.parse(raw); } catch { throw new OllamaOutputError("non-json"); }
-          if (!payload.message?.content) throw new OllamaOutputError("empty-content");
-          return withReferences
-            ? parseProposal(payload.message.content, capsule.options)
-            : parseProbabilities(payload.message.content, capsule.options);
+          }, content => withReferences
+            ? parseProposal(content, capsule.options)
+            : parseProbabilities(content, capsule.options));
         };
         const withThink = !!config.disableThinking && !unsupportedThinking.has(key);
         try {

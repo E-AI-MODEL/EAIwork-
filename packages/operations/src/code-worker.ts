@@ -2,6 +2,7 @@
 import {createHash,randomUUID} from "node:crypto";
 import {chmodSync,closeSync,existsSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,renameSync,unlinkSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,relative,resolve,sep} from "node:path";
+import {ollamaChat,type OllamaCallObserver} from "../../gateway/src/ollama-chat.ts";
 import {localOllamaHost,discoverLocalOllamaModels} from "../../gateway/src/ollama-provider.ts";
 import {checkCodeSyntax,type CodePreflight} from "./code-preflight.ts";
 import {compareSource} from "./code-diff.ts";
@@ -61,25 +62,9 @@ const readBounded=(file:string)=>{
     throw new Error("Bestand heeft geen ondersteunde tekstinhoud");
   return content;
 };
-const boundedResponse=async(response:Response)=>{
-  if(!response.ok)throw new Error("Ollama kon geen codevoorstel maken (HTTP "+response.status+")");
-  if(Number(response.headers.get("content-length")||0)>100000)throw new Error("Modelantwoord is te groot");
-  const reader=response.body?.getReader();
-  if(!reader)throw new Error("Modelantwoord ontbreekt");
-  let length=0;const chunks:Uint8Array[]=[];
-  while(true){
-    const item=await reader.read();
-    if(item.done)break;
-    length+=item.value.byteLength;
-    if(length>100000){await reader.cancel();throw new Error("Modelantwoord is te groot")}
-    chunks.push(item.value);
-  }
-  let envelope;
-  try{envelope=JSON.parse(Buffer.concat(chunks).toString("utf8"))}
-  catch{throw new Error("Ollama stuurde geen geldig antwoord")}
-  if(typeof envelope?.message?.content!=="string")throw new Error("Ollama gaf geen code terug");
+const parseCodeProposal=(content:string)=>{
   let proposal;
-  try{proposal=JSON.parse(envelope.message.content)}
+  try{proposal=JSON.parse(content)}
   catch{throw new Error("Codevoorstel heeft geen geldig JSON-formaat")}
   if(!proposal||typeof proposal!=="object"||Array.isArray(proposal)||
      Object.keys(proposal).some(k=>!["replacement","explanation","checks"].includes(k))||
@@ -105,9 +90,10 @@ export class LocalCodeWorkspace {
   private readonly model:string;
   private readonly timeoutMs:number;
   private readonly maxPredictTokens:number;
+  private readonly onCall?:OllamaCallObserver;
   private readonly testRunner:(input:DockerTestInput)=>Promise<DockerTestResult>;
   private readonly activeTests=new Set<string>();
-  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;maxPredictTokens?:number;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
+  constructor(config:{workspaceDir:string;profileDir:string;host?:string;model:string;timeoutMs?:number;maxPredictTokens?:number;onCall?:OllamaCallObserver;testRunner?:(input:DockerTestInput)=>Promise<DockerTestResult>}){
     this.root=safeRoot(config.workspaceDir);
     const profile=safeRoot(config.profileDir);
     if(this.root===profile||this.root.startsWith(profile+sep)||profile.startsWith(this.root+sep))
@@ -115,6 +101,7 @@ export class LocalCodeWorkspace {
     if(typeof config.model!=="string"||!config.model.trim()||config.model.length>120)
       throw new Error("Ongeldig Ollama-model");
     this.model=config.model;
+    this.onCall=config.onCall;
     this.testRunner=config.testRunner??runIsolatedNodeTest;
     this.modelId="ollama:"+config.model;
     this.host=localOllamaHost(config.host);
@@ -215,10 +202,10 @@ export class LocalCodeWorkspace {
     }));
     if(Buffer.byteLength(JSON.stringify({original,existingTest,relatedFiles}))>28000)
       throw new Error("De beschikbare codecontext is te groot voor dit voorstel");
-    const response=await fetch(this.host+"/api/chat",{
-      method:"POST",redirect:"error",signal:AbortSignal.timeout(this.timeoutMs),
-      headers:{"content-type":"application/json"},
-      body:JSON.stringify({model:this.model,stream:false,
+    const proposed=await ollamaChat({host:this.host,model:this.model,
+      signal:AbortSignal.timeout(this.timeoutMs),maxResponseBytes:100000,
+      operation:"code",onCall:this.onCall}, {
+        model:this.model,stream:false,
         format:{type:"object",properties:{
           replacement:{type:"string",maxLength:32768},
           explanation:{type:"string",maxLength:3000},
@@ -229,9 +216,7 @@ export class LocalCodeWorkspace {
           instruction:"Return valid JSON with exactly replacement, explanation and checks. In replacement write the COMPLETE JavaScript module for path, keeping existing named exports and imports. Implement the user request exactly. The relatedFiles and existingTest below are READ ONLY reference, not files to edit. Import ONLY names that are visibly exported by relatedFiles, never invent imports. Do not request commands, network access or publication. Report checks as suggestions, not performed tests.",
           userRequest:instruction,path,original,existingTest,relatedFiles,
         })}],
-      })
-    });
-    const proposed=await boundedResponse(response);
+    },parseCodeProposal);
     const id=randomUUID();
     const preflight=checkCodeSyntax(path,proposed.replacement);
     const record:ProposalRecord={id,path,original,sourceSha256:sha(original),
