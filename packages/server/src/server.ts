@@ -333,7 +333,7 @@ export function makeServer(cfg: Config) {
     const checkState = Object.fromEntries(Object.entries(r.state).filter(([atom]) => checkVisible.has(atom)));
     const history = operations ? operations.snapshot().history : undefined;
     const passed = check.run({ pack: checkPack, state: structuredClone(checkState), ...(history ? { operations: history } : {}) }) === true;
-    if (!(check.atom in r.state)) return { passed, line: null };
+    if (!(check.atom in r.state)) return { passed, line: null, unanswered: true };
 
     const basis = {
       reads: Object.fromEntries(check.reads.map((atom) => [atom, r.state[atom]?.value ?? null])),
@@ -1726,6 +1726,8 @@ export function makeServer(cfg: Config) {
           if (e instanceof HttpError) throw e;
           throw new HttpError(500, "deterministic check failed", false);
         }
+        // A check verifies an answer. With no answer there is nothing to record, so nothing passed.
+        if (verdict.unanswered) return json(res, 409, { passed: false, error: "the target atom has no answer yet" });
         if (!verdict.passed) return json(res, 422, { passed: false });
         const line = verdict.line;
         if (!line) return json(res, 201, { passed: true });

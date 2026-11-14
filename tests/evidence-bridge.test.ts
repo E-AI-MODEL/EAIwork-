@@ -29,6 +29,8 @@ test("the journal rule needs an applied change and a passing test for exactly th
   assert.equal(appliedChangesAreTested([row("tested","p1","src/a.js",B,"passed"),row("applied","p1","src/a.js",A,"applied")]),false,"other bytes were tested");
   assert.equal(appliedChangesAreTested([...tested,row("applied","p2","src/b.js",B,"applied")]),false,"one untested change breaks the claim");
   assert.equal(appliedChangesAreTested([...tested,row("restored","p1","src/a.js",A,"restored")]),false,"a restored change is no longer applied");
+  assert.equal(appliedChangesAreTested([...tested,row("suite-tested","p1","src/a.js",A,"failed")]),false,"a later failed run revokes the earlier pass");
+  assert.equal(appliedChangesAreTested([...tested,row("tested","p1","src/a.js",A,"failed"),row("tested","p1","src/a.js",A,"passed")]),true,"a re-run that passes restores it");
   assert.deepEqual(appliedChanges([...tested,row("applied","p2","src/b.js",B,"applied")]).map(x=>[x.path,x.tested]),
     [["src/a.js",true],["src/b.js",false]]);
 });

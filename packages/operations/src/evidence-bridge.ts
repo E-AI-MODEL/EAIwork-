@@ -11,12 +11,13 @@ export interface AppliedChange { path: string; proposalId: string; replacementSh
 /** Every file whose latest finished code action left a model-proposed change in place. */
 export function appliedChanges(history: readonly OpsEnvelope[]): AppliedChange[] {
   const latest = new Map<string, { proposalId: string; replacementSha256: string; action: string }>();
-  const passed = new Set<string>();
+  // The latest isolated run for exactly these bytes decides: a later failure revokes an earlier pass.
+  const latestTest = new Map<string, string>();
   for (const row of history) {
     const e = row.event as any;
     if (e?.type !== "code.activity") continue;
-    if ((e.action === "tested" || e.action === "suite-tested") && e.result === "passed") {
-      passed.add(e.proposalId + ":" + e.replacementSha256);
+    if (e.action === "tested" || e.action === "suite-tested") {
+      latestTest.set(e.proposalId + ":" + e.replacementSha256, e.result);
     }
     if (e.action === "applied" || e.action === "restored") {
       latest.set(e.path, { proposalId: e.proposalId, replacementSha256: e.replacementSha256, action: e.action });
@@ -26,7 +27,7 @@ export function appliedChanges(history: readonly OpsEnvelope[]): AppliedChange[]
     .filter(([, x]) => x.action === "applied")
     .map(([path, x]) => ({
       path, proposalId: x.proposalId, replacementSha256: x.replacementSha256,
-      tested: passed.has(x.proposalId + ":" + x.replacementSha256),
+      tested: latestTest.get(x.proposalId + ":" + x.replacementSha256) === "passed",
     }))
     .sort((a, b) => a.path.localeCompare(b.path));
 }

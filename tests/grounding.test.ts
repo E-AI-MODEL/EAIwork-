@@ -121,6 +121,12 @@ test("a check proves only on a shown footing, and stops when that footing moves"
   assert.equal((await state()).atoms["a.loose"].status, "observed");
   assert.match((await explain("a.loose")).reasons.join("\n"), /not grounded and has no independent support/);
 
+  // A check on an atom nobody has answered records nothing, so it does not report a pass.
+  const early = await call(CHECK, "/checks/ledger-says", "POST", {});
+  assert.equal(early.status, 409);
+  assert.equal((await early.json() as any).passed, false);
+  assert.equal((await state()).atoms["a.direct"].status, "unknown");
+
   // A check that consulted a registered source proves on its own, even on a bare answer.
   assert.equal((await answer(JAN, "a.direct")).status, 201);
   assert.equal((await call(CHECK, "/checks/ledger-says", "POST", {})).status, 201);
