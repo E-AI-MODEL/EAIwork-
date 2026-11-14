@@ -394,6 +394,13 @@ async function load(){
   finally{btn.disabled=false;btn.textContent='Open workbench'}
 }
 $('load').addEventListener('click',load);
+(()=>{
+  // Opened from the dashboard or the launcher link: connect directly. The fragment is never sent to a server.
+  const match=/^#token=([0-9a-f]{64})$/.exec(location.hash);
+  if(!match)return;
+  history.replaceState(null,'',location.pathname+location.search);
+  $('token').value=match[1];load();
+})();
 $('refresh').addEventListener('click',async()=>{ try{ state=await api('/state'); renderWorkspace(); const open=document.querySelector('#inspector .atom-id')?.textContent; if(open&&state.atoms[open]) inspectAtom(open,document.querySelector(`.atom[data-atom="${CSS.escape(open)}"]`)); }catch(e){} });
 $('token').addEventListener('keydown',e=>{if(e.key==='Enter')load()});
 </script>

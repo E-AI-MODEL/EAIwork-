@@ -150,6 +150,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error("invalid local demo port");
   demo.server.listen(port,"127.0.0.1",()=>{
     process.stdout.write("\nEAIwork lokale proef (alleen deze computer)\n"+
+      "Open deze link (verbindt direct): http://127.0.0.1:"+port+"/dashboard#token="+demo.token+"\n"+
       "Dashboard: http://127.0.0.1:"+port+"/dashboard\n"+
       "Toegangstoken: "+demo.token+"\n"+
       "Losse tekstworker (alleen lokale proef): EAI_EXECUTOR_TOKEN="+demo.workerToken+"\n"+

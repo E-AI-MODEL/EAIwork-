@@ -18,7 +18,7 @@ Ollama draait standaard op `http://127.0.0.1:11434`, het dashboard op `http://12
 
 ## Een echte lokale planproef
 
-Open het dashboardadres dat de terminal geeft. Kies **Meer > Contracten en registratie**. Kopieer het in dezelfde terminal getoonde tijdelijke toegangstoken naar het verbindingsveld. De statusbalk meldt het geconfigureerde lokale model. Deze melding bewijst nog niet dat het model al een goed antwoord heeft gegeven.
+Open de link die de terminal geeft bij **Open deze link (verbindt direct)**. Het dashboard is dan meteen verbonden; het token verdwijnt uit de adresbalk. Lukt dat niet, open dan het gewone dashboardadres en plak het tijdelijke toegangstoken uit dezelfde terminal in het verbindingsveld op de eerste pagina. De statusbalk meldt het geconfigureerde lokale model. Deze melding bewijst nog niet dat het model al een goed antwoord heeft gegeven.
 
 Open **Uitvoering** en vul onder **Taakvoorstel uit lokaal taalmodel** bijvoorbeeld in:
 
