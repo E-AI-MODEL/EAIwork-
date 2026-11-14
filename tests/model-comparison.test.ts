@@ -163,3 +163,17 @@ test("invalid whole-task JSON is a sanitized output issue, not a false epistemic
     assert.ok(!JSON.stringify(result).includes("CONFIDENTIAL"));
   } finally { globalThis.fetch = original; }
 });
+
+test("overflowing whole-task probabilities remain unassessed instead of becoming a zero-confidence answer", async () => {
+  const result = await compareAtomVsWhole({
+    id: "mock:atom", openSession: () => ({ answer: async () => distribution("unknown") }),
+  }, {
+    id: "mock:overflow", answerAll: async questions => Object.fromEntries(
+      questions.map(q => [q.caseId, { yes: 1e308, no: 1e308, unknown: 0 }]),
+    ),
+  }, { ...suite, cases: suite.cases.slice(0, 1) });
+  assert.equal(result.whole.valid, 0);
+  assert.equal(result.whole.errors, 1);
+  assert.equal(result.trials[0].whole.error, "invalid-response");
+  assert.equal(result.trials[0].whole.predicted, undefined);
+});
