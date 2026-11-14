@@ -1,6 +1,8 @@
 name: artifact-real-proof
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - feature/artifact-real-run-smoke-v01-20261110
 
 permissions:
   contents: read

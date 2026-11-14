@@ -31,6 +31,19 @@ test("the journal rule needs an applied change and a passing test for exactly th
   assert.equal(appliedChangesAreTested([...tested,row("restored","p1","src/a.js",A,"restored")]),false,"a restored change is no longer applied");
   assert.equal(appliedChangesAreTested([...tested,row("suite-tested","p1","src/a.js",A,"failed")]),false,"a later failed run revokes the earlier pass");
   assert.equal(appliedChangesAreTested([...tested,row("tested","p1","src/a.js",A,"failed"),row("tested","p1","src/a.js",A,"passed")]),true,"a re-run that passes restores it");
+  // Two changes stacked on one file: restoring the newer one brings the older one back into view.
+  const C="c".repeat(64);
+  const stacked=[...tested,row("tested","p3","src/b.js",C,"passed"),row("applied","p3","src/b.js",C,"applied"),
+    row("applied","p2","src/a.js",B,"applied"),row("restored","p2","src/a.js",B,"restored")];
+  assert.deepEqual(appliedChanges(stacked).map(x=>[x.path,x.proposalId]),[["src/a.js","p1"],["src/b.js","p3"]]);
+  assert.equal(appliedChangesAreTested(stacked),true,"p1 is back in place and was tested");
+  const untestedUnder=[row("applied","p0","src/a.js",B,"applied"),row("tested","p1","src/a.js",A,"passed"),row("applied","p1","src/a.js",A,"applied"),
+    row("tested","p3","src/b.js",C,"passed"),row("applied","p3","src/b.js",C,"applied"),row("restored","p1","src/a.js",A,"restored")];
+  assert.equal(appliedChangesAreTested(untestedUnder),false,"restoring a tested change re-exposes the untested one beneath it");
+  // An apply or restore that started without a recorded outcome leaves the file unknown.
+  assert.equal(appliedChangesAreTested([...tested,row("apply-started","p2","src/b.js",B,"pending")]),false,"interrupted apply");
+  assert.equal(appliedChangesAreTested([...tested,row("restore-started","p1","src/a.js",A,"pending")]),false,"interrupted restore");
+  assert.equal(appliedChangesAreTested([...tested,row("apply-started","p2","src/b.js",B,"pending"),row("aborted","p2","src/b.js",B,"aborted")]),true,"an aborted apply changed nothing");
   assert.deepEqual(appliedChanges([...tested,row("applied","p2","src/b.js",B,"applied")]).map(x=>[x.path,x.tested]),
     [["src/a.js",true],["src/b.js",false]]);
 });
