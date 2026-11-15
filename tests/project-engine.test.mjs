@@ -52,8 +52,8 @@ test("rapport toont niet-bewezen werking en afzonderlijke menselijke besluiten",
  const result=combine(await inventory(root,"site"),await syntax(root));
  assert.equal(result.writes,false);
  assert.equal(result.published,false);
- assert.ok(result.markdown.includes("Wat is nog niet bewezen?"));
- assert.ok(result.markdown.includes("Wat beslis jij zelf?"));
+ assert.ok(result.markdown.includes("Wat is nog niet getest?"));
+ assert.ok(result.markdown.includes("Verder met je project"));
  assert.equal(result.status,"needs-user-review");
 }));
 test("CLI produceert controleerbare JSON en markdown, niet alleen een mock",()=>fixture(async(root)=>{
@@ -72,10 +72,10 @@ test("CLI produceert controleerbare JSON en markdown, niet alleen een mock",()=>
 test("gebruikersantwoord is direct leesbaar met een concrete stap, ook bij ZIP-only",()=>fixture(async(root)=>{
  await writeFile(join(root,"project.zip"),"fixture: project files still inside archive");
  const report=combine(await inventory(root,"code"),await syntax(root));
- assert.match(report.markdown,/## Wat is de eerste stap\?/);
+ assert.match(report.markdown,/## Dit kun je nu doen/);
  assert.match(report.markdown,/Pak het ZIP-bestand uit/);
  assert.match(report.markdown,/niet vanzelf uit/);
- assert.match(report.markdown,/## Wat is nog niet bewezen\?/);
+ assert.match(report.markdown,/## Wat is nog niet getest\?/);
  assert.equal(report.writes,false);
 }));
 test("GitHub Actions toont het volledige advies direct in de samenvatting",async()=>{
@@ -97,12 +97,12 @@ test("Gebruikersantwoord: codefouten krijgen bestandslink en regelnummer",()=>fi
  await writeFile(join(root,"broken.js"),"function () {");
  const project=await inventory(root,"code"),checks=await syntax(root);
  const result=combine(project,checks);
- assert.match(result.markdown,/Vastgestelde codefouten/);
+ assert.match(result.markdown,/Gevonden codefouten/);
  assert.match(result.markdown,/broken\.js/);
  assert.match(result.markdown,/regel 1/);
- assert.match(result.markdown,/Dit gaat al goed/);
+ assert.match(result.markdown,/Dit gaat goed/);
  assert.match(result.markdown,/Logische fouten en werking/);
- assert.match(result.markdown,/Codex op het web/);
- assert.match(result.markdown,/Opdracht die je kunt kopiëren/);
+ assert.match(result.markdown,/Open EAIgit/);
+ assert.match(result.markdown,/Verder met je project/);
  assert.match(result.markdown,/Syntaxisfout in/);
 }));
