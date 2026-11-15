@@ -1,0 +1,127 @@
+name: EAI Project Engine (read-only)
+on:
+  workflow_call:
+    inputs:
+      goal:
+        description: "Welke uitkomst moet de repository ondersteunen?"
+        required: false
+        type: string
+        default: code
+  workflow_dispatch:
+    inputs:
+      goal:
+        description: "Doel van het project"
+        required: true
+        default: code
+        type: choice
+        options: [site, app, code, docs]
+  pull_request:
+    paths:
+      - 'packages/project-engine/**'
+      - 'tests/project-engine.test.mjs'
+      - '.github/workflows/project-engine.yml'
+permissions:
+  contents: read
+concurrency:
+  group: project-engine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  inventory:
+    name: Worker: bestandsinventarisatie
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal alleen de te onderzoeken repository op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: project
+          persist-credentials: false
+      - name: Haal deze engine op (ontwikkelproef, na review vastpinnen op commit)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: feature/github-actions-project-engine-20261115
+          path: engine
+          persist-credentials: false
+      - name: Node instellen
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Inventariseer veilig en sla bevindingen op
+        env:
+          PROJECT_GOAL: ${{ inputs.goal || 'code' }}
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs inventory project "$PROJECT_GOAL" output/inventory.json
+      - name: Bewaar uitslag inventarisatie
+        uses: actions/upload-artifact@v4
+        with:
+          name: eai-project-inventory
+          path: output/inventory.json
+          if-no-files-found: error
+          retention-days: 7
+  syntax:
+    name: Worker: begrensde syntaxcheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal alleen de te onderzoeken repository op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: project
+          persist-credentials: false
+      - name: Haal engine op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: feature/github-actions-project-engine-20261115
+          path: engine
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Controleer syntax zonder projectcode te starten
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs syntax project output/syntax.json
+      - name: Bewaar uitslag syntax
+        uses: actions/upload-artifact@v4
+        with:
+          name: eai-project-syntax
+          path: output/syntax.json
+          if-no-files-found: error
+          retention-days: 7
+  report:
+    name: Worker: vergelijking en advies
+    needs: [inventory, syntax]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal engine op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: feature/github-actions-project-engine-20261115
+          path: engine
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Download bronresultaten
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eai-project-*
+          path: results
+      - name: Voeg controleerbaar eindrapport samen
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs report results/eai-project-inventory/inventory.json results/eai-project-syntax/syntax.json rapport
+          printf '## EAI Project Engine\n\n' >> "$GITHUB_STEP_SUMMARY"
+          printf 'De bestandsinventarisatie en syntaxiscontrole zijn uitgevoerd. Download het artefact **eai-project-report** om ook de onbekende onderdelen en menselijke besluiten te lezen. Dit is geen functionele test of publicatie.\n' >> "$GITHUB_STEP_SUMMARY"
+      - name: Bewaar controleerbaar rapport
+        uses: actions/upload-artifact@v4
+        with:
+          name: eai-project-report
+          path: rapport/
+          if-no-files-found: error
+          retention-days: 7
