@@ -107,6 +107,9 @@ jobs:
           path: output/syntax.json
           if-no-files-found: error
           retention-days: 7
+      - name: Toon bestands- en regelnummers als GitHub-controleannotaties
+        if: always()
+        run: node engine/packages/project-engine/src/engine.mjs annotate output/syntax.json
       - name: Syntaxisfouten laten de controle mislukken
         run: |
           node -e 'const r=require("./output/syntax.json");if(r.failed){console.error(r.failed+" syntaxisfout(en) gevonden.");process.exit(1)}'
