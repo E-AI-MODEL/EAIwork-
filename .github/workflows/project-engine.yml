@@ -1,4 +1,4 @@
-name: EAI Project Engine (read-only)
+name: EAIgit · projectcontrole
 on:
   workflow_call:
     inputs:
