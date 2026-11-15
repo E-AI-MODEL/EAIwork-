@@ -101,7 +101,7 @@ test("Gebruikersantwoord: codefouten krijgen bestandslink en regelnummer",()=>fi
  assert.match(result.markdown,/broken\.js/);
  assert.match(result.markdown,/regel 1/);
  assert.match(result.markdown,/Dit gaat goed/);
- assert.match(result.markdown,/Logische fouten en werking/);
+ assert.match(result.markdown,/Wat is nog niet getest/);
  assert.match(result.markdown,/Open EAIgit/);
  assert.match(result.markdown,/Verder met je project/);
  assert.match(result.markdown,/Syntaxisfout in/);
