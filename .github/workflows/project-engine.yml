@@ -107,9 +107,13 @@ jobs:
           path: output/syntax.json
           if-no-files-found: error
           retention-days: 7
+      - name: Syntaxisfouten laten de controle mislukken
+        run: |
+          node -e 'const r=require("./output/syntax.json");if(r.failed){console.error(r.failed+" syntaxisfout(en) gevonden.");process.exit(1)}'
   report:
     name: "Worker: vergelijking en advies"
     needs: [unit, inventory, syntax]
+    if: ${{ always() && needs.unit.result == 'success' && needs.inventory.result == 'success' && (needs.syntax.result == 'success' || needs.syntax.result == 'failure') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
