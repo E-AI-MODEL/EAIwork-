@@ -113,41 +113,18 @@ export function combine(project,checks){
   ...(project.classification.hasReadme?["Er staat een README in het project."]:[])
  ];
  const errors=failures.length?failures.map(x=>"- Syntaxisfout in "+fileLink(x.path,x.line)+". De oorzaak moet nog worden onderzocht."):["- "+(checks.checked?"Binnen de gecontroleerde bestanden geen syntaxisfout vastgesteld.":"Er zijn geen ondersteunde codebestanden op syntaxis getest.")];
- const repositoryLabel=repositoryUrl||"[de link naar jouw GitHub-repository]";
- const prompt=[
-  "Onderzoek mijn repository: "+repositoryLabel,
-  "Mijn doel: "+goalLabel+".",
-  "Dit is vastgesteld: "+(failures.length?failures.map(x=>x.path+(x.line?":"+x.line:"")).join(", "):"nog geen syntaxisfouten vastgesteld binnen de uitgevoerde controles")+".",
-  "Controleer de echte code en de belangrijkste gebruikershandeling. Noem wat goed werkt en welke fouten je daadwerkelijk kunt aantonen. Gebruik bij een fout een GitHub-bestandslink en regelnummer. Maak onderscheid tussen bewezen codefouten, mogelijke logische problemen en nog niet uitgevoerde tests. Geef een simpel stappenplan.",
-  "Vraag mijn toestemming voordat je code wijzigt. Gebruik voor wijzigingen een aparte branch en een pull request. Publiceer niets zonder mijn afzonderlijke toestemming."
- ];
  const lines=[
-  "# Dit hebben we gevonden","",
-  "**Doel:** "+goalLabel,
-  "**Onderzocht:** "+project.count+" "+(project.count===1?"bestand":"bestanden")+" en "+checks.checked+" JavaScript-/Python-syntaxiscontroles.",
-  "",
-  "## Wat is de eerste stap?","",next,"",
-  ...(repositoryUrl?["[Open je repository]("+repositoryUrl+") | [Bekijk GitHub-controles]("+repositoryUrl+"/actions)",""]:[]),
-  "## Dit gaat al goed",...good.map(x=>"- "+x),"",
-  "## Vastgestelde codefouten",...errors,"",
-  "## Logische fouten en werking",
-  "- De werking van knoppen, berekeningen, gegevensstromen en andere functies is niet uitgevoerd of getest. We kunnen hierover nog geen fout of succes vaststellen.","",
-  "## Andere aandachtspunten",
-  ...(warnings.length?warnings.map(x=>"- "+x):["- Geen andere bijzonderheden vastgesteld tijdens deze beperkte controle."]),"",
-  "## Wat is nog niet bewezen?",...result.notProven.map(x=>"- "+x),"",
-  "## Zo werk je verder met ChatGPT of Codex (alleen als je dat wilt)",
-  "1. Open ChatGPT, ga naar Instellingen > Plug-ins > GitHub. Kies Installeren of Verbinden als dit beschikbaar is.",
-  "2. Log in bij GitHub, kies je repository en controleer de gevraagde machtigingen. Deze GitHub-koppeling van ChatGPT biedt leestoegang en kan geen codewijzigingen pushen.",
-  "3. Voor codewijzigingen: open [Codex op het web](https://codex.openai.com/) als je account toegang tot Codex Cloud heeft. Koppel de gewenste repository via de aanwijzingen in Codex en controleer de rechten.",
-  "4. Kopieer de opdracht hieronder en beoordeel het voorstel voordat je een pull request accepteert.",
-  "",
-  "De beschikbaarheid hangt af van je abonnement en werkruimte. Er geldt geen algemene eis dat je minimaal Plus nodig hebt om de GitHub-koppeling te gebruiken. Codex Cloud heeft eigen voorwaarden.",
-  "[GitHub koppelen aan ChatGPT](https://help.openai.com/en/articles/11145903-connecting-github-to-chatgpt) | [Codex en abonnementen](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan)",
-  "",
-  "### Opdracht die je kunt kopiëren","",
-  tick.repeat(3)+"text",...prompt,tick.repeat(3),"",
-  "## Wat beslis jij zelf?",...result.humanDecisions.map(x=>"- "+x),"",
-  "_De engine heeft niets gewijzigd en niets gepubliceerd. Downloaden van een ZIP is niet nodig om dit advies te lezen._",""
+  "# EAIgit","",
+  "## Dit kun je nu doen","",next,"",
+  ...(repositoryUrl?["[Open je repository]("+repositoryUrl+") | [Bekijk je controles]("+repositoryUrl+"/actions)",""]:[]),
+  "## Dit gaat goed",...good.map(x=>"- "+x),"",
+  "## Gevonden codefouten",...errors,"",
+  "## Wat is nog niet getest?",
+  "- Of knoppen, berekeningen en andere functies doen wat je bedoelt.",
+  "- Of afhankelijkheden veilig zijn en de toepassing goed kan worden gepubliceerd.","",
+  "## Verder met je project",
+  "[Open EAIgit voor de volgende stap](https://eaimodel.nl/tools/eaigit/)",
+  ""
  ];
  return {...result,markdown:lines.join("\n")};
 }
