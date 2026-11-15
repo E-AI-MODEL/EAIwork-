@@ -136,9 +136,15 @@ jobs:
         run: |
           set -euo pipefail
           node engine/packages/project-engine/src/engine.mjs report results/eai-project-inventory/inventory.json results/eai-project-syntax/syntax.json rapport
-          printf '## EAI Project Engine\n\n' >> "$GITHUB_STEP_SUMMARY"
-          printf 'De bestandsinventarisatie en syntaxiscontrole zijn uitgevoerd. Download het artefact **eai-project-report** om ook de onbekende onderdelen en menselijke besluiten te lezen. Dit is geen functionele test of publicatie.\n' >> "$GITHUB_STEP_SUMMARY"
-      - name: Bewaar controleerbaar rapport
+          # Het resultaat verschijnt direct leesbaar in de GitHub Actions-samenvatting.
+          # Artifacts blijven uitsluitend beschikbaar als controleerbare brongegevens.
+          test -s rapport/ADVIES.md
+          {
+            cat rapport/ADVIES.md
+            printf '\n---\n'
+            printf '_Deze controles zijn automatisch uitgevoerd. Er is niets gepubliceerd of gewijzigd._\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Bewaar onderliggende gegevens voor controle
         uses: actions/upload-artifact@v4
         with:
           name: eai-project-report
