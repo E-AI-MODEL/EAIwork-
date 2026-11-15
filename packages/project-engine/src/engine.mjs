@@ -79,7 +79,39 @@ export function combine(project,checks){
  if(checks.unknown)warnings.push("Some syntax candidates could not be checked.");
  if(project.classification.scriptNames.length)warnings.push("Project-defined scripts were found but not executed.");
  const result={schema:"eai-project-engine/report-v1",status:checks.failed?"needs-fix":"needs-user-review",project,checks,warnings,notProven:["The application works for its intended users","Dependencies are compatible and secure","The code is safe to deploy","Publishing is authorized"],humanDecisions:["Confirm the desired behavior and what may be public","Approve running unknown project scripts separately","Approve repository changes and deployment separately"],writes:false,published:false};
- const lines=["# EAI Work: projectcontrole","","Doel: "+project.goal,"Bestanden: "+project.count,"Type: "+project.classification.kind,"Syntaxis: "+checks.passed+" geslaagd, "+checks.failed+" fouten, "+checks.unknown+" onbekend","","## Aangetroffen","Startbestanden: "+(project.classification.startPaths.join(", ")||"geen standaard startbestand"),"README: "+(project.classification.hasReadme?"ja":"nee"),"Licentie: "+(project.classification.hasLicense?"aanwezig":"niet aangetroffen"),"","## Aandachtspunten",...warnings.map(x=>"- "+x),"","## Niet bewezen",...result.notProven.map(x=>"- "+x),"","## Menselijke besluiten",...result.humanDecisions.map(x=>"- "+x),"","Deze read-only workflow heeft geen projectcode uitgevoerd of bestanden gepubliceerd.",""];
+ const zipOnly=project.count===1&&project.files[0]?.path.toLowerCase().endsWith(".zip");
+ const next=zipOnly
+  ?"Pak het ZIP-bestand uit en zet de losse projectbestanden in de repository. GitHub pakt een geüpload ZIP-bestand niet vanzelf uit."
+  :project.sensitivePaths.length
+  ?"Controleer eerst de mogelijk vertrouwelijke bestanden en bepaal welke bestanden openbaar mogen worden."
+  :checks.failed
+  ?"Herstel de vastgestelde syntaxisfouten en voer de controle daarna opnieuw uit."
+  :project.goal==="site"&&!project.classification.startPaths.length
+  ?"Bepaal welke pagina de website moet openen. Er is nog geen gebruikelijk startbestand aangetroffen."
+  :"Bekijk of de gevonden bestanden passen bij jouw doel. Test het belangrijkste gebruik zelf voordat je verder publiceert.";
+ const goalLabel={site:"Een website aanbieden",app:"Een toepassing laten werken",code:"Mijn project onderhouden",docs:"Documenten delen"}[project.goal]||project.goal;
+ const lines=[
+  "# Onderzoek van je project","",
+  "**Je doel:** "+goalLabel,
+  "**Wat is onderzocht:** "+project.count+" bestanden, "+checks.checked+" syntaxcontroles.",
+  "",
+  "## Wat kun je nu doen?","",next,"",
+  "## Wat hebben we gevonden?",
+  "- Herkend projecttype: "+project.classification.kind,
+  "- Startbestanden: "+(project.classification.startPaths.join(", ")||"niet aangetroffen"),
+  "- JavaScript/Python-syntaxis: "+checks.passed+" geslaagd, "+checks.failed+" fouten, "+checks.unknown+" niet gecontroleerd",
+  "- README: "+(project.classification.hasReadme?"aanwezig":"niet aangetroffen"),
+  "- Licentie: "+(project.classification.hasLicense?"aanwezig":"niet aangetroffen"),
+  "",
+  "## Aandachtspunten",
+  ...(warnings.length?warnings.map(x=>"- "+x):["- Geen bijzonderheden vastgesteld binnen deze beperkte controles."]),
+  "",
+  "## Niet bewezen",...result.notProven.map(x=>"- "+x),
+  "",
+  "## Menselijke besluiten",...result.humanDecisions.map(x=>"- "+x),
+  "",
+  "_Deze controle heeft geen projectcode uitgevoerd, niets gewijzigd in GitHub en niets gepubliceerd._",""
+ ];
  return {...result,markdown:lines.join("\n")};
 }
 async function put(path,obj){await mkdir(dirname(resolve(path)),{recursive:true});await writeFile(path,JSON.stringify(obj,null,2)+"\n")}
