@@ -2,7 +2,7 @@
 
 Doel: iemand kan na het uitpakken van een ZIP zijn projectbestanden in een eigen GitHub-repository onderbrengen en vervolgens, zonder AI of aparte server, een controleerbare **read-only** analyse uitvoeren.
 
-De engine gebruikt GitHub Actions. Hij draait **niet continu**: GitHub start jobs op basis van een gebeurtenis, zoals een handmatige workflowstart of een pull request.
+De engine gebruikt GitHub Actions. Hij draait **niet continu**: GitHub start jobs op basis van een gebeurtenis, zoals een handmatige workflowstart of een pull request. **Het gebruikersantwoord staat leesbaar in de GitHub Actions-run onder Summary.** Artefacten zijn niet de gebruikersinterface.
 
 ## Uitvoeringsroute
 
@@ -22,7 +22,7 @@ Inventarisatie en syntax kunnen **parallel** worden uitgevoerd. Het rapport is a
 1. De gebruiker pakt zijn ZIP uit en controleert op wachtwoorden, sleutels en privébestanden.
 2. Hij zet de projectbestanden in een eigen GitHub-repository. Niet uitsluitend het ZIP-bestand.
 3. Hij beoordeelt de workflow die hij aan de eigen repository wil toevoegen.
-4. GitHub Actions draait de read-only jobs; `eai-project-report` bevat `RESULTAAT.json` en `ADVIES.md`.
+4. GitHub Actions toont het volledige persoonlijke advies rechtstreeks bovenaan bij de workflow-run, met één concrete vervolgstap. De gebruiker hoeft geen ZIP te downloaden of uit te pakken. De artefacten bewaren alleen controleerbare gegevens voor technisch onderzoek.
 5. Daarna moeten nog echte gebruikstests volgen. Een groene syntaxcheck bewijst niet dat het project werkt.
 
 ### Wrapper voor de gebruikersrepository
