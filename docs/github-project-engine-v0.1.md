@@ -1,4 +1,4 @@
-# Project Engine op GitHub, proefversie
+# EAIgit op GitHub, proefversie
 
 Doel: iemand kan na het uitpakken van een ZIP zijn projectbestanden in een eigen GitHub-repository onderbrengen en vervolgens, zonder AI of aparte server, een controleerbare **read-only** analyse uitvoeren.
 
@@ -22,7 +22,7 @@ Inventarisatie en syntax kunnen **parallel** worden uitgevoerd. Het rapport is a
 1. De gebruiker pakt zijn ZIP uit en controleert op wachtwoorden, sleutels en privébestanden.
 2. Hij zet de projectbestanden in een eigen GitHub-repository. Niet uitsluitend het ZIP-bestand.
 3. Hij beoordeelt de workflow die hij aan de eigen repository wil toevoegen.
-4. GitHub Actions toont het volledige persoonlijke advies rechtstreeks bovenaan bij de workflow-run, met één concrete vervolgstap. De gebruiker hoeft geen ZIP te downloaden of uit te pakken. De artefacten bewaren alleen controleerbare gegevens voor technisch onderzoek.
+4. GitHub Actions toont het volledige persoonlijke advies rechtstreeks bovenaan bij de workflow-run, met één concrete vervolgstap en een link naar EAIgit voor verdere hulp. De gebruiker hoeft geen ZIP te downloaden of uit te pakken. De artefacten bewaren alleen controleerbare gegevens voor technisch onderzoek.
 5. Daarna moeten nog echte gebruikstests volgen. Een groene syntaxcheck bewijst niet dat het project werkt.
 
 ### Wrapper voor de gebruikersrepository
@@ -61,4 +61,4 @@ De ontwikkeltak is **geen release**. Voor een publiek platform dat automatisch m
 
 ## Testacceptatie
 
-`node --test tests/project-engine.test.mjs` test echte lokale fixtures, bestandspaden, ZIP-valkuil, geheimen, en het voorkomen van code-uitvoering. De GitHub Actions-workflow moet daarnaast alle drie de jobs uitvoeren en een geldig resultaat opleveren. Dit test niet het daadwerkelijke project van Pieter.
+`node --test tests/project-engine.test.mjs` test echte lokale fixtures, bestandspaden, ZIP-valkuil, geheimen, en het voorkomen van code-uitvoering. De GitHub Actions-workflow moet daarnaast alle drie de jobs uitvoeren en een geldig resultaat opleveren. Dit test niet het project van een echte gebruiker.
