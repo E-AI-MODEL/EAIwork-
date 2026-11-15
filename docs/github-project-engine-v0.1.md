@@ -53,6 +53,14 @@ jobs:
 - Geen herziening van code via AI, geen zelfstandig committen of publiceren.
 - Geen geteste koppeling van deze GitHub Actions-jobs aan de beveiligde EAI Work Operations-server.
 
+## Fouten zichtbaar in EAIgit
+
+De syntaxiswerker geeft vastgestelde JavaScript- en Python-syntaxisfouten als GitHub Actions-annotaties door. Per fout worden uitsluitend de bestandsnaam, het regelnummer (voor zover de checker dat weet) en een korte melding gepubliceerd. De broncode of foutuitvoer wordt niet in de annotatie overgenomen. De controle voert geen projectscript uit.
+
+Bij een **openbare repository** kan EAIgit met de publieke GitHub Checks API de actuele checks lezen. De wizard toont alleen een syntaxisfout als de annotatie de herkenbare titel `EAIgit syntaxis` heeft en het pad voorkomt in de gecontroleerde repository. Een groen vinkje is geen bewijs van werkende functies. De JSON-rapportages van de engine en privéresultaten zijn niet automatisch beschikbaar in de browser. Hiervoor is later een aparte, geautoriseerde koppeling nodig.
+
+De Actions-controle is in de eigen concept-PR met echte testbestanden uitgevoerd. Bij gebruik door derden moeten de workflow en alle engine-checkouts eerst op een gereviewde commit worden vastgezet en de securityreview worden afgerond. De wizard activeert de engine niet zelf en verandert geen repositories.
+
 ## Beveiliging en grenzen
 
 De workflow heeft uitsluitend `contents: read`. Checkout bewaart geen credentials. Broncode wordt alleen als gegevens behandeld; symlinks en afhankelijkheidsmappen worden niet gevolgd. Scans hebben een bestands- en groottebeperking. De job geeft geen broninhoud door aan het eindrapport en toont geen teststderr met mogelijk vertrouwelijke tekst.
