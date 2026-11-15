@@ -107,8 +107,8 @@ export function combine(project,checks){
  };
  const failures=(checks.files||[]).filter(x=>x.status==="syntax-fail");
  const good=[
-  "We konden "+project.count+" bestanden inventariseren.",
-  ...(checks.passed?["De syntaxis van "+checks.passed+" JavaScript- of Python-bestanden is gecontroleerd zonder vastgestelde syntaxisfout."]:[]),
+  "We konden "+project.count+" "+(project.count===1?"bestand":"bestanden")+" inventariseren.",
+  ...(checks.passed?["De syntaxis van "+checks.passed+" "+(checks.passed===1?"JavaScript- of Python-bestand is":"JavaScript- of Python-bestanden is")+" gecontroleerd zonder vastgestelde syntaxisfout."]:[]),
   ...(project.classification.startPaths.length?["Er is een mogelijk startbestand gevonden: "+project.classification.startPaths.map(x=>fileLink(x)).join(", ")]:[]),
   ...(project.classification.hasReadme?["Er staat een README in het project."]:[])
  ];
@@ -124,7 +124,7 @@ export function combine(project,checks){
  const lines=[
   "# Dit hebben we gevonden","",
   "**Doel:** "+goalLabel,
-  "**Onderzocht:** "+project.count+" bestanden en "+checks.checked+" JavaScript-/Python-syntaxiscontroles.",
+  "**Onderzocht:** "+project.count+" "+(project.count===1?"bestand":"bestanden")+" en "+checks.checked+" JavaScript-/Python-syntaxiscontroles.",
   "",
   "## Wat is de eerste stap?","",next,"",
   ...(repositoryUrl?["[Open je repository]("+repositoryUrl+") | [Bekijk GitHub-controles]("+repositoryUrl+"/actions)",""]:[]),
