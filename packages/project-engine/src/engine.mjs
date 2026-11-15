@@ -68,7 +68,11 @@ export async function syntax(folder){
   const binary=python?"python3":process.execPath;
   const args=python?["-I","-c","import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",filename]:["--check",filename];
   const r=spawnSync(binary,args,{cwd:root,timeout:3000,maxBuffer:64*1024,env:{PATH:process.env.PATH||"/usr/bin:/bin",HOME:"/tmp"},encoding:"utf8"});
-  results.push({path:f.path,status:r.error?"unknown":r.status===0?"syntax-pass":"syntax-fail"});
+  // Bewaar alleen het regelnummersignaal. De foutuitvoer kan projectcode bevatten.
+  const stderr=String(r.stderr||"").slice(0,8192);
+  const sourceLine=stderr.match(/:(\\d+)(?::\\d+)?(?=\\r?\\n|$)/m)||stderr.match(/\\bline (\\d+)\\b/i);
+  const line=sourceLine?Number(sourceLine[1]):null;
+  results.push({path:f.path,status:r.error?"unknown":r.status===0?"syntax-pass":"syntax-fail",line:Number.isSafeInteger(line)&&line>0?line:null});
  }
  return {schema:"eai-project-engine/syntax-v1",files:results,checked:results.length,passed:results.filter(x=>x.status==="syntax-pass").length,failed:results.filter(x=>x.status==="syntax-fail").length,unknown:results.filter(x=>["unknown","skipped"].includes(x.status)).length,executesProjectCode:false,limits:["No package installation or project-defined scripts","No TypeScript, JSX, browser, integration or functionality test"]};
 }
