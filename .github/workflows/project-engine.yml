@@ -26,6 +26,22 @@ concurrency:
   group: project-engine-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  unit:
+    name: Test de engine, inclusief echte fixturebestanden
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal gecontroleerde engine op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: feature/github-actions-project-engine-20261115
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Reguliere tests inclusief tegenvoorbeelden
+        run: node --test tests/project-engine.test.mjs
   inventory:
     name: Worker: bestandsinventarisatie
     runs-on: ubuntu-24.04
@@ -93,7 +109,7 @@ jobs:
           retention-days: 7
   report:
     name: Worker: vergelijking en advies
-    needs: [inventory, syntax]
+    needs: [unit, inventory, syntax]
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
