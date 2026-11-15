@@ -43,7 +43,7 @@ jobs:
       - name: Reguliere tests inclusief tegenvoorbeelden
         run: node --test tests/project-engine.test.mjs
   inventory:
-    name: Worker: bestandsinventarisatie
+    name: "Worker: bestandsinventarisatie"
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -77,7 +77,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   syntax:
-    name: Worker: begrensde syntaxcheck
+    name: "Worker: begrensde syntaxcheck"
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -108,7 +108,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   report:
-    name: Worker: vergelijking en advies
+    name: "Worker: vergelijking en advies"
     needs: [unit, inventory, syntax]
     runs-on: ubuntu-24.04
     timeout-minutes: 8
