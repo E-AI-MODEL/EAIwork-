@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
-import {inventory,syntax,combine,main} from "../packages/project-engine/src/engine.mjs";
+import {inventory,syntax,syntaxAnnotations,combine,main} from "../packages/project-engine/src/engine.mjs";
 async function fixture(fn){
  const root=await mkdtemp(join(tmpdir(),"eai-engine-"));
  try{return await fn(root)}finally{await rm(root,{recursive:true,force:true})}
@@ -105,4 +105,16 @@ test("Gebruikersantwoord: codefouten krijgen bestandslink en regelnummer",()=>fi
  assert.match(result.markdown,/Open EAIgit/);
  assert.match(result.markdown,/Verder met je project/);
  assert.match(result.markdown,/Syntaxisfout in/);
+}));
+
+test("GitHub-annotaties verwijzen veilig naar aangetroffen syntaxfouten",()=>fixture(async(root)=>{
+ await writeFile(join(root,"bad.js"),"function () {\n");
+ await writeFile(join(root,"good.js"),"console.log('ok');");
+ const checked=await syntax(root),commands=syntaxAnnotations(checked);
+ assert.equal(commands.length,1);
+ assert.match(commands[0],/^::error file=bad\.js,line=1,title=EAIgit syntaxis::Syntaxisfout vastgesteld/);
+ assert.ok(!commands[0].includes("function () {"));
+ assert.deepEqual(syntaxAnnotations({schema:"eai-project-engine/syntax-v1",files:[
+  {path:"weird%name\nother.js",status:"syntax-fail",line:2}
+ ]}).map(x=>x.includes("%25")&&x.includes("%0A")),[true]);
 }));
