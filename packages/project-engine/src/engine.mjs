@@ -70,7 +70,7 @@ export async function syntax(folder){
   const r=spawnSync(binary,args,{cwd:root,timeout:3000,maxBuffer:64*1024,env:{PATH:process.env.PATH||"/usr/bin:/bin",HOME:"/tmp"},encoding:"utf8"});
   // Bewaar alleen het regelnummersignaal. De foutuitvoer kan projectcode bevatten.
   const stderr=String(r.stderr||"").slice(0,8192);
-  const sourceLine=stderr.match(/:(\\d+)(?::\\d+)?(?=\\r?\\n|$)/m)||stderr.match(/\\bline (\\d+)\\b/i);
+  const sourceLine=stderr.match(/:(\d+)(?::\d+)?(?=\r?\n|$)/m)||stderr.match(/\bline (\d+)\b/i);
   const line=sourceLine?Number(sourceLine[1]):null;
   results.push({path:f.path,status:r.error?"unknown":r.status===0?"syntax-pass":"syntax-fail",line:Number.isSafeInteger(line)&&line>0?line:null});
  }
