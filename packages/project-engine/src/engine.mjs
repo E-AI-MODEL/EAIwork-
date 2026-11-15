@@ -128,11 +128,23 @@ export function combine(project,checks){
  ];
  return {...result,markdown:lines.join("\n")};
 }
+
+const encodeAnnotationProperty=(value)=>String(value||"").replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A").replace(/:/g,"%3A").replace(/,/g,"%2C");
+export function syntaxAnnotations(checks){
+ if(checks?.schema!=="eai-project-engine/syntax-v1")error("Unexpected syntax result");
+ return (checks.files||[]).filter(x=>x.status==="syntax-fail").slice(0,100).map(x=>{
+  const path=encodeAnnotationProperty(x.path);
+  const line=Number.isSafeInteger(x.line)&&x.line>0?",line="+x.line:"";
+  return "::error file="+path+line+",title=EAIgit syntaxis::Syntaxisfout vastgesteld. Open het bestand en controleer de opgegeven regel.";
+ });
+}
+
 async function put(path,obj){await mkdir(dirname(resolve(path)),{recursive:true});await writeFile(path,JSON.stringify(obj,null,2)+"\n")}
 export async function main(args){
  const [mode,...items]=args;
  if(mode==="inventory"){const [folder,goal,out]=items;if(!out)error("Usage: inventory <dir> <goal> <result.json>");await put(out,await inventory(folder,goal));return}
  if(mode==="syntax"){const [folder,out]=items;if(!out)error("Usage: syntax <dir> <result.json>");await put(out,await syntax(folder));return}
+ if(mode==="annotate"){const [path]=items;if(!path)error("Usage: annotate <syntax.json>");const checks=JSON.parse(await readFile(path,"utf8"));for(const text of syntaxAnnotations(checks))console.log(text);return}
  if(mode==="report"){const [ip,sp,dir]=items;if(!dir)error("Usage: report <inventory.json> <syntax.json> <out-dir>");const result=combine(JSON.parse(await readFile(ip,"utf8")),JSON.parse(await readFile(sp,"utf8")));await mkdir(dir,{recursive:true});await put(join(dir,"RESULTAAT.json"),{...result,markdown:undefined});await writeFile(join(dir,"ADVIES.md"),result.markdown);return}
  error("Unknown project worker");
 }
