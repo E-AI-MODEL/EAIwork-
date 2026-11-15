@@ -44,6 +44,7 @@ test("syntaxiscontrole voert onbekende projectcode niet uit",()=>fixture(async(r
  assert.equal(data.executesProjectCode,false);
  assert.equal(data.failed,1);
  assert.equal(data.passed,2);
+ assert.equal(data.files.find(x=>x.path==="bad.js").line,1);
  await assert.rejects(readFile(join(root,"oops"),"utf8"),{code:"ENOENT"});
 }));
 test("rapport toont niet-bewezen werking en afzonderlijke menselijke besluiten",()=>fixture(async(root)=>{
@@ -90,4 +91,18 @@ test("een syntaxfout geeft een herstelstap in het gebruikersantwoord",()=>fixtur
  const report=combine(await inventory(root,"site"),await syntax(root));
  assert.match(report.markdown,/Herstel de vastgestelde syntaxisfouten/);
  assert.equal(report.status,"needs-fix");
+}));
+
+test("Gebruikersantwoord: codefouten krijgen bestandslink en regelnummer",()=>fixture(async(root)=>{
+ await writeFile(join(root,"broken.js"),"function () {");
+ const project=await inventory(root,"code"),checks=await syntax(root);
+ const result=combine(project,checks);
+ assert.match(result.markdown,/Vastgestelde codefouten/);
+ assert.match(result.markdown,/broken\.js/);
+ assert.match(result.markdown,/regel 1/);
+ assert.match(result.markdown,/Dit gaat al goed/);
+ assert.match(result.markdown,/Logische fouten en werking/);
+ assert.match(result.markdown,/Codex op het web/);
+ assert.match(result.markdown,/Opdracht die je kunt kopiëren/);
+ assert.ok(!result.markdown.includes("geen fout"));
 }));
