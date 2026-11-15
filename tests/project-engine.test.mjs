@@ -1,0 +1,68 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from "node:fs/promises";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
+import {inventory,syntax,combine,main} from "../packages/project-engine/src/engine.mjs";
+async function fixture(fn){
+ const root=await mkdtemp(join(tmpdir(),"eai-engine-"));
+ try{return await fn(root)}finally{await rm(root,{recursive:true,force:true})}
+}
+test("inventariseert website en laat gebouwde bestanden intact",()=>fixture(async(root)=>{
+ await mkdir(join(root,"dist"));await writeFile(join(root,"dist/index.html"),"<h1>demo</h1>");
+ await writeFile(join(root,"README.md"),"Public test project");
+ const data=await inventory(root,"site");
+ assert.deepEqual(data.classification.startPaths,["dist/index.html"]);
+ assert.equal(data.classification.hasReadme,true);
+ assert.equal(data.executesProjectCode,false);
+}));
+test("herkent ZIP als los bestand en claimt niet dat GitHub uitpakt",()=>fixture(async(root)=>{
+ await writeFile(join(root,"myproject.zip"),"fake fixture");
+ const data=await inventory(root,"code");
+ assert.ok(data.warnings.some(x=>x.includes("does not unpack")));
+}));
+test("gevoelige namen en symlinks blijven buiten uitvoer",()=>fixture(async(root)=>{
+ await writeFile(join(root,".env"),"FAKE_SECRET=do_not_print");
+ await symlink(join(root,".env"),join(root,"pointer.txt"));
+ const data=await inventory(root,"code");
+ assert.deepEqual(data.sensitivePaths,[".env"]);
+ assert.ok(data.skipped.some(x=>x.reason==="symlink"));
+ assert.ok(!JSON.stringify(data).includes("FAKE_SECRET"));
+}));
+test("parst scripts en dependencies zonder ze uit te voeren",()=>fixture(async(root)=>{
+ await writeFile(join(root,"package.json"),JSON.stringify({dependencies:{vite:"*"},scripts:{test:"node unsafe.js"}}));
+ const data=await inventory(root,"site");
+ assert.equal(data.classification.framework,"vite");
+ assert.deepEqual(data.classification.scriptNames,["test"]);
+ assert.ok(!data.warnings.some(x=>x.includes("syntax errors")));
+}));
+test("syntaxiscontrole voert onbekende projectcode niet uit",()=>fixture(async(root)=>{
+ await writeFile(join(root,"good.js"),'require("node:fs").writeFileSync("oops","executed");');
+ await writeFile(join(root,"bad.js"),"function () {");
+ await writeFile(join(root,"script.py"),'raise Exception("must never run")');
+ const data=await syntax(root);
+ assert.equal(data.executesProjectCode,false);
+ assert.equal(data.failed,1);
+ assert.equal(data.passed,2);
+ await assert.rejects(readFile(join(root,"oops"),"utf8"),{code:"ENOENT"});
+}));
+test("rapport toont niet-bewezen werking en afzonderlijke menselijke besluiten",()=>fixture(async(root)=>{
+ await writeFile(join(root,"index.html"),"<!doctype html><html></html>");
+ const result=combine(await inventory(root,"site"),await syntax(root));
+ assert.equal(result.writes,false);
+ assert.equal(result.published,false);
+ assert.ok(result.markdown.includes("Niet bewezen"));
+ assert.ok(result.markdown.includes("Menselijke besluiten"));
+ assert.equal(result.status,"needs-user-review");
+}));
+test("CLI produceert controleerbare JSON en markdown, niet alleen een mock",()=>fixture(async(root)=>{
+ const project=join(root,"project");const out=join(root,"artifacts");
+ await mkdir(project);
+ await writeFile(join(project,"index.html"),"<p>web</p>");
+ await main(["inventory",project,"site",join(out,"inventory.json")]);
+ await main(["syntax",project,join(out,"syntax.json")]);
+ await main(["report",join(out,"inventory.json"),join(out,"syntax.json"),out]);
+ const result=JSON.parse(await readFile(join(out,"RESULTAAT.json"),"utf8"));
+ assert.equal(result.project.count,1);assert.equal(result.checks.checked,0);
+ assert.ok((await readFile(join(out,"ADVIES.md"),"utf8")).includes("geen standaard startbestand")===false);
+}));
