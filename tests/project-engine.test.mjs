@@ -66,3 +66,28 @@ test("CLI produceert controleerbare JSON en markdown, niet alleen een mock",()=>
  assert.equal(result.project.count,1);assert.equal(result.checks.checked,0);
  assert.ok((await readFile(join(out,"ADVIES.md"),"utf8")).includes("geen standaard startbestand")===false);
 }));
+
+
+test("gebruikersantwoord is direct leesbaar met een concrete stap, ook bij ZIP-only",()=>fixture(async(root)=>{
+ await writeFile(join(root,"project.zip"),"fixture: project files still inside archive");
+ const report=combine(await inventory(root,"code"),await syntax(root));
+ assert.match(report.markdown,/## Wat kun je nu doen\?/);
+ assert.match(report.markdown,/Pak het ZIP-bestand uit/);
+ assert.match(report.markdown,/niet vanzelf uit/);
+ assert.match(report.markdown,/## Niet bewezen/);
+ assert.equal(report.writes,false);
+}));
+test("GitHub Actions toont het volledige advies direct in de samenvatting",async()=>{
+ const workflow=await readFile(new URL("../.github/workflows/project-engine.yml",import.meta.url),"utf8");
+ assert.ok(workflow.includes('cat rapport/ADVIES.md'));
+ assert.ok(workflow.includes('"$GITHUB_STEP_SUMMARY"'));
+ assert.ok(!workflow.includes('Download het artefact **eai-project-report**'));
+ assert.ok(workflow.includes('Bewaar onderliggende gegevens voor controle'));
+});
+test("een syntaxfout geeft een herstelstap in het gebruikersantwoord",()=>fixture(async(root)=>{
+ await writeFile(join(root,"index.html"),"<h1>Demo</h1>");
+ await writeFile(join(root,"broken.js"),"function () {");
+ const report=combine(await inventory(root,"site"),await syntax(root));
+ assert.match(report.markdown,/Herstel de vastgestelde syntaxisfouten/);
+ assert.equal(report.status,"needs-fix");
+}));
