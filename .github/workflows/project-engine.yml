@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: feature/github-actions-project-engine-20261115
+          ref: a31819be7f611874bf4c30b02152f558f2105f80
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -52,11 +52,11 @@ jobs:
         with:
           path: project
           persist-credentials: false
-      - name: Haal deze engine op (ontwikkelproef, na review vastpinnen op commit)
+      - name: Haal engine op vanaf onveranderlijke commit (nog niet onafhankelijk gereviewd)
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: feature/github-actions-project-engine-20261115
+          ref: a31819be7f611874bf4c30b02152f558f2105f80
           path: engine
           persist-credentials: false
       - name: Node instellen
@@ -90,7 +90,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: feature/github-actions-project-engine-20261115
+          ref: a31819be7f611874bf4c30b02152f558f2105f80
           path: engine
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -124,7 +124,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: feature/github-actions-project-engine-20261115
+          ref: a31819be7f611874bf4c30b02152f558f2105f80
           path: engine
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
