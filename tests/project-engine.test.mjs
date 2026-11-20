@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtemp,mkdir,writeFile,readFile,rm,symlink} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
-import {inventory,syntax,syntaxAnnotations,combine,main} from "../packages/project-engine/src/engine.mjs";
+import {inventory,syntax,syntaxAnnotations,combine,main,sourceBinding} from "../packages/project-engine/src/engine.mjs";
 async function fixture(fn){
  const root=await mkdtemp(join(tmpdir(),"eai-engine-"));
  try{return await fn(root)}finally{await rm(root,{recursive:true,force:true})}
@@ -138,4 +138,33 @@ test("ongebruikelijke bestandsnamen kunnen het GitHub-rapport niet herschrijven"
  assert.ok(report.markdown.includes("broken\\]\\[other\\nname.js"));
  assert.ok(!report.markdown.includes("broken][other\nname.js"));
  assert.equal(report.published,false);
+}));
+
+test("project workers report their exact GitHub Actions source context",async()=>{
+ const sha="A".repeat(40);
+ assert.deepEqual(sourceBinding({GITHUB_REPOSITORY:"E-AI-MODEL/EAIwork-",GITHUB_SHA:sha}),{
+  kind:"github-actions-context",repository:"E-AI-MODEL/EAIwork-",commitSha:sha.toLowerCase()
+ });
+ assert.deepEqual(sourceBinding({GITHUB_REPOSITORY:"E-AI-MODEL/EAIwork-",GITHUB_SHA:"main"}),{
+  kind:"unbound",repository:null,commitSha:null
+ });
+});
+test("inventory and syntax from different revisions cannot yield a combined result",()=>fixture(async(root)=>{
+ await writeFile(join(root,"index.html"),"<h1>Fixture</h1>");
+ const project=await inventory(root,"site");
+ const checks=await syntax(root);
+ assert.deepEqual(project.sourceBinding,checks.sourceBinding);
+ const baseline=combine(project,checks);
+ assert.equal(baseline.sourceConsistency,
+  project.sourceBinding.kind==="github-actions-context"?"matching-run-context":"unattested-local-input");
+ const gitA={kind:"github-actions-context",repository:"E-AI-MODEL/proef",commitSha:"a".repeat(40)};
+ const gitB={...gitA,commitSha:"b".repeat(40)};
+ assert.throws(()=>combine({...project,sourceBinding:gitA},{...checks,sourceBinding:gitB}),/Mixed project source revisions/);
+ assert.throws(()=>combine({...project,sourceBinding:gitA},{...checks,sourceBinding:{...gitA,repository:"other/repo"}}),/Mixed project source revisions/);
+ assert.throws(()=>combine({...project,sourceBinding:gitA},checks),/Mixed project source revisions/);
+ assert.throws(()=>combine({...project,sourceBinding:null},checks),/Missing or malformed project source binding/);
+ assert.throws(()=>combine(project,{...checks,sourceBinding:undefined}),/Missing or malformed project source binding/);
+ const matching=combine({...project,sourceBinding:gitA},{...checks,sourceBinding:gitA});
+ assert.equal(matching.sourceConsistency,"matching-run-context");
+ assert.deepEqual(matching.sourceBinding,gitA);
 }));
