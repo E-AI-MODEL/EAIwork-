@@ -71,6 +71,7 @@ export function claimTextJob(store:OpsStore,executor:ExecutorIdentity):ExecutorJ
   for(const mission of missions){
     const consent=mission.automation;
     if(mission.paused||!consent?.enabled||consent.executionMode!=="remote-text"||
+       !consent.executorIds?.includes(executor.ownerId)||
        consent.starts>=consent.maxStarts||
        Object.values(mission.tasks).some(t=>t.status==="failed"))
       continue;
@@ -125,6 +126,7 @@ const activeClaim=(store:OpsStore,identity:ExecutorIdentity,ref:JobReference)=>{
      lease.ownerId!==identity.ownerId||
      mission.paused||!mission.automation?.enabled||
      mission.automation.executionMode!=="remote-text"||
+     !mission.automation.executorIds?.includes(identity.ownerId)||
      !identity.taskKinds.includes(task.spec.taskKind as FixedTextKind)||
      !FIXED.has(task.spec.taskKind))
     fail("executor claim no longer active");
