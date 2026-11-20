@@ -79,7 +79,7 @@ Onjuiste leasegegevens en mislukte onafhankelijke resultaatscontrole
 leiden tot afwijzing.
 
 Het ophalen van werk gebeurt alleen voor missies met een expliciet
-`executionMode:"remote-text"` en een nog niet verbruikt startbudget.
+`executionMode:"remote-text"`, een nog niet verbruikt startbudget en een expliciete lijst met toegestane uitvoerders (`executorIds`). Niet-aangewezen tokens krijgen geen invoertekst of lease.
 De toestemming, taakclaim, lease en voltooide resultaten zijn
 replaybare operations-events. Een automatische herstart van een
 geleasede taak is niet toegestaan.
@@ -114,3 +114,7 @@ werkelijke lokale HTTP-server. Ze controleren taaktoestemming,
 verschillende credentials, gelijktijdige claims, het hergebruik van
 leases, de gevolgen van een ongeldig resultaat en de blijvende
 scheiding met de gewone API. De CI-uitkomst hoort bij de exacte commit.
+
+## Bestaande missies en uitvoerdertoestemming
+
+Oudere logs zonder `executorIds` blijven controleerbaar en kunnen opnieuw worden gelezen. De toegestane lijst is dan leeg; zo'n missie kan geen nieuwe externe teksttaken laten claimen. De eigenaar stopt de oude toestemming en start opnieuw met één tot acht vooraf geconfigureerde uitvoerder-ID's. De HTTP-API weigert nieuwe remote-toestemming zonder lijst. Een reeds opgeslagen lease wordt niet automatisch herhaald.
