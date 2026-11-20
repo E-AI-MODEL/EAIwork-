@@ -2143,7 +2143,7 @@ async function prepareMissionWorker(id){
     });
     if(result.status!=='candidate-tested')
       throw new Error('De Builder heeft geen geteste kandidaat opgeleverd.');
-    s.workerNeeds=null;
+    s.workerNeeds=null;s.selectedOpsWorker=result.workerId;
     s.liveRunNote='Worker '+result.workerId+' is samengesteld en lokaal getest. '+
       'Hij is nog niet vrijgegeven. Open Workerregistratie voor de afzonderlijke beoordeling. '+
       'De oorspronkelijke opdracht blijft in de wachtrij.';
