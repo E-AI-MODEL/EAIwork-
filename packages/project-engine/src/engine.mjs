@@ -12,6 +12,15 @@ const PY=/\.py$/i;
 const error=(s)=>{throw new Error(s)};
 const existsDir=async(s)=>{try{return (await lstat(s)).isDirectory();}catch{return false}};
 const posix=(p)=>p.split(sep).join("/");
+// Bind separate worker results to the same GitHub Actions checkout context.
+// This is consistency evidence, not a cryptographic or independent attestation.
+export function sourceBinding(environment=process.env){
+ const repository=String(environment.GITHUB_REPOSITORY||"");
+ const commitSha=String(environment.GITHUB_SHA||"");
+ if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)||!/^[a-f0-9]{40}$/i.test(commitSha))
+  return {kind:"unbound",repository:null,commitSha:null};
+ return {kind:"github-actions-context",repository,commitSha:commitSha.toLowerCase()};
+}
 export async function inventory(folder,goal="site"){
  if(!["site","app","code","docs"].includes(goal))error("Unsupported goal");
  const root=resolve(folder);
@@ -55,7 +64,7 @@ export async function inventory(folder,goal="site"){
  if(goal==="site"&&!startPaths.length)warnings.push("No standard website entry point found. Custom build steps may still exist.");
  if(paths.length===1&&paths[0].toLowerCase().endsWith(".zip"))warnings.push("Only a ZIP was found. GitHub does not unpack ZIP uploads automatically.");
  if(skipped.length)warnings.push("Some directories or symlinks were skipped.");
- return {schema:"eai-project-engine/inventory-v1",goal,files,skipped:skipped.slice(0,200),count:files.length,totalBytes,sensitivePaths,classification,warnings,source:"repository-checkout",executesProjectCode:false};
+ return {schema:"eai-project-engine/inventory-v1",goal,files,skipped:skipped.slice(0,200),count:files.length,totalBytes,sensitivePaths,classification,warnings,source:"repository-checkout",sourceBinding:sourceBinding(),executesProjectCode:false};
 }
 export async function syntax(folder){
  const root=resolve(folder);
@@ -77,15 +86,26 @@ export async function syntax(folder){
   const line=sourceLine?Number(sourceLine[1]):null;
   results.push({path:f.path,status:r.error||r.signal||r.status===null?"unknown":r.status===0?"syntax-pass":"syntax-fail",line:Number.isSafeInteger(line)&&line>0?line:null});
  }
- return {schema:"eai-project-engine/syntax-v1",files:results,checked:results.length,passed:results.filter(x=>x.status==="syntax-pass").length,failed:results.filter(x=>x.status==="syntax-fail").length,unknown:results.filter(x=>["unknown","skipped"].includes(x.status)).length,executesProjectCode:false,limits:["No package installation or project-defined scripts","No TypeScript, JSX, browser, integration or functionality test"]};
+ return {schema:"eai-project-engine/syntax-v1",files:results,checked:results.length,passed:results.filter(x=>x.status==="syntax-pass").length,failed:results.filter(x=>x.status==="syntax-fail").length,unknown:results.filter(x=>["unknown","skipped"].includes(x.status)).length,sourceBinding:sourceBinding(),executesProjectCode:false,limits:["No package installation or project-defined scripts","No TypeScript, JSX, browser, integration or functionality test"]};
 }
 export function combine(project,checks){
  if(project?.schema!=="eai-project-engine/inventory-v1"||checks?.schema!=="eai-project-engine/syntax-v1")error("Unexpected worker result");
+ // Reject missing, malformed or mixed source bindings before producing advice.
+ // The runner may tell us a commit SHA; this comparison cannot attest to its bytes.
+ const validBinding=(b)=>b&&(
+  (b.kind==="unbound"&&b.repository===null&&b.commitSha===null)||
+  (b.kind==="github-actions-context"&&typeof b.repository==="string"&&
+   /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(b.repository)&&
+   typeof b.commitSha==="string"&&/^[a-f0-9]{40}$/.test(b.commitSha)));
+ if(!validBinding(project.sourceBinding)||!validBinding(checks.sourceBinding))
+  error("Missing or malformed project source binding");
+ if(JSON.stringify(project.sourceBinding)!==JSON.stringify(checks.sourceBinding))
+  error("Mixed project source revisions");
  const warnings=[...project.warnings];
  if(checks.failed)warnings.push("Syntax errors found in "+checks.failed+" checked files.");
  if(checks.unknown)warnings.push("Some syntax candidates could not be checked.");
  if(project.classification.scriptNames.length)warnings.push("Project-defined scripts were found but not executed.");
- const result={schema:"eai-project-engine/report-v1",status:checks.failed?"needs-fix":"needs-user-review",project,checks,warnings,notProven:["The application works for its intended users","Dependencies are compatible and secure","The code is safe to deploy","Publishing is authorized"],humanDecisions:["Confirm the desired behavior and what may be public","Approve running unknown project scripts separately","Approve repository changes and deployment separately"],writes:false,published:false};
+ const result={schema:"eai-project-engine/report-v1",status:checks.failed?"needs-fix":"needs-user-review",sourceBinding:project.sourceBinding,sourceConsistency:project.sourceBinding.kind==="github-actions-context"?"matching-run-context":"unattested-local-input",project,checks,warnings,notProven:["The application works for its intended users","Dependencies are compatible and secure","The code is safe to deploy","Publishing is authorized"],humanDecisions:["Confirm the desired behavior and what may be public","Approve running unknown project scripts separately","Approve repository changes and deployment separately"],writes:false,published:false};
  const zipOnly=project.count===1&&project.files[0]?.path.toLowerCase().endsWith(".zip");
  const next=zipOnly
   ?"Pak het ZIP-bestand uit en zet de losse projectbestanden in de repository. GitHub pakt een geüpload ZIP-bestand niet vanzelf uit."
