@@ -1770,8 +1770,15 @@ function codeWorkbench(){
     section('Niet op de publieke demo','<div class="card pad">Er worden hier geen bronbestanden geopend of gewijzigd.</div>');
   if(!s.liveOps)return header('Codeworker','Verbind eerst met je lokale EAIwork-server.')+
     section('Registratie',btn('Open verbinding','nav-registration','primary'));
-  if(!codeWorkspaceStatus?.enabled)return header('Codeworker','Gebruik een vooraf gekozen lokale werkmap.')+
-    section('Werkmap ontbreekt','<div class="card pad">Start EAIwork opnieuw met <code>--worktree=/pad/naar/project</code>. Alleen die map komt in aanmerking voor voorstellen. Er wordt niets automatisch uitgevoerd.</div>');
+  if(!codeWorkspaceStatus?.enabled)return header('Codeworker','Er is nog geen projectmap aan deze lokale sessie gekoppeld.')+
+    section('Codeworker activeren','<div class="card pad">'+
+      '<p>De server is bereikbaar, maar de Codeworker staat uit omdat er bij het starten geen werkmap is gekozen. Stop EAIwork in Terminal met <code>Ctrl+C</code>.</p>'+
+      '<p><b>Probeer de Codeworker met een veilig voorbeeldproject:</b></p>'+
+      '<pre class="contract-code">npm run local:ollama -- --example</pre>'+
+      '<p><b>Of werk in een bestaande projectmap op je computer:</b></p>'+
+      '<pre class="contract-code">npm run local:ollama -- --worktree=/pad/naar/jouw/project</pre>'+
+      '<p class="muted smalltext">Vervang het voorbeeldpad door een echte map. Ollama moet lokaal draaien met een geïnstalleerd model. Open daarna de volledige dashboardlink die Terminal geeft. Er wordt niets automatisch gewijzigd.</p>'+
+      '<p><a href="https://github.com/E-AI-MODEL/EAIwork-/blob/main/docs/START-HIER.md" target="_blank" rel="noopener noreferrer">Open de startgids</a></p></div>');
   const draft=codeDraft;
   // A proposal that belongs to the running plan is tested and decided in the plan block above.
   const inPlan=!!draft&&codePlans.some(p=>(p.state==='active'||p.state==='blocked')&&(p.steps||[]).some(x=>x.proposalId===draft.id));
