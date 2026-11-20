@@ -11,7 +11,7 @@ const demoMissions:Record<string,string>={
   "mission-demo-compose":"Samengestelde worker uitvoeren",
   "mission-demo-automatic":"Automatische tekstverwerking uitproberen"
 };
-const demoWorkers=new Set(["text-normalize","text-metrics","repo-search","text-inspector"]);
+const demoWorkers=new Set(["text-normalize","text-metrics","repo-search","text-inspector","reference-extract"]);
 const seededWorker=(id:string,record:{contract:{version:string;specialization:string;recipe?:{kind:string}}})=>
   demoWorkers.has(id)&&record.contract.version==="1.0.0"&&
   (record.contract.specialization==="Fixed local demonstration"||
