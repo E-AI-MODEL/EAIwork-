@@ -1490,11 +1490,19 @@ export function makeServer(cfg: Config) {
           if(options.proposeOnBlock&&!cfg.planningModel)
             return json(res,503,{error:"local revision planner is not configured"});
           try{
-            return json(res,200,await runAgentCycle(operations,agentCycle[1],{
+            const outcome=await runAgentCycle(operations,agentCycle[1],{
               requestedBy:actor.id,maxStarts:options.maxStarts??1,
               proposeOnBlock:options.proposeOnBlock??false,
               planningModel:cfg.planningModel,repoSearchRoot:cfg.repoSearchRoot,
-            }));
+            });
+            const verified=operations.verify();
+            if(!verified.ok)throw new HttpError(503,"operations journal unavailable");
+            const state=readableOps();
+            const line=productionLineView(state,builtinInventoryForState(state,cfg.repoSearchRoot),true);
+            // Reuse the existing product-line projection rather than building
+            // a second task, worker, review or release state machine.
+            return json(res,200,{...outcome,productionLine:line.missions.find(
+              item=>item.id===agentCycle[1])??null});
           }catch(e){
             const reason=(e as Error).message;
             if(/unknown mission/.test(reason))throw new HttpError(404,"unknown mission");
