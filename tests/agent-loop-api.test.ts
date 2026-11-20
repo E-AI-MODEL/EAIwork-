@@ -39,6 +39,9 @@ test("authenticated mission owner runs native agent cycle, with no automatic pri
     assert.equal(final.stopReason,"complete");
     assert.equal(final.progress.done,2);
     assert.equal(final.revisionProposal,undefined);
+    assert.equal(final.productionLine?.id,id);
+    assert.equal(final.productionLine?.publication?.allowed,false);
+    assert.ok(Array.isArray(final.productionLine?.stages));
     const snapshot=await fetch(base+"/ops/missions",{
       headers:{Authorization:"Bearer "+demo.token},
     });
