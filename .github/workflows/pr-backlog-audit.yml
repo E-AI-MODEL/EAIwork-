@@ -1,6 +1,11 @@
 name: Inspecteer openstaande EAIwork PR's
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pr-backlog-audit.yml'
+      - 'scripts/pr_backlog_audit.py'
 
 permissions:
   contents: read
