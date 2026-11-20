@@ -138,3 +138,23 @@ test("real loopback transport refuses redirects and aborts while reading a delay
     await Promise.all([new Promise<void>(r => source.close(() => r())), new Promise<void>(r => target.close(() => r()))]);
   }
 });
+
+test("overflowing probability totals are rejected and measured as invalid output", async () => {
+  const old = globalThis.fetch;
+  const metrics: OllamaCallMetric[] = [];
+  try {
+    globalThis.fetch = async () => Response.json({ message: {
+      content: '{"yes":1e308,"no":1e308,"unknown":0}',
+    } });
+    const provider = ollamaProvider({ model: "overflow", onCall: m => { metrics.push(m); } });
+    for (const method of ["answer", "propose"] as const) {
+      if (method === "propose") globalThis.fetch = async () => Response.json({ message: {
+        content: '{"probabilities":{"yes":1e308,"no":1e308,"unknown":0},"references":[]}',
+      } });
+      await assert.rejects(() => provider.openSession()[method]!(capsule),
+        e => e instanceof OllamaOutputError && e.code === "invalid-probability");
+    }
+    assert.deepEqual(metrics.map(m => [m.outcome, m.outputIssue]),
+      [["invalid-response", "invalid-probability"], ["invalid-response", "invalid-probability"]]);
+  } finally { globalThis.fetch = old; }
+});

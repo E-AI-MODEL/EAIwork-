@@ -66,6 +66,7 @@ function safeDistribution(value: unknown, allowed: string[]): { predicted: strin
     if (typeof obj[key] !== "number" || !Number.isFinite(obj[key]) || obj[key] < 0) throw new Error("invalid probability");
     sum += obj[key] as number;
   }
+  if (!Number.isFinite(sum)) throw new Error("invalid probability total");
   if (sum <= 0) throw new Error("zero probability distribution");
   const ranked = allowed.map(k => [k, (obj[k] as number) / sum] as const).sort((a,b) => b[1] - a[1]);
   return { predicted: ranked[0][0], confidence: ranked[0][1] };

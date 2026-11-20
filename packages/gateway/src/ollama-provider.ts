@@ -50,7 +50,9 @@ function parseProbabilities(content: string, allowed: string[]): Record<string, 
     output[option] = value;
   }
   if (Object.keys(obj).some(k => !allowed.includes(k))) throw new OllamaOutputError("extra-option");
-  if (Object.values(output).reduce((a, b) => a + b, 0) <= 0) throw new OllamaOutputError("zero-probability");
+  const sum = Object.values(output).reduce((a, b) => a + b, 0);
+  if (!Number.isFinite(sum)) throw new OllamaOutputError("invalid-probability");
+  if (sum <= 0) throw new OllamaOutputError("zero-probability");
   return output;
 }
 
