@@ -160,8 +160,8 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       "Losse tekstworker (alleen lokale proef): EAI_EXECUTOR_TOKEN="+demo.workerToken+"\n"+
       "Start apart: EAI_EXECUTOR_URL=http://127.0.0.1:"+port+
         " EAI_EXECUTOR_TOKEN=<token> node scripts/local-text-executor.ts\n"+
-      "Open Contracten en registratie en verbind met dit tijdelijke token.\n"+
-      "Er zijn vier opdrachten en vier geteste lokale workers.\n"+
+      "Open de volledige link hierboven; de browser verbindt dan direct.\n"+
+      "Er zijn vier proefopdrachten en vijf geteste lokale workers.\n"+
       "Stop met Ctrl+C. Tijdelijke gegevens worden verwijderd.\n\n");
   });
   let closing=false;

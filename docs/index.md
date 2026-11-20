@@ -1,6 +1,6 @@
 # Documentatie EAIwork
 
-Begin bij de [README](../README.md). Dit overzicht koppelt de onderdelen aan de documentatie die op de huidige ontwikkeltak beschikbaar is.
+**Nieuw hier?** [Start hier: EAIwork lokaal openen](START-HIER.md). Daarna kun je de [README](../README.md) en onderstaande technische documentatie raadplegen. Dit overzicht koppelt de onderdelen aan de documentatie die op de huidige ontwikkeltak beschikbaar is.
 
 - **Bewijsregels:** [atomaire beweringen](atomic-claim-contract.md), [ontwerp voor herkomst en bevestiging](../proposals/0001-independence-and-proven.md), [controle van de bewijskern](alignment/bouwronde-2026-11-13.md), [veiligheidsgrenzen](../SECURITY.md).
 - **Uitvoering en lokale codeproef:** [bouwplan](first-product-roadmap-2026-11-11.md), [Docker-projecttests](local-project-suite-smoke.md), [opdrachten en uitvoerders](mission-execution-v0.1.md), [model- en workerversies](worker-versions-and-evidence-links.md).
