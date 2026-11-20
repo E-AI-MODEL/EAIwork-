@@ -36,6 +36,6 @@ De `yes`-velden zijn verklaringen van de beheerder, geen automatisch bewijs. De 
 1. Een afzonderlijke, beveiligde gateway met server-side JWT-validatie en expliciete autorisatie. Geen directe browsertoegang tot de bestaande lokale API zonder aanvullende bescherming.
 2. Hosting voor de gateway, de EAIwork-server en een geïsoleerde code-executor. De exacte hostingkeuze volgt pas na verificatie van de beschikbare Cloudflare-voorzieningen.
 3. End-to-end-tests met toegestane en geweigerde gebruikers, herstart, tokenrotatie, back-upherstel en een ongeldige agentactie.
-4. Een beperkte Codex-proef op een wegwerp-repository: opdracht, voorstel, diff, geïsoleerde test, menselijke goedkeuring, auditregistratie. Geen automatische merge of publicatie.
+4. Een proef met onze eigen EAIwork-agent in een wegwerp-werkruimte: opdracht, bestaand taakplan, workerkeuze, uitgevoerde stap, controle, zo nodig een herplanvoorstel en menselijke goedkeuring. Geen autonome rechtenuitbreiding, merge of publicatie. Een taalmodel is optioneel en alleen een begrensde plannings- of taakadapter; de agent-loop zelf is eigen EAIwork-code.
 
 Deze notitie verandert de huidige lokale uitvoering niet en introduceert geen publieke API.
