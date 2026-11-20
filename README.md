@@ -84,7 +84,7 @@ Three ways to start, all bound to `127.0.0.1`. Requires Node `22.18+`.
 
 | Goal | Command | What you get |
 |---|---|---|
-| Look around with example data | `npm run demo:dashboard` | A temporary server with four tested local workers and four example missions. Data is deleted on exit. |
+| Look around with example data | `npm run demo:dashboard` | A temporary server with five tested local workers and four example missions. Data is deleted on exit. |
 | Work with your own local model | `npm run local:ollama` | Ollama proposes work plans; you approve them. Missions and logs are kept in `~/.eaiwork/local`. |
 | Let a model change code under control | `npm run local:ollama -- --example` | Adds the code worker on a fresh example project: proposal, syntax check, isolated Docker test, your yes or no, apply, restore. Use `--worktree=/path/to/project` for your own project. |
 
