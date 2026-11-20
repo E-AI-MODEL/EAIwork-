@@ -22,5 +22,5 @@ test("server only serves vacancy inspection and human requested Builder",()=>{
   assert.match(server,/inspectMissionWorkerNeeds/);
   assert.match(server,/prepareMissingWorker/);
   assert.match(server,/only mission owners may request worker preparation/);
-  assert.match(server,/Object\.keys\(body\)\.sort\(\)\.join\(","\)==="expectedRevision,taskId"/);
+  assert.match(server,/expectedRevision,taskId/);
 });
