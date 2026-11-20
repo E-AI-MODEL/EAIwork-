@@ -19,7 +19,7 @@ test("old locally saved demo entries stay in the journal but disappear from the 
     assert.equal(originalResponse.status,200);
     const original=await originalResponse.json();
     assert.equal(Object.keys(original.missions).length,4);
-    assert.equal(Object.keys(original.workers).length,4);
+    assert.equal(Object.keys(original.workers).length,5);
     const originalCount=original.history.length;
     await old.close();old=undefined;
     live=createDemoServer({persistentDir:profile,schedulerIntervalMs:0,seedDemoData:false,localLiveView:true});
