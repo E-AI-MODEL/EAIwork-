@@ -145,10 +145,23 @@ eai replay <pack.json> <events.jsonl>
 eai explain <pack.json> <events.jsonl> <atom>
 eai report <pack.json> <events.jsonl> [goal-atom,...]
 eai agree <answersA.json> <answersB.json>
+eai project-check <project-dir> <site|app|code|docs> <operations-dir> [run-id] [--retry]
 eai verify-local <data-dir>
 eai verify-log <data-dir> <witness-dir> <public-key.pem>
 eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem>
 ```
+
+## EAIgit: lokale projectcontrole
+
+EAIgit kan de bestaande EAIwork-projectworkers lokaal uitvoeren zonder projectcode te starten. Gebruik bijvoorbeeld:
+
+```bash
+node packages/cli/src/eai.ts project-check ./mijn-project site ./mijn-operations
+```
+
+Inventarisatie, JavaScript-/Python-syntaxiscontrole en advies lopen via de project-engine. Elke uitkomst wordt met een resultaat-hash en broncontext vastgelegd in het **bestaande** EAIwork-operationslog. De console toont het run-ID. Hergebruik dat ID om na een onderbreking dezelfde resultaten opnieuw te controleren. Een mislukt read-only onderdeel krijgt pas na `--retry` een tweede en laatste poging. De oorspronkelijke bron moet bereikbaar blijven. Bij afwijkende resultaten stopt de voortgang.
+
+Dit is lokaal en alleen-lezen. Het bewijst niet dat een website of programma werkt. De openbare EAIgit-wizard is nog niet verbonden met deze lokale engine. Een geslaagd operationslog is ook geen onafhankelijk ondertekend testbewijs. Aanpassingen, onbekende projectscripts en publicatie zijn geen onderdeel van dit commando.
 
 ## Repository map
 
