@@ -12,7 +12,7 @@ import type { OpsEnvelope } from "../../operations/src/registry.ts";
 import {localStateWithoutDemo} from "../../operations/src/legacy-demo-view.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
-import { runAgentCycle } from "../../operations/src/agent-loop.ts";
+import { inspectMissionWorkerNeeds,prepareMissingWorker } from "../../operations/src/orchestrator.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
@@ -1471,48 +1471,44 @@ export function makeServer(cfg: Config) {
             throw new HttpError(503,"parallel local worker could not finish safely");
           }
         }
-        const agentCycle=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/agent\/cycle$/.exec(url.pathname);
-        if(req.method==="POST"&&agentCycle){
-          if(actor.kind!=="person")throw new HttpError(403,"only people may request agent execution");
+        const workerNeeds=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/worker-needs$/.exec(url.pathname);
+        if(req.method==="GET"&&workerNeeds){
+          try{
+            if(!operations.verify().ok)throw new HttpError(503,"operations journal unavailable");
+            return json(res,200,inspectMissionWorkerNeeds(
+              readableOps(),workerNeeds[1],cfg.repoSearchRoot));
+          }catch(e){
+            if(e instanceof HttpError)throw e;
+            if(String(e).includes("unknown mission"))throw new HttpError(404,"unknown mission");
+            throw new HttpError(503,"worker needs unavailable");
+          }
+        }
+        const prepareWorker=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/workers\/prepare$/.exec(url.pathname);
+        if(req.method==="POST"&&prepareWorker){
+          if(actor.kind!=="person")throw new HttpError(403,"only mission owners may request worker preparation");
           requireWritableIntegrity();
           let body:unknown;
           try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
           catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
           if(!body||typeof body!=="object"||Array.isArray(body)||
-             Object.keys(body).some(key=>key!=="maxStarts"&&key!=="proposeOnBlock"))
-            throw new HttpError(422,"expected maxStarts and optional proposeOnBlock");
-          const options=body as {maxStarts?:number;proposeOnBlock?:boolean};
-          if(options.maxStarts!==undefined&&(!Number.isSafeInteger(options.maxStarts)||
-             options.maxStarts<1||options.maxStarts>8))
-            throw new HttpError(422,"agent start limit must be 1-8");
-          if(options.proposeOnBlock!==undefined&&typeof options.proposeOnBlock!=="boolean")
-            throw new HttpError(422,"invalid proposeOnBlock flag");
-          if(options.proposeOnBlock&&!cfg.planningModel)
-            return json(res,503,{error:"local revision planner is not configured"});
+             Object.keys(body).sort().join(",")!=="expectedRevision,taskId")
+            throw new HttpError(422,"expected taskId and expectedRevision");
+          const reqBody=body as {taskId:unknown;expectedRevision:unknown};
+          if(typeof reqBody.taskId!=="string"||
+             !/^[a-z][a-z0-9-]{2,63}$/.test(reqBody.taskId)||
+             !Number.isSafeInteger(reqBody.expectedRevision))
+            throw new HttpError(422,"invalid task or revision");
           try{
-            const outcome=await runAgentCycle(operations,agentCycle[1],{
-              requestedBy:actor.id,maxStarts:options.maxStarts??1,
-              proposeOnBlock:options.proposeOnBlock??false,
-              planningModel:cfg.planningModel,repoSearchRoot:cfg.repoSearchRoot,
-            });
-            const verified=operations.verify();
-            if(!verified.ok)throw new HttpError(503,"operations journal unavailable");
-            const state=readableOps();
-            const line=productionLineView(state,builtinInventoryForState(state,cfg.repoSearchRoot),true);
-            // Reuse the existing product-line projection rather than building
-            // a second task, worker, review or release state machine.
-            return json(res,200,{...outcome,productionLine:line.missions.find(
-              item=>item.id===agentCycle[1])??null});
+            return json(res,201,prepareMissingWorker(operations,prepareWorker[1],{
+              requestedBy:actor.id,expectedRevision:reqBody.expectedRevision as number,
+              taskId:reqBody.taskId,repoSearchRoot:cfg.repoSearchRoot,
+            }));
           }catch(e){
-            if(e instanceof HttpError)throw e;
-            const reason=(e as Error).message;
-            if(/unknown mission/.test(reason))throw new HttpError(404,"unknown mission");
-            if(/original mission approver/.test(reason))throw new HttpError(403,"mission owner required");
-            if(/journal verification|mission disappeared/.test(reason))
-              throw new HttpError(503,"operations journal unavailable");
-            if(/revision model|local planner|planner|model/.test(reason))
-              throw new HttpError(503,"local planner unavailable");
-            throw new HttpError(422,"agent cycle stopped: "+reason);
+            const msg=(e as Error).message;
+            if(/only mission owner/.test(msg))throw new HttpError(403,"mission owner required");
+            if(/unknown mission/.test(msg))throw new HttpError(404,"unknown mission");
+            if(/journal verification/.test(msg))throw new HttpError(503,"operations journal unavailable");
+            throw new HttpError(422,"worker preparation refused: "+msg);
           }
         }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
