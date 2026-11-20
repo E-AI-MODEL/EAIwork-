@@ -122,7 +122,7 @@ export class OpsStore {
       for(let i=0;i<lines.length;i++){
         const l=lines[i];
         if(l.seq!==i+1 || l.prev!==prev || l.hash!==hash(prev,l.payload)) return {ok:false,lines,state,reason:"invalid journal chain at "+(i+1)};
-        const next=stageOps(latest,l.payload,seen);
+        const next=stageOps(latest,l.payload,seen,true);
         next.history.push(structuredClone(l.payload));
         seen.add(l.payload.id);
         latest=next;
