@@ -1,0 +1,148 @@
+name: EAIgit · projectcontrole
+# Alleen binnen deze repository. Openbare herbruikbare workflow volgt pas na aparte proef.
+on:
+  workflow_dispatch:
+    inputs:
+      goal:
+        description: "Doel van het project"
+        required: true
+        default: code
+        type: choice
+        options: [site, app, code, docs]
+  pull_request:
+    paths:
+      - 'packages/project-engine/**'
+      - 'tests/project-engine.test.mjs'
+      - '.github/workflows/project-engine.yml'
+permissions:
+  contents: read
+concurrency:
+  group: project-engine-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  unit:
+    name: Test de engine, inclusief echte fixturebestanden
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Test exact de engine van deze commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Reguliere tests inclusief tegenvoorbeelden
+        run: node --test tests/project-engine.test.mjs
+  inventory:
+    name: "Worker: bestandsinventarisatie"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal alleen de te onderzoeken repository op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: project
+          persist-credentials: false
+      - name: Haal engine op vanaf onveranderlijke commit (nog niet onafhankelijk gereviewd)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: ${{ github.sha }}
+          path: engine
+          persist-credentials: false
+      - name: Node instellen
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Inventariseer veilig en sla bevindingen op
+        env:
+          PROJECT_GOAL: ${{ inputs.goal || 'code' }}
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs inventory project "$PROJECT_GOAL" output/inventory.json
+      - name: Bewaar uitslag inventarisatie
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eai-project-inventory
+          path: output/inventory.json
+          if-no-files-found: error
+          retention-days: 7
+  syntax:
+    name: "Worker: begrensde syntaxcheck"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal alleen de te onderzoeken repository op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: project
+          persist-credentials: false
+      - name: Haal engine op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: ${{ github.sha }}
+          path: engine
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Controleer syntax zonder projectcode te starten
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs syntax project output/syntax.json
+      - name: Bewaar uitslag syntax
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eai-project-syntax
+          path: output/syntax.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Toon bestands- en regelnummers als GitHub-controleannotaties
+        if: always()
+        run: node engine/packages/project-engine/src/engine.mjs annotate output/syntax.json
+      - name: Syntaxisfouten laten de controle mislukken
+        run: |
+          node -e 'const r=require("./output/syntax.json");if(r.failed){console.error(r.failed+" syntaxisfout(en) gevonden.");process.exit(1)}'
+  report:
+    name: "Worker: vergelijking en advies"
+    needs: [unit, inventory, syntax]
+    if: ${{ always() && needs.unit.result == 'success' && needs.inventory.result == 'success' && (needs.syntax.result == 'success' || needs.syntax.result == 'failure') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Haal engine op
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: E-AI-MODEL/EAIwork-
+          ref: ${{ github.sha }}
+          path: engine
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Download bronresultaten
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: eai-project-*
+          path: results
+      - name: Voeg controleerbaar eindrapport samen
+        run: |
+          set -euo pipefail
+          node engine/packages/project-engine/src/engine.mjs report results/eai-project-inventory/inventory.json results/eai-project-syntax/syntax.json rapport
+          # Het resultaat verschijnt direct leesbaar in de GitHub Actions-samenvatting.
+          # Artifacts blijven uitsluitend beschikbaar als controleerbare brongegevens.
+          test -s rapport/ADVIES.md
+          {
+            cat rapport/ADVIES.md
+            printf '\n---\n'
+            printf '_Deze controles zijn automatisch uitgevoerd. Er is niets gepubliceerd of gewijzigd._\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Bewaar onderliggende gegevens voor controle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: eai-project-report
+          path: rapport/
+          if-no-files-found: error
+          retention-days: 7
