@@ -118,3 +118,24 @@ test("GitHub-annotaties verwijzen veilig naar aangetroffen syntaxfouten",()=>fix
   {path:"weird%name\nother.js",status:"syntax-fail",line:2}
  ]}).map(x=>x.includes("%25")&&x.includes("%0A")),[true]);
 }));
+
+
+test("deze workflow test de actuele engine en is niet als externe dienst vrijgegeven",async()=>{
+ const workflow=await readFile(new URL("../.github/workflows/project-engine.yml",import.meta.url),"utf8");
+ assert.ok(!workflow.includes("workflow_call:"),"external reusable entry must stay disabled");
+ assert.equal((workflow.match(/ref: \$\{\{ github\.sha \}\}/g)||[]).length,3);
+ assert.ok(workflow.includes("Test exact de engine van deze commit"));
+ assert.ok(!workflow.includes("a31819be7f611874bf4c30b02152f558f2105f80"));
+ assert.ok(workflow.includes("permissions:\n  contents: read"));
+ assert.ok(workflow.includes("persist-credentials: false"));
+});
+test("ongebruikelijke bestandsnamen kunnen het GitHub-rapport niet herschrijven",()=>fixture(async(root)=>{
+ const unsafe="broken][other\nname.js";
+ await writeFile(join(root,unsafe),"function () {");
+ const project=await inventory(root,"code"),checks=await syntax(root);
+ assert.equal(checks.failed,1);
+ const report=combine(project,checks);
+ assert.ok(report.markdown.includes("broken\\]\\[other\\nname.js"));
+ assert.ok(!report.markdown.includes("broken][other\nname.js"));
+ assert.equal(report.published,false);
+}));
