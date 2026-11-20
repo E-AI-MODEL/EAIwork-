@@ -1,0 +1,32 @@
+name: Inspecteer openstaande EAIwork PR's
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@49933ea5288caeca8642d1e84afbd3f7d6820020 # v5
+        with:
+          python-version: "3.12"
+      - name: Controleer de vergelijkingsregels
+        run: python3 -m unittest discover -s tests -p 'test_pr_backlog_audit.py' -v
+      - name: Vergelijk alle open PR's met main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/pr_backlog_audit.py --output pr-backlog-audit.md
+      - name: Bewaar het overzicht zonder iets te sluiten
+        uses: actions/upload-artifact@v4
+        with:
+          name: eaiwork-pr-backlog
+          path: |
+            pr-backlog-audit.md
+            pr-backlog-audit.json
+          retention-days: 14
