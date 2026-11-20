@@ -31,7 +31,7 @@ De eerdere EAIgit-projectworkers `inventory`, `syntax` en `report` staan op een 
 4. De server gebruikt de bestaande `proposeComposedWorker` om een `text-inspector` te maken met het vaste, geteste recept `text-normalize → text-metrics`. Een onbekend of door een model aangeboden recept wordt geweigerd.
 5. De server voert de *echte* lokale `evaluateBuiltin`-fixtures uit en legt registratie en meting met een apart check-actor vast in het bestaande operationslog.
 6. De worker blijft `candidate`. Alleen een persoon kan met de bestaande `worker.release`-actie en exact testbewijs vrijgeven. Een verzonnen bewijsreferentie wordt geweigerd.
-7. De oorspronkelijke missie blijft ongewijzigd en kan na toelating via de **bestaande** `POST /ops/missions/:id/run`-route worden vervolgd. De taskrun blijft `verification:"not-evaluated"` tot een afzonderlijke, passende inhoudelijke controle plaatsvindt.
+7. De oorspronkelijke missie blijft ongewijzigd. Na vrijgave kan de eigenaar haar via de **bestaande** `POST /ops/missions/:id/run`-route vervolgen, of afzonderlijk `POST /ops/missions/:id/automation/start` met een maximaal aantal starts toestaan. De bestaande scheduler voert dan de taak uit. De Builder geeft zelf geen uitvoertoestemming. De taskrun blijft `verification:"not-evaluated"` tot een afzonderlijke, passende inhoudelijke controle plaatsvindt.
 
 De aanvraag wordt geweigerd bij een ontbrekende of verouderde missierevisie, niet-eigenaar, open voorwaarde, actieve scheduler, lopende of mislukte taak, externe actie, al bestaande kandidaat of ontbrekend ondersteund Builder-recept. Een tweede aanvraag kan geen dubbele worker registreren.
 
