@@ -52,7 +52,7 @@ test("vacature -> Builder -> echte fixture -> menselijke release -> oorspronkeli
     assert.equal(second.needs[0].evidenceRef,candidate.evidenceRef);
     assert.equal(second.canPrepare,false);
     assert.equal((await request("POST",prepare,{expectedRevision:1,taskId:"task-inspect"})).status,422);
-    const beforeRelease=await(await request("GET","/ops/missions")).json() as any;
+    const beforeRelease=await(await request("GET","/ops/state")).json() as any;
     assert.equal(beforeRelease.missions[id].tasks["task-inspect"].status,"queued");
     assert.equal(beforeRelease.workers["text-inspector"].stage,"candidate");
     const stillBlocked=await(await request("POST","/ops/missions/"+id+"/run",{})).json() as any;
@@ -112,7 +112,7 @@ test("unknown recipe or blocked condition never launches Builder or a new worker
     assert.equal(blocked.canPrepare,false);
     assert.equal((await req("POST","/ops/missions/"+gated+"/workers/prepare",
       {taskId:"task-inspect",expectedRevision:1})).status,422);
-    const state=await(await req("GET","/ops/missions")).json() as any;
+    const state=await(await req("GET","/ops/state")).json() as any;
     assert.deepEqual(Object.keys(state.workers),[]);
   }finally{await demo.close()}
 });
