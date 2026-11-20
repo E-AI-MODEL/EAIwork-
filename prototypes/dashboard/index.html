@@ -224,6 +224,7 @@
 .approval-choice>b{font-size:14px;display:block}
 .approval-choice .row .btn{min-height:42px;min-width:170px;flex:1 1 190px;font-size:12px}
 @media(max-width:600px){.approval-choice .row{flex-direction:column;align-items:stretch}.approval-choice .row .btn{width:100%;flex:auto}}
+.top-help-link{display:inline-flex;align-items:center;color:var(--muted);text-decoration:none;font-size:12px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;white-space:nowrap}.top-help-link:hover,.top-help-link:focus-visible{color:var(--ink);border-color:var(--green)}
 </style>
 </head>
 <body>
@@ -311,7 +312,7 @@ function renderShell(){
  document.getElementById('topbar').innerHTML=
    '<div class="top-location"><span class="top-title">'+h(label)+'</span>'+
    '<span class="top-sub">'+(onExecutionServer()?(s.liveOps?'Lokale registratie':'Verbind de lokale server'):h(selected?.title||'Werkruimte'))+'</span></div>'+
-   '<div class="top-actions"><span class="pill '+(s.liveOps?'good':onExecutionServer()?'dim':'demo')+'">'+
+   '<div class="top-actions"><a class="top-help-link" href="https://github.com/E-AI-MODEL/EAIwork-/blob/main/docs/START-HIER.md" target="_blank" rel="noopener noreferrer" aria-label="Open de EAIwork startgids">Startgids</a><span class="pill '+(s.liveOps?'good':onExecutionServer()?'dim':'demo')+'">'+
    (onExecutionServer()?(s.liveOps?'Lokale server':'Niet verbonden'):'Demonstratie')+'</span>'+
    (onExecutionServer()?'':'<span class="top-desktop-actions">'+btn('Herstellen','reset','small')+
    btn('Export','export','small')+'</span>')+'</div>';
@@ -690,7 +691,7 @@ function liveOverview(){
   const connection=statuses.map(([name,ready])=>'<span class="smalltext" style="white-space:nowrap">'+
     '<span class="indicator '+(ready?'green':'amber')+'" style="display:inline-block;vertical-align:middle;margin-right:6px"></span>'+
     h(name)+(ready?' verbonden':' nog niet bevestigd')+'</span>').join(' <span style="padding:0 7px">·</span> ');
-  return '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / mijn werk</span>'+
+  const detailed = '<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / mijn werk</span>'+
     '<h1>Waar wil je mee verder?</h1><p>Je opdrachten, wie eraan werkt en wat nog jouw aandacht vraagt.</p></div>'+
     '<div class="dash-head-actions">'+btn('Nieuwe codeopdracht','nav','primary','data-id="code"')+
     btn('Nieuwe teksttaak','nav','','data-id="uitvoering"')+'</div></div>'+
@@ -743,11 +744,42 @@ function liveOverview(){
         ' wacht'+(pending.length===1?'':'en')+' op jouw beoordeling.</p>'+
         btn('Bekijk beslissingen','nav','primary','data-id="hitl"')+'</div>'):'')+
       '</div></div>';
+  const activeTitle=current?.title||missionsRunning[0]?.plan?.title||'Nog geen actieve opdracht';
+  const activeTarget=current?'code':'uitvoering';
+  const startText=missionsRunning.length||current?
+    'Open je bestaande opdracht en kijk welke stap nu nodig is.':
+    'Maak een nieuwe opdracht. EAIwork helpt met het plan en toont de uitkomst.';
+  const quick='<div class="dash-head"><div><span class="dash-eyebrow">EAIwork / lokale werkruimte</span>'+
+    '<h1>Waar wil je aan werken?</h1><p>Begin met een opdracht. Alleen wat jouw aandacht nodig heeft, staat direct in beeld.</p></div></div>'+
+    '<div class="dash-columns"><div class="dash-main-column">'+
+    '<div class="card pad"><b>Begin een opdracht</b>'+
+    '<p class="muted smalltext">Kies wat je wilt doen. De technische instellingen staan onder Meer functies.</p>'+
+    '<div class="row" style="gap:10px;flex-wrap:wrap">'+
+    btn('Nieuwe codeopdracht','nav','primary','data-id="code"')+
+    btn('Teksttaak of werkplan','nav','small','data-id="uitvoering"')+'</div></div>'+
+    '<div class="card pad mt"><b>Verder met je werk</b><p><strong>'+h(activeTitle)+'</strong></p>'+
+    '<p class="muted smalltext">'+h(startText)+'</p>'+
+    btn('Bekijk opdracht','nav','small','data-id="'+activeTarget+'"')+'</div></div>'+
+    '<div class="dash-side-column">'+
+    '<div class="card pad"><b>Jouw beslissing nodig</b><p class="smalltext">'+h(needsReview)+
+    ' open controle'+(needsReview===1?'':'s')+' of besluiten.</p>'+
+    btn('Bekijk wat nodig is','nav','small','data-id="hitl"')+'</div>'+
+    '<div class="card pad mt"><b>Automatisch werken</b><p class="smalltext">'+
+    h(autoMissions.length?autoMissions.length+' lokale opdracht(en) actief binnen het ingestelde maximum.':
+      'Er is momenteel geen automatische opdracht actief.')+'</p>'+
+    btn('Bekijk uitvoering','nav','small','data-id="uitvoering"')+'</div>'+
+    '<div class="card pad mt"><b>Verbindingen</b><p class="smalltext">'+connection+'</p>'+
+    '<a class="top-help-link" href="https://github.com/E-AI-MODEL/EAIwork-/blob/main/docs/START-HIER.md" target="_blank" rel="noopener noreferrer">Zo start en gebruik je EAIwork</a></div>'+
+    '</div></div>';
+  return quick+
+    '<details class="card pad mt" style="margin-top:18px"><summary>Uitgebreide overzichten en technische controles</summary>'+
+    '<div class="mt">'+detailed+'</div></details>';
 }
 function localConnectView(){
   return header('Lokale werkruimte','Dit is de echte EAIwork-omgeving. Er worden geen demo-opdrachten of fictieve metingen getoond.')+
     section('Verbind met EAIwork','<div class="card pad">'+
       '<p>Neem het toegangstoken over uit het Terminal-venster waarin EAIwork draait. Het token geeft je browser toegang tot deze lokale server.</p>'+
+      '<p class="muted smalltext">Start je EAIwork opnieuw? Open Terminal in de repositorymap en gebruik <code>npm run demo:dashboard</code> voor een proef of <code>npm run local:ollama</code> voor je eigen lokale werkruimte. <a href="https://github.com/E-AI-MODEL/EAIwork-/blob/main/docs/START-HIER.md" target="_blank" rel="noopener noreferrer">Lees de startgids.</a></p>'+
       '<label for="ops-token" class="field-label">Toegangstoken</label>'+
       '<div class="row"><input type="password" id="ops-token" autocomplete="off" placeholder="Plak het lokale toegangstoken" style="flex:1;min-width:180px">'+
       btn('Verbind deze server','ops-connect','primary')+'</div>'+
