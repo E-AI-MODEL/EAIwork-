@@ -12,6 +12,7 @@ import type { OpsEnvelope } from "../../operations/src/registry.ts";
 import {localStateWithoutDemo} from "../../operations/src/legacy-demo-view.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
+import { runAgentCycle } from "../../operations/src/agent-loop.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
@@ -1468,6 +1469,41 @@ export function makeServer(cfg: Config) {
             if(/pause|automatic|worker|timeout|capacity|unsupported/.test(String(e)))
               throw new HttpError(422,"parallel local execution is not allowed");
             throw new HttpError(503,"parallel local worker could not finish safely");
+          }
+        }
+        const agentCycle=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/agent\/cycle$/.exec(url.pathname);
+        if(req.method==="POST"&&agentCycle){
+          if(actor.kind!=="person")throw new HttpError(403,"only people may request agent execution");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).some(key=>key!=="maxStarts"&&key!=="proposeOnBlock"))
+            throw new HttpError(422,"expected maxStarts and optional proposeOnBlock");
+          const options=body as {maxStarts?:number;proposeOnBlock?:boolean};
+          if(options.maxStarts!==undefined&&(!Number.isSafeInteger(options.maxStarts)||
+             options.maxStarts<1||options.maxStarts>8))
+            throw new HttpError(422,"agent start limit must be 1-8");
+          if(options.proposeOnBlock!==undefined&&typeof options.proposeOnBlock!=="boolean")
+            throw new HttpError(422,"invalid proposeOnBlock flag");
+          if(options.proposeOnBlock&&!cfg.planningModel)
+            return json(res,503,{error:"local revision planner is not configured"});
+          try{
+            return json(res,200,await runAgentCycle(operations,agentCycle[1],{
+              requestedBy:actor.id,maxStarts:options.maxStarts??1,
+              proposeOnBlock:options.proposeOnBlock??false,
+              planningModel:cfg.planningModel,repoSearchRoot:cfg.repoSearchRoot,
+            }));
+          }catch(e){
+            const reason=(e as Error).message;
+            if(/unknown mission/.test(reason))throw new HttpError(404,"unknown mission");
+            if(/original mission approver/.test(reason))throw new HttpError(403,"mission owner required");
+            if(/journal verification|mission disappeared/.test(reason))
+              throw new HttpError(503,"operations journal unavailable");
+            if(/revision model|local planner|planner|model/.test(reason))
+              throw new HttpError(503,"local planner unavailable");
+            throw new HttpError(422,"agent cycle stopped: "+reason);
           }
         }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
