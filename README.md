@@ -4,6 +4,8 @@
 
 # EAI work
 
+**Nieuw of opnieuw beginnen?** [Start EAIwork op je eigen computer in drie minuten](docs/START-HIER.md). Dit is de korte Nederlandstalige handleiding, met het juiste startcommando en het verschil tussen de demo en een echte lokale sessie.
+
 **Split work into the smallest checkable questions. Keep evidence and its origin visible. Derive status instead of editing it.**
 
 EAI work is an evidence-first workbench. AI may propose an answer, flag a problem or lower confidence. It may not raise the status of its own output. Stronger status comes from person-attached evidence, independent origins or deterministic non-LLM checks.
