@@ -1,53 +1,53 @@
-# EAIwork: eigen agentbesturing, voortbouwen op het bestaande product
+# EAIwork: Orchestrator en Worker Builder
 
-**Status:** bouwstap in concept. Geen zelfstandige cloudagent en geen publicatie op eaimodel.nl. Geen Codex SDK, geen externe agent-runtime en geen nieuwe workerbibliotheek naast EAIwork.
+Status: **eerste volledige lokale Builder-proef, geen cloudagent of productiepublicatie**. Deze aanpassing vervangt de redundante `agent-loop.ts` uit de eerdere concept-PR. De bestaande scheduler en missie-uitvoering blijven de enige uitvoerders van reguliere taken.
 
-## Wat al bestaat in de huidige code
+## Welk probleem wordt opgelost?
 
-| Onderdeel | Code | Bestaande rol |
-| --- | --- | --- |
-| Bewijs en herkomst | `packages/core`, `packages/evidence`, `packages/server` | Atomen, bronherkomst, onafhankelijke checks, apart ondertekend bewijslog en begrensde modelclaims |
-| Werkplannen | `operations/missions.ts`, `planner.ts`, `preflight.ts`, `replan.ts` | Fases, taakafhankelijkheden, bronpassages met voorwaarden, planvoorstellen en append-only revisies |
-| Workerleger | `catalog.ts`, `registry.ts`, `selector.ts` | 56 beschreven specialisaties, echt geteste en toegelaten contractsversies, selectie op feitelijk beschikbare adapters |
-| Uitvoering | `execution.ts`, `scheduler.ts`, `parallel.ts`, `queue.ts`, `executor-channel.ts` | Lokale workers, goedgekeurde budgets, leases, twee parallelle teksttaken, afzonderlijke uitvoerders met beperkte rechten |
-| Code | `code-worker.ts`, `ordered-code-plans.ts`, `docker-project-suite.ts` | Codevoorstellen en meerstapsplannen, gescheiden testen, expliciete menselijke toepassing en herstel |
-| Brononderzoek | `reposearch.ts` | Begrensd zoeken in een beheerdersgestuurde lokale repository |
-| Kwaliteit | `quality.ts`, registerdefecten en reparatie-events | Versiegebonden metingen, driftwaarschuwingen, quarantaine en maximaal drie geregistreerde herstelpogingen |
-| Resultaat en oplevering | `trace.ts`, `production-line.ts`, release- en GitHub-artifactmodules | Afgeleide voortgang, echte geschiedenis, CI-/artifactcontrole en een niet-automatische uitgiftebeoordeling |
-| Interface | `prototypes/dashboard/index.html`, `packages/client` | Bestaande live lokale werkruimte en afzonderlijke browserdemonstratie |
-| Opslag | `operations/store.ts` en bewijsjournal | Duurzame, replaybare events, verschillende vertrouwensgrenzen voor werk en bewijs |
+Een missie kan wachten omdat geen geschikte en vrijgegeven worker beschikbaar is. EAIwork kon dat al signaleren via `selectWorker`. De losse Builder kon ook al een **vaste** lokale samenstelling voorstellen. Die twee routes waren nog niet verbonden met een werkelijke missie. Deze proef verbindt dat tekort aan registratie, een uitgevoerde fixturesuite, menselijke vrijgave en het voortzetten van dezelfde missie.
 
-De bestaande interfaces en workercontracten zijn dus leidend. De 56 specialisaties zijn **niet** 56 actieve agents. Een geslaagde Docker-test is geen bewijs dat een eindproduct inhoudelijk klopt. De operations-journal heeft nog geen onafhankelijke externe witness zoals het bewijslog.
+Dit is de eerste controleerbare bijdrage van de Orchestrator. De Orchestrator start **zelf geen taken** en krijgt geen extra rechten. De bestaande `runMissionStep`, scheduler, workerregistry en het operationslog blijven leidend.
 
-## Wat de nieuwe bouwstap wel doet
+## Bestaande onderdelen blijven behouden
 
-`packages/operations/src/agent-loop.ts` voert een gecontroleerde cyclus uit over een **bestaand, door een persoon goedgekeurd** missieplan:
+- `packages/core` en `packages/evidence`: bewijsregels, bronherkomst en inhoudelijke status zijn gescheiden van technische werkuitvoering.
+- `operations/missions.ts`, `planner.ts`, `preflight.ts`, `replan.ts`: opdrachtplannen, afhankelijke taken, voorwaarden en menselijke goedkeuring.
+- `operations/catalog.ts`, `registry.ts`, `selector.ts`: 56 beschreven workerrollen, echte toegelaten contractversies en selectie op daadwerkelijk aanwezige adapters.
+- `operations/builder.ts`: kandidaat uit twee bestaande lokale bewerkingen; geen willekeurige codegeneratie.
+- `operations/execution.ts`: werkelijke ingebouwde adapter, nieuwe versie- en rechtencontrole per start, lokale fixtures.
+- `operations/store.ts`: duurzaam operationslog met één schrijver.
+- `operations/code-worker.ts`, `ordered-code-plans.ts`, `docker-project-suite.ts`: bestaande codevoorstellen en afgeschermde tests, nog niet door deze Builder-route aangestuurd.
+- `operations/reposearch.ts`, `quality.ts`, `trace.ts`, `production-line.ts`: bestaand brononderzoek, kwaliteitsregistratie, geschiedenis en zichtbare voortgang.
 
-1. Bekijk de actuele taakstatus, afhankelijkheden en open voorwaarden.
-2. Stop bij een actieve scheduler, lopende of mislukte taak, pauze of ontbrekende toestemming.
-3. Start maximaal één goedgekeurde lokale worker per beslissing via de bestaande `runMissionStep`. De runner controleert contract, versie, adapter, bron en taakstatus opnieuw.
-4. Controleer dat de uitkomst is geregistreerd. Technische afronding krijgt geen extra bewijsstatus.
-5. Stop bij het afgesproken maximum (1-8 per expliciet verzoek), voltooiing of blokkade.
-6. Een optioneel taalmodel mag bij een niet-veiligheidsgerelateerde blokkade een **niet-toegepaste** revisie voorstellen. Alleen de missie-eigenaar kan de versie via de bestaande route goedkeuren.
+De eerdere EAIgit-projectworkers `inventory`, `syntax` en `report` staan op een ander, begrensd uitvoerpad. Ze worden hier niet opnieuw gebouwd.
 
-De route `POST /ops/missions/:id/agent/cycle` gebruikt de bestaande serveridentiteit en auditbevoegdheid. Het is geen tweede authsysteem. In het **bestaande live dashboard** onder Uitvoering staat nu de knop `Agent: maximaal 2 stappen`. De knop vraagt één afgebakende uitvoering aan, haalt de echte voortgang opnieuw op en gebruikt dezelfde productielijn. Hij verschijnt niet als werkende knop op de publieke website; daar staat alleen de losse demonstratie.
+## Werkende verticale proef
 
-## Wat deze code nog niet verbindt
+**Voorwaarden:** een eerder door een persoon vastgelegde missie met een uitvoerbare lokale `text-inspect`-taak waarvoor nog geen worker is geregistreerd.
 
-Deze eerste agent-cyclus gebruikt de bestaande lokale mission-runner. Die kan al de vrijgegeven deterministische tekstworkers, een vaste samenstelling en een **beperkte lokale RepoSearch** uitvoeren, mits de beheerder die repository en worker vooraf heeft ingesteld. De agent bestuurt **nog niet** zelfstandig de Codeworker, Docker, Worker Builder, herstel of releaseketen. Die bestaan als afzonderlijke, deels werkende routes en contracten. We voegen hiervoor geen parallelle implementaties toe.
+1. `GET /ops/missions/:id/worker-needs` leest de actuele missie, afhankelijkheden, beperkingen, workerregistry en beschikbare adapters. Geen taakinput of onnodige uitvoer in de reactie.
+2. De bestaande live werkruimte toont **Controleer ontbrekende workers**. Alleen bij een werkelijk geschikte vacature verschijnt **Bouw en test kandidaat**.
+3. `POST /ops/missions/:id/workers/prepare` accepteert alleen `{"taskId":"task-inspect","expectedRevision":1}`, met het echte taak-ID en de actuele revisie. De aanvrager moet de oorspronkelijke missie-eigenaar zijn.
+4. De server gebruikt de bestaande `proposeComposedWorker` om een `text-inspector` te maken met het vaste, geteste recept `text-normalize → text-metrics`. Een onbekend of door een model aangeboden recept wordt geweigerd.
+5. De server voert de *echte* lokale `evaluateBuiltin`-fixtures uit en legt registratie en meting met een apart check-actor vast in het bestaande operationslog.
+6. De worker blijft `candidate`. Alleen een persoon kan met de bestaande `worker.release`-actie en exact testbewijs vrijgeven. Een verzonnen bewijsreferentie wordt geweigerd.
+7. De oorspronkelijke missie blijft ongewijzigd en kan na toelating via de **bestaande** `POST /ops/missions/:id/run`-route worden vervolgd. De taskrun blijft `verification:"not-evaluated"` tot een afzonderlijke, passende inhoudelijke controle plaatsvindt.
 
-De nieuwe route geeft ook de bestaande `productionLineView` terug, zodat werkplan, workers, uitvoering, beoordeling en vrijgave niet in een tweede statusadministratie belanden. De volgende *volledige* productverbinding moet precies deze overgangen koppelen:
+De aanvraag wordt geweigerd bij een ontbrekende of verouderde missierevisie, niet-eigenaar, open voorwaarde, actieve scheduler, lopende of mislukte taak, externe actie, al bestaande kandidaat of ontbrekend ondersteund Builder-recept. Een tweede aanvraag kan geen dubbele worker registreren.
 
-- Vraag -> planvoorstel -> bronvoorwaarden controleren -> expliciete goedkeuring
-- Plan -> Worker Registry en RepoSearch -> geschikte beschikbare uitvoerder -> beperkte uitvoering
-- Voor code: bestaande meerstaps-codeplannen -> voorstel -> Docker-projecttest -> menselijke goedkeuring -> status
-- Na fouten: diagnose / gemeten defect -> geteste herstelkandidaat -> hoogstens drie pogingen -> menselijke beslissing
-- Resultaat -> bron- en outputcontrole -> vrijgavedossier -> onafhankelijke verificatie en besluit
+## Wat deze proef niet aantoont
 
-De regellus **mag niet** zelf beslissen dat een worker is toegelaten, een nieuwe versie productierijp is, een bron semantisch bewijs levert of een opdracht gepubliceerd mag worden. De ontbrekende koppelingen worden zichtbaar als `needs-review` of `blocked`, niet als verzonnen voltooiing.
+- Dat de algemene `worker-assembler` uit de catalogus al zelfstandig nieuwe TypeScript-, Python-, document- of webworkers schrijft.
+- Dat RepoSearch gevonden code inhoudelijk geschikt verklaart of uitvoerbaar maakt.
+- Dat een model nieuwe uitvoerrechten, workercode of publicatierechten mag toekennen.
+- Dat workerkwaliteit buiten de exacte fixtures, op echte taken of nieuwe gebruikersinvoer is vastgesteld.
+- Dat een taakvoltooiing het eindresultaat controleert of een softwareversie vrijgeeft.
+- Dat de website op eaimodel.nl een online agent of openbare API heeft.
 
-## Controle
+De 56 rollen blijven grotendeels `design-only`. De volgende Builder-uitbreiding moet via dezelfde vacature-, test-, registratie- en vrijgaveketen **nieuwe sandbox-workers** kunnen voortbrengen, inclusief versiegebonden tests en een losse goedkeuring. Daarvoor moeten eerst de echte runtime en veilige isolatie van gegenereerde code worden toegevoegd.
 
-`node --test tests/agent-loop.test.ts tests/agent-loop-api.test.ts tests/agent-loop-ui.test.ts` test de nieuwe beperkte cyclus met echte server en operationslog, maar geen extern model. `npm test`, de Docker-CI en een afzonderlijke modelproef zijn nodig voordat we over een geslaagde integratie kunnen spreken.
+## Controles
 
-De eerste publieke ingang op `eaimodel.nl/work/` blijft informatief. De statische pagina is niet geschikt om secrets of een lokale codeworker rechtstreeks vanuit een browser beschikbaar te maken.
+`node --test tests/orchestrator-builder-api.test.ts tests/orchestrator-ui.test.ts` is de gerichte regressieset. Controleer daarnaast `npm test`, CI, bestaande securitytests en een echte gebruikersproef op de actuele PR-head. Beschouw een groene unit- of mocktest niet als onafhankelijke acceptatie.
+
+De publieke `/work/`-pagina blijft los van de echte lokale werkruimte.
