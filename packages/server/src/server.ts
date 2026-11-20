@@ -12,6 +12,7 @@ import type { OpsEnvelope } from "../../operations/src/registry.ts";
 import {localStateWithoutDemo} from "../../operations/src/legacy-demo-view.ts";
 import { catalogOverview } from "../../operations/src/selector.ts";
 import { runMissionStep, runMissionUntilBlocked, evaluateBuiltin, builtinInventoryForState } from "../../operations/src/execution.ts";
+import { inspectMissionWorkerNeeds,prepareMissingWorker } from "../../operations/src/orchestrator.ts";
 import {runParallelPureText} from "../../operations/src/parallel.ts";
 import {expireLocalLeases} from "../../operations/src/leases.ts";
 import {projectLocalQueue} from "../../operations/src/queue.ts";
@@ -1468,6 +1469,46 @@ export function makeServer(cfg: Config) {
             if(/pause|automatic|worker|timeout|capacity|unsupported/.test(String(e)))
               throw new HttpError(422,"parallel local execution is not allowed");
             throw new HttpError(503,"parallel local worker could not finish safely");
+          }
+        }
+        const workerNeeds=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/worker-needs$/.exec(url.pathname);
+        if(req.method==="GET"&&workerNeeds){
+          try{
+            if(!operations.verify().ok)throw new HttpError(503,"operations journal unavailable");
+            return json(res,200,inspectMissionWorkerNeeds(
+              readableOps(),workerNeeds[1],cfg.repoSearchRoot));
+          }catch(e){
+            if(e instanceof HttpError)throw e;
+            if(String(e).includes("unknown mission"))throw new HttpError(404,"unknown mission");
+            throw new HttpError(503,"worker needs unavailable");
+          }
+        }
+        const prepareWorker=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/workers\/prepare$/.exec(url.pathname);
+        if(req.method==="POST"&&prepareWorker){
+          if(actor.kind!=="person")throw new HttpError(403,"only mission owners may request worker preparation");
+          requireWritableIntegrity();
+          let body:unknown;
+          try{body=JSON.parse((await readBody(req,maxBodyBytes))||"{}")}
+          catch(e){if(e instanceof HttpError)throw e;throw new HttpError(400,"invalid JSON")}
+          if(!body||typeof body!=="object"||Array.isArray(body)||
+             Object.keys(body).sort().join(",")!=="expectedRevision,taskId")
+            throw new HttpError(422,"expected taskId and expectedRevision");
+          const reqBody=body as {taskId:unknown;expectedRevision:unknown};
+          if(typeof reqBody.taskId!=="string"||
+             !/^[a-z][a-z0-9-]{2,63}$/.test(reqBody.taskId)||
+             (typeof reqBody.expectedRevision!=="number"||!Number.isSafeInteger(reqBody.expectedRevision)))
+            throw new HttpError(422,"invalid task or revision");
+          try{
+            return json(res,201,prepareMissingWorker(operations,prepareWorker[1],{
+              requestedBy:actor.id,expectedRevision:reqBody.expectedRevision as number,
+              taskId:reqBody.taskId,repoSearchRoot:cfg.repoSearchRoot,
+            }));
+          }catch(e){
+            const msg=(e as Error).message;
+            if(/only mission owner/.test(msg))throw new HttpError(403,"mission owner required");
+            if(/unknown mission/.test(msg))throw new HttpError(404,"unknown mission");
+            if(/journal verification/.test(msg))throw new HttpError(503,"operations journal unavailable");
+            throw new HttpError(422,"worker preparation refused: "+msg);
           }
         }
         const missionStep=/^\/ops\/missions\/([a-z][a-z0-9-]{2,63})\/step$/.exec(url.pathname);
