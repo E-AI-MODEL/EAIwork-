@@ -61,13 +61,27 @@ export function validateExecutorIdentities(
   }
 }
 
+/** Most recent durable lease for this mission, including reviewed attempts. */
+const lastLeaseClaimMs=(mission:OpsState["missions"][string]):number=>{
+  let last=0;
+  for(const record of Object.values(mission.tasks)){
+    for(const run of [...(record.attempts??[]),...(record.run?[record.run]:[])]){
+      if(!run.lease)continue;
+      const at=Date.parse(run.startedAt);
+      if(Number.isFinite(at))last=Math.max(last,at);
+    }
+  }
+  return last;
+};
 /** Server-side claim is durable before input is ever returned to the caller. */
 export function claimTextJob(store:OpsStore,executor:ExecutorIdentity):ExecutorJob|null{
   const state=store.snapshot();
   const active=Object.values(state.missions).reduce((n,m)=>n+
     Object.values(m.tasks).filter(t=>t.status==="running"&&!!t.run?.lease).length,0);
   if(active>=2)return null;
-  const missions=Object.values(state.missions).sort((a,b)=>a.plan.id.localeCompare(b.plan.id));
+  const missions=Object.values(state.missions).sort((a,b)=>
+    lastLeaseClaimMs(a)-lastLeaseClaimMs(b) ||
+    a.plan.id.localeCompare(b.plan.id));
   for(const mission of missions){
     const consent=mission.automation;
     if(mission.paused||!consent?.enabled||consent.executionMode!=="remote-text"||
