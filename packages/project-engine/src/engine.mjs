@@ -102,7 +102,7 @@ export function combine(project,checks){
  const hasSource=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(ownerRepo)&&/^[a-f0-9]{40}$/i.test(commitSha);
  const repositoryUrl=hasSource?"https://github.com/"+ownerRepo:null;
  // Namen van projectbestanden zijn onbetrouwbare invoer, ook in een rapport.
- const safeLabel=(value)=>String(value).replace(/([\\`*_{}\[\]()#+.!<>|~-])/g,"\\$1").replace(/\r/g,"\\r").replace(/\n/g,"\\n");
+ const safeLabel=(value)=>String(value).replace(/([\\`*_{}\[\]<>])/g,"\\$1").replace(/\r/g,"\\r").replace(/\n/g,"\\n");
  const fileLink=(p,line)=>{
   const file=String(p||"").slice(0,250);
   const address=hasSource?repositoryUrl+"/blob/"+commitSha+"/"+file.split("/").map(encodeURIComponent).join("/")+(line?"#L"+line:""):null;
