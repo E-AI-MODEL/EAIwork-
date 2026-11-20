@@ -50,7 +50,7 @@ export function projectLocalQueue(state:OpsState,nowMs=Date.now()){
       }
       const approved=record.status==="queued" &&
         !blockers.length &&
-        ["text-normalize","text-metrics"].includes(task.taskKind) &&
+        ["text-normalize","text-metrics","text-inspect","reference-extract"].includes(task.taskKind) &&
         (task.effect===undefined||task.effect==="local");
       const run=record.run;
       const lease=run?.lease;

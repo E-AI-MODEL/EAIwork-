@@ -74,8 +74,8 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
       [reviewerToken]:{actor:{kind:"person",id:"person:release-reviewer"},
         access:{read:"*",write:[],audit:true}}},
     executorTokens:{
-      [workerToken]:{ownerId:"executor-local-demo",taskKinds:["text-normalize","text-metrics"]},
-      [otherWorkerToken]:{ownerId:"executor-other-demo",taskKinds:["text-normalize","text-metrics"]},
+      [workerToken]:{ownerId:"executor-local-demo",taskKinds:["text-normalize","text-metrics","text-inspect","reference-extract"]},
+      [otherWorkerToken]:{ownerId:"executor-other-demo",taskKinds:["text-normalize","text-metrics","text-inspect","reference-extract"]},
     },
   });
   if(!operations)throw new Error("demonstration operations journal missing");
@@ -86,6 +86,7 @@ export function createDemoServer(options:{schedulerIntervalMs?:number;planningMo
   for(const contract of [
     simple("text-normalize","text-normalize"),
     simple("text-metrics","text-metrics"),
+    simple("reference-extract","reference-extract"),
     simple("repo-search","repo-search","repo-search-fixture-v1"),
     proposeComposedWorker("text-inspector","Tekstinspectie").contract,
   ]){
