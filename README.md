@@ -86,12 +86,13 @@ Three ways to start, all bound to `127.0.0.1`. Requires Node `22.18+`.
 | Work with your own local model | `npm run local:ollama` | Ollama proposes work plans; you approve them. Missions and logs are kept in `~/.eaiwork/local`. |
 | Let a model change code under control | `npm run local:ollama -- --example` | Adds the code worker on a fresh example project: proposal, syntax check, isolated Docker test, your yes or no, apply, restore. Use `--worktree=/path/to/project` for your own project. |
 
-Open the address printed in the terminal and connect with the one-time token shown there. Ollama must be running with at least one model (`ollama pull qwen2.5-coder:3b`); the Docker test needs `docker pull node:22-alpine` and a local Docker socket. Nothing is sent to a cloud model and nothing is published.
+Open the link printed in the terminal; it connects directly. The token travels in the URL fragment, which is never sent to a server, and it is removed from the address bar on arrival. You can also open the plain address and paste the token. Ollama must be running with at least one model (`ollama pull qwen2.5-coder:3b`); the Docker test needs `docker pull node:22-alpine` and a local Docker socket. Nothing is sent to a cloud model and nothing is published.
 
 What the local server does and does not do:
 
 - **A model proposes; it never approves.** Plans, code changes and releases wait for a person, or for a task maximum a person set in advance.
 - **Code is tested before it is applied.** The proposed bytes run against the chosen test in a container without network, without your project mounted and without write access, on a local Docker socket only. A change that reaches into the process or the test harness is refused, and only named tests that really ran count as a pass.
+- **The result is visible where you work.** When a code assignment is finished, the Codeworker page shows whether every applied change has a passing isolated test, and links to the evidence view with the rule and the evidence that carry that status.
 - **Interrupted work is not repeated blindly.** After a restart, unfinished file changes are shown for review and new changes are blocked until that is done.
 - **Recorded work becomes evidence by a rule, not by assertion.** With a code workspace the evidence view carries one extra question: *does every applied code change have a passing isolated test for exactly the applied bytes?* A deterministic rule over the operations journal answers it. When it holds, the atom is `proven` with the journal as its registered source. When an untested change is applied, the proof is withdrawn; it returns when the rule holds again. No person and no model sets that status.
 

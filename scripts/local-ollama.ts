@@ -157,6 +157,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
     });
     process.stdout.write(
       "\nEAIwork lokaal met Ollama\n"+
+      "Open deze link (verbindt direct): "+local.address+"#token="+local.token+"\n"+
       "Dashboard: "+local.address+"\n"+
       "Model voor planvoorstellen: "+local.model+" (Ollama op "+local.ollamaHost+")\n"+
       "Toegangstoken: "+local.token+"\n"+

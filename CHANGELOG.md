@@ -6,6 +6,13 @@
 - **Een controle heeft één actuele uitslag.** Naast `check.passed` bestaat nu `check.failed`. De laatste uitvoering van een controle vervangt de vorige, dus een mislukte controle trekt een bewijs in en een latere geslaagde zet het terug (vectors 029 en 030).
 - **Geen nep-geslaagde tests meer.** Voorgestelde code kon `assert` of `node:test` uitschakelen en dan slagen met een fout resultaat, via een gewone import, een berekende import, `process.getBuiltinModule` of de Function-constructor. De testomgeving wordt nu bevroren voordat er voorgestelde code laadt; elke route laat de test falen. Een vooraf-controle weigert de directe vormen al voordat Docker start.
 - Automatische controles draaien ook bij het opstarten van de server, zodat een vervallen bewijs na een crash niet blijft staan.
+- **Dashboard, na een volledige doorloop als gebruiker met echte Docker-tests:**
+  - Na het verversen van de pagina verdween de ja/nee-keuze terwijl de test geslaagd was. De keuze blijft nu staan.
+  - Een voorstel binnen een lopende opdracht toonde twee tegenstrijdige testregels. Er staat er nu één.
+  - Na afloop zie je in Codeworker het bewijs van het werk, met een knop naar de bewijsweergave.
+  - Een nieuwe gebruiker had geen tekstworkers en kon geen teksttaak uitvoeren. Eén knop voegt de twee ingebouwde toe; de server test ze eerst.
+  - De link uit de terminal verbindt direct. Het token staat in het fragment en verdwijnt uit de adresbalk.
+  - Het verbindingenblok klapt in als alles bereikbaar is; een kapot icoon en ongestijlde invoervelden zijn hersteld; een afgeronde teksttaak toont geen startknoppen meer.
 - Acht eenmalige preview-releaseworkflows met schrijfrechten zijn verwijderd; ze hoorden bij al samengevoegde branches.
 - README: één overzicht om lokaal te starten. `docs/index.md` dekt alle documenten.
 
