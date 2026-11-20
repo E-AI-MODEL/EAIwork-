@@ -16,10 +16,13 @@ export async function inventory(folder,goal="site"){
  if(!["site","app","code","docs"].includes(goal))error("Unsupported goal");
  const root=resolve(folder);
  if(!await existsDir(root))error("Explicit project directory is required");
- const files=[],skipped=[],stack=[root];let totalBytes=0;
+ const files=[],skipped=[],stack=[root];let totalBytes=0,scannedEntries=0;
  while(stack.length){
+  if(stack.length>5000)error("Project has too many directories for this pilot");
   const dir=stack.pop();
   const entries=(await readdir(dir,{withFileTypes:true})).sort((a,b)=>a.name.localeCompare(b.name));
+  scannedEntries+=entries.length;
+  if(scannedEntries>20000)error("Project has too many entries for this pilot");
   for(const entry of entries){
    const abs=join(dir,entry.name),p=posix(relative(root,abs)),st=await lstat(abs);
    if(st.isSymbolicLink()){skipped.push({path:p,reason:"symlink"});continue}
@@ -72,7 +75,7 @@ export async function syntax(folder){
   const stderr=String(r.stderr||"").slice(0,8192);
   const sourceLine=stderr.match(/:(\d+)(?::\d+)?(?=\r?\n|$)/m)||stderr.match(/\bline (\d+)\b/i);
   const line=sourceLine?Number(sourceLine[1]):null;
-  results.push({path:f.path,status:r.error?"unknown":r.status===0?"syntax-pass":"syntax-fail",line:Number.isSafeInteger(line)&&line>0?line:null});
+  results.push({path:f.path,status:r.error||r.signal||r.status===null?"unknown":r.status===0?"syntax-pass":"syntax-fail",line:Number.isSafeInteger(line)&&line>0?line:null});
  }
  return {schema:"eai-project-engine/syntax-v1",files:results,checked:results.length,passed:results.filter(x=>x.status==="syntax-pass").length,failed:results.filter(x=>x.status==="syntax-fail").length,unknown:results.filter(x=>["unknown","skipped"].includes(x.status)).length,executesProjectCode:false,limits:["No package installation or project-defined scripts","No TypeScript, JSX, browser, integration or functionality test"]};
 }
