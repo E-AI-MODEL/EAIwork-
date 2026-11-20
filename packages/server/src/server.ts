@@ -1496,7 +1496,7 @@ export function makeServer(cfg: Config) {
           const reqBody=body as {taskId:unknown;expectedRevision:unknown};
           if(typeof reqBody.taskId!=="string"||
              !/^[a-z][a-z0-9-]{2,63}$/.test(reqBody.taskId)||
-             !Number.isSafeInteger(reqBody.expectedRevision))
+             (typeof reqBody.expectedRevision!=="number"||!Number.isSafeInteger(reqBody.expectedRevision)))
             throw new HttpError(422,"invalid task or revision");
           try{
             return json(res,201,prepareMissingWorker(operations,prepareWorker[1],{
