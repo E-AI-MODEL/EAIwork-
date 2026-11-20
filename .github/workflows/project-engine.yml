@@ -12,7 +12,11 @@ on:
   pull_request:
     paths:
       - 'packages/project-engine/**'
+      - 'packages/cli/src/eai.ts'
+      - 'packages/operations/src/registry.ts'
+      - 'packages/operations/src/store.ts'
       - 'tests/project-engine.test.mjs'
+      - 'tests/project-ops-runner.test.mjs'
       - '.github/workflows/project-engine.yml'
 permissions:
   contents: read
@@ -33,7 +37,7 @@ jobs:
         with:
           node-version: '22'
       - name: Reguliere tests inclusief tegenvoorbeelden
-        run: node --test tests/project-engine.test.mjs
+        run: node --test tests/project-engine.test.mjs tests/project-ops-runner.test.mjs
   inventory:
     name: "Worker: bestandsinventarisatie"
     runs-on: ubuntu-24.04

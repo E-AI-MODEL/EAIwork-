@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { agreement, coverage, distribution, lintPack, propagate, replay, reviewSignals, runRules, weakestLink } from "../../core/src/index.ts";
 import { Store } from "../../server/src/store.ts";
 import { SignedFileAnchorVerifier, SignedFileAnchorWitness } from "../../server/src/witness.ts";
+import { OpsStore } from "../../operations/src/store.ts";
+import { runProjectCheck, projectCheckHistory } from "../../project-engine/src/ops-runner.mjs";
 
 const [cmd, ...args] = process.argv.slice(2);
 const now = process.env.EAI_NOW ?? new Date().toISOString().slice(0, 10);
@@ -15,7 +17,7 @@ const usage = `usage:
   eai explain <pack.json> <events.jsonl> <atom>
   eai report <pack.json> <events.jsonl> [goal-atom,...]
   eai agree <answersA.json> <answersB.json>      (two observers, {atom: value})
-  eai verify-local <data-dir>
+  eai project-check <project-dir> <site|app|code|docs> <operations-dir> [run-id] [--retry]\n  eai verify-local <data-dir>
   eai verify-log <data-dir> <witness-dir> <public-key.pem>
   eai bootstrap-witness <data-dir> <witness-dir> <private-key.pem> <public-key.pem>`;
 
@@ -62,6 +64,30 @@ if (cmd === "lint-pack") {
   const r = agreement(readJson(args[0]), readJson(args[1]));
   console.log(`n=${r.n} agreement=${(r.percent * 100).toFixed(0)}% kappa=${r.kappa.toFixed(2)}`);
   r.disagreements.forEach((x) => console.log("  disagree on", x, "-> split the atom or rewrite the question"));
+} else if (cmd === "project-check") {
+  const [folder,goal,operationsDir,runId,flag]=args;
+  if(!folder||!["site","app","code","docs"].includes(goal)||!operationsDir||
+     args.length>5||(flag!==undefined&&flag!=="--retry")||
+     (flag==="--retry"&&!runId)){
+    console.error(usage);process.exitCode=2;
+  }else{
+    const ops=new OpsStore(operationsDir);
+    try{
+      const result=await runProjectCheck(ops,folder,{
+        goal,...(runId?{runId}:{}),allowRetry:flag==="--retry"
+      });
+      const recorded=projectCheckHistory(ops,result.runId);
+      console.log("EAIgit projectcontrole",result.runId);
+      console.log("Status:",result.status,"| nieuw:",result.executed.join(", ")||"geen",
+        "| hergebruikt:",result.reused.join(", ")||"geen");
+      console.log("Registraties:",recorded.length,"| journal:",ops.verify().ok?"intact":"fout");
+      console.log("Gebruikstest en publicatie zijn niet uitgevoerd.");
+      if(result.status!=="needs-human-review"){
+        console.error("Geblokkeerd:",result.reason??"onbekend");
+        process.exitCode=1;
+      }
+    }finally{ops.close();}
+  }
 } else if (cmd === "verify-local") {
   const v = new Store(args[0]).verify();
   console.log(v.ok ? "local log intact" : `local log broken at seq ${v.badAt}`);
