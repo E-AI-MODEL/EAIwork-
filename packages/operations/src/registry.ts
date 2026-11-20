@@ -172,7 +172,7 @@ function transitionOps(
     if(!plain(source)||!(
       (source.kind==="unbound"&&source.repository===null&&source.commitSha===null)||
       (source.kind==="github-actions-context"&&typeof source.repository==="string"&&
-       /^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(source.repository)&&
+       source.repository.split("/").length===2&&source.repository.split("/").every(part=>/^[A-Za-z0-9_.-]+$/.test(part))&&
        typeof source.commitSha==="string"&&/^[a-f0-9]{40}$/.test(source.commitSha))))
       fail("invalid project check source");
     if(e.status==="failed"&&e.detailCode!=="worker-error"||
