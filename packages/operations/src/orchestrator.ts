@@ -113,7 +113,8 @@ export function prepareMissingWorker(
   const current=store.snapshot();
   const mission=current.missions[missionId];
   if(!mission)throw new Error("unknown mission");
-  if(!options.requestedBy.startsWith("person:")||mission.createdBy!==options.requestedBy)
+  if(typeof options.requestedBy!=="string"||!options.requestedBy.trim()||
+     mission.createdBy!==options.requestedBy)
     throw new Error("only mission owner may prepare workers");
   if(!Number.isSafeInteger(options.expectedRevision)||options.expectedRevision!==mission.revision)
     throw new Error("stale mission revision");
