@@ -70,9 +70,11 @@ test("vacature -> Builder -> echte fixture -> menselijke release -> oorspronkeli
     const ready=await(await request("GET",needs)).json() as any;
     assert.equal(ready.needs[0].status,"available");
     assert.equal(ready.canPrepare,false);
-    const completed=await(await request("POST","/ops/missions/"+id+"/run",{})).json() as any;
-    assert.equal(completed.stopReason,"complete");
-    assert.equal(completed.progress.done,1);
+    // Reuse the pre-existing, separately authorized scheduler. The Builder
+    // does not launch the worker or grant a background execution budget.
+    assert.equal((await request("POST","/ops/missions/"+id+"/automation/start",{maxStarts:1})).status,201);
+    assert.ok(demo.scheduler);
+    assert.deepEqual(demo.scheduler.tick().stopped,[{missionId:id,reason:"complete"}]);
     const state=await(await request("GET","/ops/missions")).json() as any;
     const output=state.missions[id].tasks["task-inspect"].run.output;
     assert.equal(output.text,"Hallo EAIwork wereld");
