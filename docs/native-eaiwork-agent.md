@@ -34,7 +34,7 @@ De route `POST /ops/missions/:id/agent/cycle` gebruikt de bestaande serveridenti
 
 ## Wat deze code nog niet verbindt
 
-Deze eerste agent-cyclus gebruikt alleen de bestaande, lokale mission-runner. Hij bestuurt **nog niet** zelfstandig RepoSearch, de Codeworker, Docker, Worker Builder, herstel, de releaseketen of de browserinterface. Ze bestaan wel als afzonderlijke, deels werkende routes en contracten. We voegen hiervoor geen parallelle implementaties toe.
+Deze eerste agent-cyclus gebruikt de bestaande lokale mission-runner. Die kan al de vrijgegeven deterministische tekstworkers, een vaste samenstelling en een **beperkte lokale RepoSearch** uitvoeren, mits de beheerder die repository en worker vooraf heeft ingesteld. De agent bestuurt **nog niet** zelfstandig de Codeworker, Docker, Worker Builder, herstel of releaseketen. Die bestaan als afzonderlijke, deels werkende routes en contracten. We voegen hiervoor geen parallelle implementaties toe.
 
 De nieuwe route geeft ook de bestaande `productionLineView` terug, zodat werkplan, workers, uitvoering, beoordeling en vrijgave niet in een tweede statusadministratie belanden. De volgende *volledige* productverbinding moet precies deze overgangen koppelen:
 
