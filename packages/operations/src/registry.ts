@@ -76,7 +76,12 @@ export type OpsEvent =
   | { type: "quality.record"; measurement: QualityMeasurement }
   | { type: "defect.open"; id: string; workerId: string; reason: string; severity: "quality" | "security" }
   | { type: "repair.record"; defectId: string; attempt: RepairAttempt }
-  | { type: "human.decide"; defectId: string; choice: "replace" | "rebuild" | "manual" | "pause" | "disable"; rationale: string };
+  | { type: "human.decide"; defectId: string; choice: "replace" | "rebuild" | "manual" | "pause" | "disable"; rationale: string }
+  | { type:"project.check.record"; runId:string; step:"inventory"|"syntax"|"report";
+      status:"completed"|"failed"|"needs-review"; attempt:1|2;
+      source:{kind:"unbound"|"github-actions-context";repository:string|null;commitSha:string|null};
+      resultSha256:string; detailCode:"ok"|"syntax-findings"|"incomplete"|"worker-error"|"human-review";
+      counts:{checked:number;failed:number;unknown:number} };
 export interface OpsEnvelope { id: string; at: string; actor: OpsActor; event: OpsEvent }
 export interface OpsState { workers: Record<string, WorkerRecord>; workerVersions: Record<string, Record<string, WorkerRecord>>; measurements: QualityMeasurement[]; defects: Record<string, Defect>; missions: Record<string, MissionRecord>; history: OpsEnvelope[] }
 export const emptyOps = (): OpsState => ({ workers: {}, workerVersions: {}, measurements: [], defects: {}, missions: {}, history: [] });
@@ -126,7 +131,8 @@ function transitionOps(
   const defectEvent=["defect.open","repair.record","human.decide"].includes(e.type);
   const qualityEvent=e.type==="quality.record";
   const codeEvent=e.type==="code.activity";
-  const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent||codeEvent;
+  const projectEvent=e.type==="project.check.record";
+  const knownEvent=missionEvent||workerEvent||defectEvent||qualityEvent||codeEvent||projectEvent;
   // A mission event can only change one mission; copy the dictionary and that
   // one record, not every unrelated mission and all its task results.
   const copyAffectedMission=():OpsState["missions"]=>{
@@ -147,6 +153,45 @@ function transitionOps(
   if (e.type === "mission.create" || e.type === "mission.extend" || e.type === "mission.release.submit" || e.type === "mission.release.review" || e.type === "mission.release.ci.observe" || e.type === "mission.release.artifact.observe" || e.type === "mission.release.github-artifact.observe" || e.type === "mission.pause" || e.type === "mission.resume" ||
       e.type === "task.started" || e.type === "task.lease.claim" || e.type === "task.lease.renew" || e.type === "task.lease.expire" || e.type === "task.completed" || e.type === "task.failed" || e.type === "task.recover" || e.type === "mission.gate.resolve" || e.type === "task.retry" || e.type === "mission.automation.start" || e.type === "mission.automation.stop") {
     applyMissionEvent(state.missions,e,envelope.actor,envelope.at,verifiedJournalReplay);
+  } else if(e.type==="project.check.record"){
+    // Deliberately no separate project state: the existing durable operations
+    // journal is the source of truth. No source contents or user tokens stored.
+    if(envelope.actor.kind!=="check"||envelope.actor.id!=="check:eaigit-local")
+      fail("project check requires the trusted local engine actor");
+    if(!/^[a-z0-9][a-z0-9-]{7,95}$/.test(e.runId)||
+       !["inventory","syntax","report"].includes(e.step)||
+       !["completed","failed","needs-review"].includes(e.status)||
+       ![1,2].includes(e.attempt)||!/^[a-f0-9]{64}$/.test(e.resultSha256)||
+       !["ok","syntax-findings","incomplete","worker-error","human-review"].includes(e.detailCode))
+      fail("invalid project check record");
+    if(!plain(e.counts)||!["checked","failed","unknown"].every(k=>
+       Number.isSafeInteger(e.counts[k])&&Number(e.counts[k])>=0&&Number(e.counts[k])<=2500)||
+       Object.keys(e.counts).length!==3)
+      fail("invalid project check counts");
+    const source=e.source;
+    if(!plain(source)||!(
+      (source.kind==="unbound"&&source.repository===null&&source.commitSha===null)||
+      (source.kind==="github-actions-context"&&typeof source.repository==="string"&&
+       /^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(source.repository)&&
+       typeof source.commitSha==="string"&&/^[a-f0-9]{40}$/.test(source.commitSha))))
+      fail("invalid project check source");
+    if(e.status==="failed"&&e.detailCode!=="worker-error"||
+       e.status==="completed"&&e.detailCode!=="ok"||
+       e.status==="needs-review"&&!["syntax-findings","incomplete","human-review"].includes(e.detailCode))
+      fail("project check status not supported by outcome");
+    const previous=current.history.filter(x=>x.event.type==="project.check.record"&&x.event.runId===e.runId)
+      .map(x=>x.event).filter(x=>x.type==="project.check.record");
+    if(previous.length>=6||previous.some(x=>JSON.stringify(x.source)!==JSON.stringify(source)))
+      fail("project check run changed source or exceeded limit");
+    const same=previous.filter(x=>x.step===e.step);
+    if(e.attempt!==same.length+1 || same.length && (same.length>=2||same.at(-1)?.status!=="failed"))
+      fail("project check cannot be silently rerun");
+    const prior= e.step==="syntax"?"inventory":e.step==="report"?"syntax":null;
+    if(prior && !previous.some(x=>x.step===prior&&x.status!=="failed"))
+      fail("project check dependency not completed");
+    if(e.step==="report"&&!previous.some(x=>x.step==="inventory"&&x.status==="completed"))
+      fail("project report requires inventory");
+    if(e.step==="report"&&e.status==="completed")fail("project report cannot certify application functionality");
   } else if(e.type==="code.activity"){
     // This journal records server-observed transitions. It is NOT an
     // authorization to modify files and carries no source-code contents.
