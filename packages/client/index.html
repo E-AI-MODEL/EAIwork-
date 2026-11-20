@@ -394,10 +394,10 @@ async function load(){
     badge.querySelector('span').textContent=integrity?(integrity.ok?'log intact':'log issue'):'log not verified for this token';
   }catch(e){
     const reason=String(e?.message||'');
-    $('error').textContent=/^401\\b/.test(reason)?
+    $('error').textContent=/^401\b/.test(reason)?
       'Dit token is ongeldig of hoort bij een vorige serversessie. Open de nieuwste link uit Terminal.':
-      /^403\\b/.test(reason)?'Je account heeft geen toegang tot deze bewijsgegevens.':
-      /^429\\b/.test(reason)?'Te veel verzoeken. Probeer het later opnieuw.':
+      /^403\b/.test(reason)?'Je account heeft geen toegang tot deze bewijsgegevens.':
+      /^429\b/.test(reason)?'Te veel verzoeken. Probeer het later opnieuw.':
       'De bewijsomgeving kon niet verbinden. Gebruik voor opdrachten /dashboard en controleer of de lokale server nog draait.';
   }
   finally{btn.disabled=false;btn.textContent='Open workbench'}
