@@ -12,6 +12,7 @@ on:
   pull_request:
     paths:
       - 'packages/project-engine/**'
+      - 'packages/cli/src/eai.ts'
       - 'packages/operations/src/registry.ts'
       - 'packages/operations/src/store.ts'
       - 'tests/project-engine.test.mjs'
