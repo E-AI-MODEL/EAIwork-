@@ -133,7 +133,8 @@
     <div class="topbar-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>EAI work</span></div>
       <div class="top-actions">
-        <span class="hide-mobile">Evidence-first workbench</span>
+        <a href="/dashboard" class="act" style="text-decoration:none">Naar werkdashboard</a>
+        <span class="hide-mobile">Bewijs en herkomst</span>
         <button id="refresh" class="act" hidden>Refresh</button><span id="integrity" class="integrity"><i class="integrity-dot"></i><span>not loaded</span></span>
       </div>
     </div>
@@ -145,6 +146,7 @@
         <div class="eyebrow">Small questions. Visible evidence. No hidden score.</div>
         <h1>Build work from what can actually be checked.</h1>
         <p class="lead">EAI work splits a job into atomic questions, derives status from evidence and keeps every dependency inspectable. AI can propose. It cannot promote its own answer.</p>
+        <p class="lead" style="font-size:15px;max-width:670px">Dit is de aparte bewijsomgeving, niet het dashboard voor opdrachten of de Codeworker. <a href="/dashboard">Open je EAIwork-werkdashboard</a>. Gebruik voor toegang de volledige link uit Terminal. Het tijdelijke token wordt bij opnieuw starten vernieuwd.</p>
         <div class="login">
           <input id="token" type="password" autocomplete="off" placeholder="Access token" aria-label="Access token">
           <button id="load" class="primary">Open workbench</button>
@@ -390,7 +392,14 @@ async function load(){
     const badge=$('integrity');
     badge.className='integrity'+(integrity?(integrity.ok?' ok':' bad'):'');
     badge.querySelector('span').textContent=integrity?(integrity.ok?'log intact':'log issue'):'log not verified for this token';
-  }catch(e){$('error').textContent='Could not open this workbench. Check the token and server.';}
+  }catch(e){
+    const reason=String(e?.message||'');
+    $('error').textContent=/^401\\b/.test(reason)?
+      'Dit token is ongeldig of hoort bij een vorige serversessie. Open de nieuwste link uit Terminal.':
+      /^403\\b/.test(reason)?'Je account heeft geen toegang tot deze bewijsgegevens.':
+      /^429\\b/.test(reason)?'Te veel verzoeken. Probeer het later opnieuw.':
+      'De bewijsomgeving kon niet verbinden. Gebruik voor opdrachten /dashboard en controleer of de lokale server nog draait.';
+  }
   finally{btn.disabled=false;btn.textContent='Open workbench'}
 }
 $('load').addEventListener('click',load);
