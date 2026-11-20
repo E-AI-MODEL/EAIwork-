@@ -1504,6 +1504,7 @@ export function makeServer(cfg: Config) {
             return json(res,200,{...outcome,productionLine:line.missions.find(
               item=>item.id===agentCycle[1])??null});
           }catch(e){
+            if(e instanceof HttpError)throw e;
             const reason=(e as Error).message;
             if(/unknown mission/.test(reason))throw new HttpError(404,"unknown mission");
             if(/original mission approver/.test(reason))throw new HttpError(403,"mission owner required");
