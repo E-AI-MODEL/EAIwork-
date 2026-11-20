@@ -1,12 +1,6 @@
 name: EAIgit · projectcontrole
+# Alleen binnen deze repository. Openbare herbruikbare workflow volgt pas na aparte proef.
 on:
-  workflow_call:
-    inputs:
-      goal:
-        description: "Welke uitkomst moet de repository ondersteunen?"
-        required: false
-        type: string
-        default: code
   workflow_dispatch:
     inputs:
       goal:
@@ -31,11 +25,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
-      - name: Haal gecontroleerde engine op
+      - name: Test exact de engine van deze commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          repository: E-AI-MODEL/EAIwork-
-          ref: a31819be7f611874bf4c30b02152f558f2105f80
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -56,7 +48,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: a31819be7f611874bf4c30b02152f558f2105f80
+          ref: ${{ github.sha }}
           path: engine
           persist-credentials: false
       - name: Node instellen
@@ -70,7 +62,7 @@ jobs:
           set -euo pipefail
           node engine/packages/project-engine/src/engine.mjs inventory project "$PROJECT_GOAL" output/inventory.json
       - name: Bewaar uitslag inventarisatie
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: eai-project-inventory
           path: output/inventory.json
@@ -90,7 +82,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: a31819be7f611874bf4c30b02152f558f2105f80
+          ref: ${{ github.sha }}
           path: engine
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -101,7 +93,7 @@ jobs:
           set -euo pipefail
           node engine/packages/project-engine/src/engine.mjs syntax project output/syntax.json
       - name: Bewaar uitslag syntax
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: eai-project-syntax
           path: output/syntax.json
@@ -124,14 +116,14 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: E-AI-MODEL/EAIwork-
-          ref: a31819be7f611874bf4c30b02152f558f2105f80
+          ref: ${{ github.sha }}
           path: engine
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
       - name: Download bronresultaten
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: eai-project-*
           path: results
@@ -148,7 +140,7 @@ jobs:
             printf '_Deze controles zijn automatisch uitgevoerd. Er is niets gepubliceerd of gewijzigd._\n'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Bewaar onderliggende gegevens voor controle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: eai-project-report
           path: rapport/
