@@ -4,6 +4,8 @@ import {mkdtempSync,rmSync} from "node:fs";
 import {mkdtemp,mkdir,writeFile} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
+import {spawnSync} from "node:child_process";
+import {fileURLToPath} from "node:url";
 import {OpsStore} from "../packages/operations/src/store.ts";
 import {runProjectCheck,projectCheckHistory} from "../packages/project-engine/src/ops-runner.mjs";
 const emptyEnv={};
@@ -78,4 +80,25 @@ test("operations reducer refuses forged project checks and out-of-order steps",(
   assert.equal(store.verify().ok,true);
   assert.equal(store.snapshot().history.length,0);
  }finally{store.close();rmSync(root,{recursive:true,force:true})}
+});
+
+test("existing EAIwork CLI runs project checks and prints only verified status",async()=>{
+ const root=fresh(),project=join(root,"project"),dir=join(root,"operations");
+ try{
+  await mkdir(project);
+  await writeFile(join(project,"index.html"),"<!doctype html><html><body>ok</body></html>");
+  const cli=fileURLToPath(new URL("../packages/cli/src/eai.ts",import.meta.url));
+  const run=spawnSync(process.execPath,[cli,"project-check",project,"site",dir],{
+   encoding:"utf8",timeout:30000,env:{...process.env,GITHUB_REPOSITORY:"",GITHUB_SHA:""}
+  });
+  assert.equal(run.status,0,run.stderr||run.stdout);
+  assert.match(run.stdout,/Status: needs-human-review/);
+  assert.match(run.stdout,/Registraties: 3/);
+  assert.match(run.stdout,/publicatie zijn niet uitgevoerd/);
+  const store=new OpsStore(dir);
+  try{
+   assert.equal(store.verify().ok,true);
+   assert.equal(store.snapshot().history.filter(x=>x.event.type==="project.check.record").length,3);
+  }finally{store.close()}
+ }finally{rmSync(root,{recursive:true,force:true})}
 });
