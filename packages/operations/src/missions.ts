@@ -35,6 +35,8 @@ export interface MissionPhase {
   taskIds:string[];
 }
 export interface MissionPlan {
+  /** Owner-selected site preference, NOT an authorization or an execution grant. */
+  executionPreference?:"auto"|"local"|"cloud";
   /** The original request is preserved unchanged; no model may rewrite it. */
   sourceInstruction?:string;
   constraints?:MissionConstraint[];
@@ -193,6 +195,8 @@ export function validateReleaseCandidate(candidate:ReleaseCandidate):void {
 export function validateMissionPlan(plan:MissionPlan):void {
   if(!plain(plan)||typeof plan.id!=="string"||!ID.test(plan.id))fail("invalid mission id");
   bounded(plan.title,"mission title",160);bounded(plan.goal,"mission goal",1500);
+  if(plan.executionPreference!==undefined&&
+     !["auto","local","cloud"].includes(plan.executionPreference))fail("invalid execution preference");
   if(!Array.isArray(plan.tasks)||plan.tasks.length<1||plan.tasks.length>32)fail("mission must have 1-32 tasks");
   const ids=new Set<string>();
   for(const task of plan.tasks){
