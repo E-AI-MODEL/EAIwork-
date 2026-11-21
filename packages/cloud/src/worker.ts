@@ -5,7 +5,8 @@
  */
 import {DurableObject} from "cloudflare:workers";
 import {applyOps,type OpsEnvelope} from "../../operations/src/registry.ts";
-import {cloudTransition,cloudView,digest,emptyOps} from "./controller.ts";
+import {cloudTransition,cloudView,digest,digestBytes,emptyOps} from "./controller.ts";
+import {renderCsvDashboardHtml,type CsvDashboard} from "../../operations/src/csv-dashboard.ts";
 import {html,javascript} from "./ui.ts";
 
 interface LedgerEntry {previous:string;hash:string;envelope:OpsEnvelope}
@@ -33,6 +34,39 @@ export class CloudWorkspace extends DurableObject {
         const entries=await this.ctx.storage.get<LedgerEntry[]>("journal")??[];
         const {state}=await replay(entries);
         return response(cloudView(state));
+      }
+      if(request.method==="GET"&&url.pathname==="/api/artifact"){
+        const id=url.searchParams.get("missionId")??"";
+        const mode=url.searchParams.get("mode")??"download";
+        if(!/^mission-[a-z0-9-]{8,55}$/.test(id)||
+           !["download","preview"].includes(mode)||
+           [...url.searchParams.keys()].some(k=>!["missionId","mode"].includes(k)))
+          return response({error:"Ongeldig artifactverzoek"},400);
+        const entries=await this.ctx.storage.get<LedgerEntry[]>("journal")??[];
+        const {state}=await replay(entries);
+        const mission=state.missions[id],task=mission?.tasks["task-inspect"];
+        const result=task?.run?.output;
+        if(!mission||!task||task.status!=="done"||
+           task.spec.taskKind!=="csv-dashboard"||
+           result?.kind!=="csv-dashboard-v1"||
+           typeof result.artifactSha256!=="string")
+          return response({error:"Geen afgerond HTML-artifact beschikbaar"},404);
+        const html=renderCsvDashboardHtml(result as unknown as CsvDashboard);
+        if(await digestBytes(html)!==result.artifactSha256)
+          return response({error:"De opgeslagen artifacthash komt niet overeen"},503);
+        const fileName="eaiwork-dashboard-"+id.slice(-12)+".html";
+        return new Response(html,{headers:{
+          "content-type":"text/html; charset=utf-8",
+          "cache-control":"private, no-store",
+          "x-content-type-options":"nosniff",
+          "referrer-policy":"no-referrer",
+          "content-disposition":mode==="download"?
+            'attachment; filename="'+fileName+'"':'inline',
+          "content-security-policy":"sandbox allow-scripts; default-src 'none'; "+
+            "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "+
+            "connect-src 'none'; img-src 'none'; font-src 'none'; "+
+            "form-action 'none'; base-uri 'none'; frame-ancestors 'none'",
+        }});
       }
       if(request.method!=="POST"||url.pathname!=="/api/action")
         return response({error:"Onbekende route"},404);
@@ -103,7 +137,7 @@ export default {
         "content-security-policy":"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}});
     if(request.method==="GET"&&url.pathname==="/app.js")
       return new Response(javascript,{headers:{...headers,"content-type":"text/javascript; charset=utf-8"}});
-    if(!["/api/state","/api/action"].includes(url.pathname))
+    if(!["/api/state","/api/action","/api/artifact"].includes(url.pathname))
       return response({error:"Onbekende route"},404);
     if(request.method==="POST"){
       if(url.pathname!=="/api/action")return response({error:"Niet toegestaan"},405);
@@ -111,13 +145,14 @@ export default {
       // cross-origin form or a request with no Origin.
       if(request.headers.get("origin")!==url.origin)
         return response({error:"Ongeldige herkomst van de aanvraag"},403);
-    }else if(request.method!=="GET"||url.pathname!=="/api/state"){
+    }else if(request.method!=="GET"||!["/api/state","/api/artifact"].includes(url.pathname)){
       return response({error:"Methode niet toegestaan"},405);
     }
     if(!ctx?.exports?.CloudWorkspace)
       return response({error:"Beveiligde opslag ontbreekt"},503);
     const stub=ctx.exports.CloudWorkspace.get(ctx.exports.CloudWorkspace.idFromName("solo-workspace-v1"));
-    const internal=new Request("https://eaiwork.internal"+url.pathname,{
+    const internal=new Request("https://eaiwork.internal"+url.pathname+
+      (url.pathname==="/api/artifact"?url.search:""),{
       method:request.method,
       headers:{"content-type":"application/json","x-eai-owner":"person:cloud-owner"},
       ...(request.method==="POST"?{body:await request.text()}:{})});
