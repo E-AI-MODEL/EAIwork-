@@ -1,4 +1,5 @@
 /** Accessible private workspace. User text is displayed with textContent only. */
+import {PROMPT_STARTERS} from "./prompt-starters.ts";
 export const html=String.raw`<!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EAIwork · Mijn werkruimte</title>
@@ -52,6 +53,22 @@ a.artifact-link{display:inline-block;text-decoration:none;border:1px solid #c8da
 .tiny-bar{display:grid;grid-template-columns:minmax(78px,110px) 1fr 45px;align-items:center;gap:6px;padding:6px 0;font-size:11px}.tiny-bar-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tiny-bar-track{height:9px;background:#e8f0e9;border-radius:3px;overflow:hidden}.tiny-bar-fill{height:100%;background:#4c8362}.tiny-bar-number{text-align:right;font-variant-numeric:tabular-nums}
 #example-csv{font-size:11px;color:#335f43;margin-top:9px}
 #csv-file{font-size:11px;padding:8px 0;max-width:100%;color:#53765c}
+.prompt-picker{border:1px solid #e0e9e2;border-radius:10px;padding:12px;margin:0 0 17px;background:#fcfdfc}
+.prompt-heading{font-size:12px;font-weight:700;margin:0 0 10px;color:#365844}
+.prompt-toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:9px}
+.prompt-groups{display:flex;flex:1;gap:4px;overflow-x:auto;scrollbar-width:thin}
+.prompt-filter,.mission-filter{white-space:nowrap;font-size:11px;min-height:32px;padding:7px 10px;color:#627b69;border-color:#dfe8e1}
+.prompt-filter[aria-pressed="true"],.mission-filter[aria-pressed="true"]{background:#e8f2e9;border-color:#9fbeab;color:#264f35}
+#prompt-availability{background:white;color:#45654c;border:1px solid #d9e6dc;border-radius:7px;font-size:11px;min-height:32px;padding:5px 6px;max-width:125px}
+.prompt-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:177px;overflow-y:auto}
+.prompt-choice{display:flex;flex-direction:column;justify-content:center;text-align:left;gap:4px;min-width:0;min-height:71px;padding:9px;background:#fff;border:1px solid #e0e9e2;font-size:12px}
+.prompt-choice[aria-pressed="true"]{border-color:#749e80;background:#edf5ef;box-shadow:inset 2px 0 0 #4d8060}
+.prompt-choice strong{font-size:12px;line-height:1.35}.prompt-choice small{font-size:10px;line-height:1.45;font-weight:400;color:#768c7e}
+.prompt-picker .hint{margin:8px 0 0}
+.mission-filters{border-bottom:1px solid #e7ede8;padding:10px 15px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#fff}
+#mission-search{flex:1;min-width:130px;max-width:210px;border:1px solid #d8e6db;border-radius:7px;font-size:12px;padding:8px 10px;min-height:34px}
+.mission-filter-buttons{display:flex;gap:5px;overflow-x:auto}
+.mission-filter-count{font-size:10px;color:#86998b;margin-left:auto}
 .back-to-list{display:none}
 .mobile-nav{display:none}
 #work-message{padding:0 17px;font-size:11px;color:#2c6a4c}
@@ -97,6 +114,8 @@ label{margin:0 0 7px}
 .back-to-list{display:inline-flex;align-items:center;margin:0 0 14px}
 .mission-option{min-height:60px;padding:12px 16px}
 .worker{flex:none;padding:9px 16px;font-size:10px}
+.prompt-picker{padding:10px;margin-bottom:12px}.prompt-results{max-height:158px}.prompt-choice{min-height:65px;padding:8px}.prompt-filter{padding:6px 9px}
+.mission-filters{padding:8px 12px;gap:6px}.mission-filter-buttons{width:100%}.mission-filter{flex:1}.mission-filter-count{display:none}
 footer{display:none}
 }
 @media(max-width:490px){
@@ -110,7 +129,24 @@ footer{display:none}
 <div id="layout" class="layout" data-mobile-view="work">
 <section id="create-panel" class="panel"><div class="panel-header"><h2>Nieuwe opdracht</h2><span class="tag">Gewone taal</span></div>
 <div class="panel-body"><p class="lead">Beschrijf wat je wilt bereiken. Het systeem registreert ook opdrachten die de huidige cloudversie nog niet kan uitvoeren, zonder ze als afgerond te markeren.</p>
-<form id="create"><label for="instruction">Wat wil je dat EAIwork doet?</label>
+<form id="create">
+<section class="prompt-picker" aria-label="Selecteer een prompt">
+  <div class="prompt-heading">Kies een prompt <span class="muted">of schrijf zelf</span></div>
+  <div class="prompt-toolbar"><div id="prompt-groups" class="prompt-groups" role="group" aria-label="Filter prompts op onderwerp">
+    <button class="prompt-filter" type="button" data-group="all" aria-pressed="true">Alles</button>
+    <button class="prompt-filter" type="button" data-group="data" aria-pressed="false">Data</button>
+    <button class="prompt-filter" type="button" data-group="tekst" aria-pressed="false">Tekst</button>
+    <button class="prompt-filter" type="button" data-group="software" aria-pressed="false">Software</button>
+  </div>
+  <select id="prompt-availability" aria-label="Filter prompts op uitvoerbaarheid">
+    <option value="all">Alle statussen</option>
+    <option value="available">Nu mogelijk</option>
+    <option value="unavailable">Nog niet</option>
+  </select></div>
+  <div class="prompt-results" id="prompt-results" role="group" aria-label="Selecteer een voorbeeldopdracht"></div>
+  <p id="prompt-feedback" class="hint" role="status" aria-live="polite">Selecteer een voorstel. Je kunt de prompt daarna aanpassen.</p>
+</section>
+<label for="instruction">Jouw opdracht</label>
 <textarea id="instruction" maxlength="1500" required placeholder="Bijvoorbeeld: Tel de woorden, tekens en regels in mijn tekst. Of: Bouw een dashboard voor mijn gegevens."></textarea>
 <p class="hint" id="privacy-hint">Gebruik voorlopig alleen onschuldige testgegevens.</p>
 <button type="button" id="example-csv">Vul een CSV-dashboardvoorbeeld in</button>
@@ -130,6 +166,16 @@ footer{display:none}
 <p class="muted">De tekstworker telt en normaliseert tekst. De geteste CSV-dashboardtemplate kan met proefgegevens een zelfstandig HTML-dashboard bouwen, met filter, zoeken, tabel en grafiek. Beide gebruiken de bestaande Builder en menselijke vrijgave. De algemene Codeworker, echte Excelbestanden, willekeurige software en publicatie zijn nog niet aangesloten. EAIwork meldt dat als uitvoerblokkade, niet als voltooiing.</p></details>
 </div></section>
 <section id="work-panel" class="panel"><div class="panel-header"><h2>Mijn werk</h2><button id="refresh" type="button">Ververs</button></div>
+<div class="mission-filters" aria-label="Opdrachten filteren">
+  <input type="search" id="mission-search" placeholder="Zoek opdrachten" aria-label="Zoek in opdrachten">
+  <div id="mission-filter-buttons" class="mission-filter-buttons" role="group" aria-label="Filter opdrachten op status">
+    <button type="button" class="mission-filter" data-status="all" aria-pressed="true">Alle</button>
+    <button type="button" class="mission-filter" data-status="active" aria-pressed="false">Open</button>
+    <button type="button" class="mission-filter" data-status="done" aria-pressed="false">Afgerond</button>
+    <button type="button" class="mission-filter" data-status="blocked" aria-pressed="false">Wacht</button>
+  </div>
+  <span id="mission-filter-count" class="mission-filter-count"></span>
+</div>
 <div id="work-message" role="status" aria-live="polite"></div><div id="workarea" class="work-area" data-pane="list"><nav id="tasks" class="mission-list" aria-label="Opdrachten"><p class="muted">Opdrachten ophalen...</p></nav>
 <div id="detail" class="detail" aria-live="polite"><p class="muted">Selecteer een opdracht voor voortgang en resultaat.</p></div></div>
 <div id="worker" class="worker"></div>
@@ -138,9 +184,71 @@ footer{display:none}
 </main><script src="/app.js" defer></script></body></html>`;
 
 export const javascript=String.raw`"use strict";
+const PROMPT_STARTERS=${JSON.stringify(PROMPT_STARTERS)};
 const $=id=>document.getElementById(id);
 const tasks=$("tasks"),detail=$("detail"),worker=$("worker"),message=$("message");
 let busy=false,last=null,selectedId=null,mobilePane="list",mobileView="work";
+let promptGroup="all",promptAvailability="all",selectedPromptId=null;
+let missionFilter="all";
+function selectPromptGroup(group){
+  promptGroup=group;
+  document.querySelectorAll("[data-group]").forEach(button=>
+    button.setAttribute("aria-pressed",String(button.dataset.group===group)));
+  renderPromptChoices();
+}
+function promptMatches(p){
+  return (promptGroup==="all"||p.group===promptGroup)&&
+    (promptAvailability==="all"||(promptAvailability==="available"&&p.supported)||
+     (promptAvailability==="unavailable"&&!p.supported));
+}
+function renderPromptChoices(){
+  const box=$("prompt-results");box.replaceChildren();
+  const choices=PROMPT_STARTERS.filter(promptMatches);
+  for(const p of choices){
+    const b=document.createElement("button");b.type="button";
+    b.className="prompt-choice";b.setAttribute("aria-pressed",String(selectedPromptId===p.id));
+    const title=document.createElement("strong");title.textContent=p.title;
+    const info=document.createElement("small");
+    info.textContent=p.summary+" · "+(p.supported?"Beschikbaar":"Nog niet uitvoerbaar");
+    b.append(title,info);
+    b.addEventListener("click",()=>usePrompt(p));box.append(b);
+  }
+  if(!choices.length)box.append(document.createTextNode("Geen prompts voor dit filter."));
+}
+function usePrompt(p){
+  const field=$("instruction"),value=field.value.trim();
+  const prev=PROMPT_STARTERS.find(x=>x.id===selectedPromptId);
+  if(value&&value!==p.instruction&&value!==prev?.instruction&&
+     !confirm("Je huidige opdrachttekst vervangen door de geselecteerde prompt?"))return;
+  field.value=p.instruction;
+  selectedPromptId=p.id;renderPromptChoices();
+  if(p.source!=="none")$("source-details").open=true;
+  $("prompt-feedback").textContent=p.supported?
+    (p.source==="csv"?"Gekozen. Voeg nu CSV-gegevens toe of kies het voorbeeld.":
+     "Gekozen. Voeg de tekst toe die je wilt laten controleren."):
+    "Deze prompt wordt bewaard, maar een geschikte uitvoerder ontbreekt nog.";
+  field.focus();
+}
+function isBlockedMission(m){
+  return !!(m.csvMissing||m.sourceMissing||
+    ["unsupported","worker-unavailable","external-action","condition-blocked"].includes(m.need?.status)||
+    m.execution?.status==="site-unavailable"||
+    (m.execution?.status==="worker-unavailable"&&m.need?.status!=="buildable"));
+}
+function matchesMission(m){
+  const term=$("mission-search").value.trim().toLocaleLowerCase("nl-NL");
+  if(term&&!String(m.title+" "+(m.requestedOutcome||"")).toLocaleLowerCase("nl-NL").includes(term))return false;
+  if(missionFilter==="done")return m.status==="done";
+  if(missionFilter==="blocked")return m.status!=="done"&&isBlockedMission(m);
+  if(missionFilter==="active")return m.status!=="done"&&!isBlockedMission(m);
+  return true;
+}
+function setMissionFilter(value){
+  missionFilter=value;
+  document.querySelectorAll(".mission-filter").forEach(button=>
+    button.setAttribute("aria-pressed",String(button.dataset.status===value)));
+  render(last);
+}
 function showMobile(view){
   mobileView=view;
   $("layout").dataset.mobileView=view;
@@ -350,9 +458,11 @@ function render(data){
   last=data;tasks.replaceChildren();worker.replaceChildren();
   showMobile(mobileView);
   $("workarea").dataset.pane=mobilePane;
-  const ms=data.missions||[],w=data.worker;
+  const allMissions=data.missions||[];
+  const ms=allMissions.filter(matchesMission),w=data.worker;
+  $("mission-filter-count").textContent=ms.length+" van "+allMissions.length;
   if(!selectedId||!ms.some(m=>m.id===selectedId))selectedId=ms[0]?.id||null;
-  if(!ms.length){tasks.append(el("p","Nog geen opdrachten.","muted"));showDetails(null,w)}
+  if(!ms.length){tasks.append(el("p",allMissions.length?"Geen opdrachten voor dit filter.":"Nog geen opdrachten.","muted"));showDetails(null,w)}
   else for(const m of ms){
     const b=el("button",undefined,"mission-option"+(m.id===selectedId?" selected":""));
     b.type="button";b.setAttribute("aria-current",m.id===selectedId?"true":"false");
@@ -405,12 +515,23 @@ $("csv-file").addEventListener("change",async event=>{
   finally{event.target.value=""}
 });
 $("example-csv").addEventListener("click",()=>{
+  const preset=PROMPT_STARTERS.find(x=>x.id==="csv-dashboard");
+  if(preset){$("instruction").value=preset.instruction;selectedPromptId=preset.id;renderPromptChoices();}
   $("instruction").value="Bouw een interactief dashboard van deze CSV-gegevens";
   $("source-details").open=true;
   $("source").value="Afdeling;Maand;Aantal\nNoord;Januari;12\nZuid;Januari;18\nWest;Januari;9\nNoord;Februari;16\nZuid;Februari;21\nWest;Februari;14";
   $("instruction").focus();
   note("Voorbeeld ingevuld. Kies Cloud of Automatisch en leg de opdracht vast.");
 });
+document.querySelectorAll("[data-group]").forEach(button=>
+  button.addEventListener("click",()=>selectPromptGroup(button.dataset.group)));
+$("prompt-availability").addEventListener("change",event=>{
+  promptAvailability=event.target.value;renderPromptChoices();
+});
+document.querySelectorAll(".mission-filter").forEach(button=>
+  button.addEventListener("click",()=>setMissionFilter(button.dataset.status)));
+$("mission-search").addEventListener("input",()=>render(last));
+renderPromptChoices();
 $("refresh").addEventListener("click",()=>refresh());
 $("tab-create").addEventListener("click",()=>showMobile("create"));
 $("tab-work").addEventListener("click",()=>{
@@ -427,6 +548,7 @@ $("create").addEventListener("submit",async ev=>{
       instruction:$("instruction").value,sourceText:$("source").value,
       executionPreference:document.querySelector('input[name="exec-location"]:checked')?.value||"auto"});
     selectedId=data.result.missionId;
+    setMissionFilter("all");
     mobilePane="detail";showMobile("work");render(data.state);
     $("instruction").value="";$("source").value="";
     note(data.result.stage==="unsupported"?
