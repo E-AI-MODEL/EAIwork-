@@ -476,6 +476,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.resumeAfterRestart!==undefined&&typeof e.resumeAfterRestart!=="boolean")
       fail("invalid restart continuation consent");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
+    if(mission.plan.executionPreference==="cloud")fail("cloud-designated mission cannot be scheduled on the local executor");
     if(e.executionMode!==undefined &&
        !["local-scheduler","remote-text"].includes(e.executionMode))
       fail("invalid automation execution mode");
