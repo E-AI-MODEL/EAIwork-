@@ -93,7 +93,8 @@ export function claimTextJob(store:OpsStore,executor:ExecutorIdentity):ExecutorJ
     a.plan.id.localeCompare(b.plan.id));
   for(const mission of missions){
     const consent=mission.automation;
-    if(mission.paused||!consent?.enabled||consent.executionMode!=="remote-text"||
+    if(mission.plan.executionPreference==="cloud"||
+       mission.paused||!consent?.enabled||consent.executionMode!=="remote-text"||
        !consent.executorIds?.includes(executor.ownerId)||
        consent.starts>=consent.maxStarts||
        Object.values(mission.tasks).some(t=>t.status==="failed"))
