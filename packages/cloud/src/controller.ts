@@ -105,7 +105,7 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
         throw new Error("Geen passende geteste kandidaat voor toelating");
       const evidence=[...state.measurements].reverse().find(meas=>
         meas.workerId===w.contract.id&&meas.version===w.contract.version&&
-        meas.testSuite===undefined && meas.suiteVersion===w.contract.testSuite&&
+        meas.suiteVersion===w.contract.testSuite&&
         meas.metric==="fixture-pass"&&meas.numerator===meas.denominator&&meas.denominator>=3);
       if(!evidence)throw new Error("Geteste versie of meetbewijs ontbreekt");
       push(person(actorId),{type:"worker.release",id:w.contract.id,
@@ -131,10 +131,10 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
       const started=new Date().toISOString(),stamp=Date.now();
       const output=runPureTextAdapter("text-inspect",input);
       const outputHash=await digest(output);
-      push(person(actorId),{type:"task.started",missionId:action.missionId,taskId:task.spec.id,
+      push({kind:"system",id:"system:mission-runner"},{type:"task.started",missionId:action.missionId,taskId:task.spec.id,
         run:{runId,workerId:w.contract.id,workerVersion:w.contract.version,
           adapterId:"text-inspect",inputHash,startedAt:started,verification:"not-evaluated"}});
-      push({kind:"system",id:"system:cloud-text-runner"},
+      push({kind:"system",id:"system:mission-runner"},
         {type:"task.completed",missionId:action.missionId,taskId:task.spec.id,
           runId,finishedAt:new Date().toISOString(),elapsedMs:Math.max(0,Date.now()-stamp),
           output,outputHash});
