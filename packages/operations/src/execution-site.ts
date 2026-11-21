@@ -52,5 +52,5 @@ export function chooseExecutionSite(
 }
 export const CLOUD_PILOT_SITES:readonly ExecutionSiteInfo[]=Object.freeze([
   {id:"local",connected:false,taskKinds:[]},
-  {id:"cloud",connected:true,taskKinds:["text-inspect"]},
+  {id:"cloud",connected:true,taskKinds:["text-inspect","csv-dashboard"]},
 ]);
