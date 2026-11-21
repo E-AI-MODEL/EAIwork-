@@ -175,3 +175,23 @@ test("Mobile missions show either the list or the selected detail, with return a
   assert.match(ui,/Brontekst ontbreekt/);
   assert.doesNotMatch(ui,/innerHTML/);
 });
+
+test("Mobile workspace fits the viewport and switches between real task and creation panels",async()=>{
+  const ui=await import("../packages/cloud/src/ui.ts");
+  const {Script}=await import("node:vm");
+  assert.doesNotThrow(()=>new Script(ui.javascript));
+  assert.match(ui.html,/id="tab-create"/);
+  assert.match(ui.html,/id="tab-work"/);
+  assert.match(ui.html,/id="create-panel"/);
+  assert.match(ui.html,/id="work-panel"/);
+  assert.match(ui.html,/height:100dvh/);
+  assert.match(ui.html,/overflow:hidden/);
+  assert.match(ui.html,/\.layout\[data-mobile-view="create"\] #work-panel\{display:none\}/);
+  assert.match(ui.html,/\.layout\[data-mobile-view="work"\] #create-panel\{display:none\}/);
+  assert.match(ui.html,/\.mission-list\{flex:1;min-height:0;max-height:none;overflow-y:auto/);
+  assert.match(ui.javascript,/showMobile\("create"\)/);
+  assert.match(ui.javascript,/showMobile\("work"\)/);
+  assert.match(ui.javascript,/mobilePane="detail";showMobile\("work"\);render\(data\.state\)/);
+  assert.match(ui.html,/Gebruik voorlopig alleen onschuldige testgegevens/);
+  assert.doesNotMatch(ui.javascript,/innerHTML/);
+});
