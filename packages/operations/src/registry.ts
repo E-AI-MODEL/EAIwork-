@@ -1,4 +1,5 @@
 import { applyMissionEvent, type MissionEvent, type MissionRecord } from "./missions.ts";
+import {safeDashboardContract} from "./csv-dashboard.ts";
 /**
  * Worker contracts and quality control. This is a separate operations model:
  * it never changes the authority or evidence status of EAIwork atoms.
@@ -19,7 +20,8 @@ export interface WorkerContract {
   modelPolicy: { preferred: "small" | "medium" | "large" | "deterministic" | "auto"; fallback?: string };
   testSuite: string;
   stopConditions: string[];
-  recipe?:{kind:"builtin-compose";steps:["text-normalize","text-metrics"]};
+  recipe?:{kind:"builtin-compose";steps:["text-normalize","text-metrics"]}|
+    {kind:"builtin-dashboard";steps:["csv-parse","dashboard-render"]};
 }
 export interface WorkerRecord {
   contract: WorkerContract;
@@ -286,13 +288,16 @@ function transitionOps(
     if (!Array.isArray(c.stopConditions) || !c.stopConditions.length) fail("stop conditions required");
     if (!plain(c.modelPolicy) || !["small","medium","large","deterministic","auto"].includes(String(c.modelPolicy.preferred))) fail("invalid model policy");
     if(c.recipe!==undefined){
-      if(!plain(c.recipe)||c.recipe.kind!=="builtin-compose"||
-         !Array.isArray(c.recipe.steps)||JSON.stringify(c.recipe.steps)!==JSON.stringify(["text-normalize","text-metrics"])||
-         JSON.stringify(c.taskKinds)!==JSON.stringify(["text-inspect"])||
-         c.modelPolicy.preferred!=="deterministic"||
-         c.testSuite!=="builtin-compose-fixture-v1" ||
-         c.tools.length!==0||c.requestedPermissions.length!==0)
-        fail("invalid safe worker recipe");
+      const textRecipe=plain(c.recipe)&&c.recipe.kind==="builtin-compose"&&
+        Array.isArray(c.recipe.steps)&&
+        JSON.stringify(c.recipe.steps)===JSON.stringify(["text-normalize","text-metrics"])&&
+        JSON.stringify(c.taskKinds)===JSON.stringify(["text-inspect"])&&
+        c.modelPolicy.preferred==="deterministic"&&
+        c.testSuite==="builtin-compose-fixture-v1"&&
+        c.tools.length===0&&c.requestedPermissions.length===0;
+      const dashboardRecipe=plain(c.recipe)&&c.recipe.kind==="builtin-dashboard"&&
+        safeDashboardContract(c);
+      if(!textRecipe&&!dashboardRecipe)fail("invalid safe worker recipe");
     }
     state.workerVersions[c.id]??={};
     if (state.workerVersions[c.id][c.version]) fail("worker version already registered");

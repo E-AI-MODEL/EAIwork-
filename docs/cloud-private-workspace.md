@@ -62,3 +62,42 @@ De repo bevat de Cloudflare-configuratie `cloudflare.config.ts` volgens de actue
 `node --test tests/cloud-workspace.test.ts` test de echte EAIwork-overgangen en beperkingen, met dezelfde reducer als de lokale software. Het reguliere `npm test` toetst ook de bestaande werking. Een aparte Cloudflare runtime-build controleert of bundeling en Durable Object-registratie geldig zijn. Groene unit-tests bewijzen niet dat Access, opslag of de online dienst al werkt.
 
 Vervolg: een geïsoleerde Codeworker-run via Cloudflare Sandbox of een gecontroleerde externe runner. Dat vereist apart mandaat, versie-/contracttest en menselijke vrijgave. Er wordt geen model of externe agent als vervanger van EAIwork ingevoerd.
+
+
+## CSV-dashboard als tweede afgebakende bouwproef
+
+Vanaf de vaste CSV-dashboarduitbreiding kan een gebruiker op de telefoon een opdracht
+zoals *Bouw een interactief dashboard van deze CSV-gegevens* combineren met
+proefdata. Plak een kopregel plus minimaal één gegevensrij met komma,
+puntkomma of tab als scheidingsteken. Op een telefoon kun je ook
+via de bestandskiezer een klein CSV-bestand uit de lokale Bestanden-app
+inlezen; pas bij het vastleggen worden de gegevens naar de afgeschermde
+EAIwork-werkruimte verzonden. Een echte `.xlsx`-upload of algemene
+instructie-naar-code generatie wordt niet ondersteund.
+
+De controleerbare route gebruikt het bestaande missiemodel, de centrale
+Worker Registry, `worker-needs` en de bestaande menselijke vrijgave. De
+nieuwe, hard-coded Builder-receptuur bestaat alleen uit `csv-parse` en
+`dashboard-render`. De controller voert vier vaste, daadwerkelijk
+uitgevoerde parser-/renderfixtures uit en registreert de exacte werkerversie
+als kandidaat. De eigenaar moet deze geteste kandidaat afzonderlijk
+vrijgeven. Daarna kan dezelfde worker nieuwe CSV-dashboardopdrachten direct
+verwerken. Er is geen shell, LLM, Docker, webzoekactie, code-injectie of
+publicatie naar GitHub betrokken.
+
+Het resultaat bevat een tabel, zoekveld, categorie-filter, enkele getallen en
+een staafdiagram. Het is een vooraf bepaalde HTML-template, geen volledig op
+maat gemaakt systeem. De opgeslagen taak bevat data, versienummer,
+`not-evaluated` en SHA-256 van de werkelijk gegenereerde HTML. De
+`GET /api/artifact`-route vereist dezelfde Cloudflare Access-identiteit,
+controleert de hash opnieuw, geeft een bestand als attachment terug en kan
+het voorbeeld in een streng geïsoleerde, netwerkloze CSP-sandbox openen.
+Alle gebruikersgegevens worden als tekst toegevoegd. De statische HTML bevat
+geen externe scriptbibliotheken en de door gebruikers ingevulde data is
+ontsnapt voor HTML en scriptcontext.
+
+Bewuste grenzen: maximaal 120 CSV-rijen, 12 kolommen en 10.000 tekens, geen
+AVG-goedkeuring voor persoonsgegevens, geen geverifieerde statistische
+betekenis van de weergegeven waarden, geen live synchronisatie met Excel,
+geen generieke Codeworker en geen automatisch online publiceren van de
+geleverde HTML. De HTML is bedoeld als een lokaal te openen demonstratiebestand.

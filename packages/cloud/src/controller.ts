@@ -5,6 +5,8 @@
  */
 import {applyOps,emptyOps,type OpsState,type OpsEnvelope,type OpsEvent} from "../../operations/src/registry.ts";
 import {proposeComposedWorker} from "../../operations/src/builder.ts";
+import {dashboardContract,safeDashboardContract,evaluateDashboardFixtures,
+  parseDashboardCsv,buildCsvDashboard,renderCsvDashboardHtml} from "../../operations/src/csv-dashboard.ts";
 import {evaluateComposedFixture,runPureTextAdapter,safeComposition} from "../../operations/src/pure-text.ts";
 import {missionProgress,blockingConstraints} from "../../operations/src/missions.ts";
 import {selectWorker} from "../../operations/src/selector.ts";
@@ -20,11 +22,17 @@ export type CloudAction=
   | {type:"run";missionId:string};
 
 const idPattern=/^mission-[a-z0-9-]{8,55}$/;
-const inventory={adapterIds:["text-inspector"],capabilities:[],grantedPermissions:[],
+const inventory={adapterIds:["text-inspector","csv-dashboard-renderer"],capabilities:[],grantedPermissions:[],
   supportedModelSizes:["deterministic"] as const};
 const person=(actorId:string)=>({kind:"person" as const,id:actorId});
 /** A bounded, explicit intent check. Never interpret a title like "build" as executable code. */
-export function cloudRequestKind(instruction:string,sourceText=""):"text-inspect"|"request-review"{
+export const cloudDashboardIntent=(instruction:string):boolean=>
+  /\b(dashboard|dashboards)\b/i.test(instruction)&&
+  /\b(bouw|maak|genereer|ontwikkel|creëer|creeer)\b/i.test(instruction);
+export const cloudCsvCandidate=(source:string):boolean=>
+  typeof source==="string"&&/[\r\n]/.test(source)&&/[,;\t]/.test(source.split(/[\r\n]/,1)[0]);
+export function cloudRequestKind(instruction:string,sourceText=""):"text-inspect"|"csv-dashboard"|"request-review"{
+  if(cloudDashboardIntent(instruction)&&cloudCsvCandidate(sourceText))return "csv-dashboard";
   const text=instruction.toLowerCase();
   const safeTextIntent=/\b(inspecteer|tekstinspectie|tel(?:len)?\s+(?:(?:de|het)\s+)?(?:aantal\s+)?(?:woorden|tekens|regels)|hoeveel\s+(?:woorden|tekens|regels)|analyseer\s+(?:de|dit|mijn|een)\s+tekst|controleer\s+(?:de|dit|mijn|een)\s+tekst)\b/i;
   const differentTask=/\b(bouw|bouwen|maak|maken|ontwikkel|programmeer|publiceer|verstuur|mail|verwijder|github|dashboard|website|app|code|deploy|worker|shell|terminal)\b/i;
@@ -51,6 +59,11 @@ export function validateCloudAction(value:unknown):CloudAction {
     if(cloudNeedsSource(a.instruction)&&
        (typeof a.sourceText!=="string"||!a.sourceText.trim()))
       return deny("Voor deze tekstcontrole ontbreekt de brontekst. Voeg eerst een tekst toe.");
+    // A request without CSV remains a queued, non-executed native mission.
+    // Historical requests and freeform planning are never silently rejected.
+    if(cloudDashboardIntent(a.instruction)&&
+       typeof a.sourceText==="string"&&cloudCsvCandidate(a.sourceText))
+      parseDashboardCsv(a.sourceText);
     return {type:"submit",instruction:a.instruction.trim(),
       ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{}),
       ...(a.executionPreference===undefined?{}:
@@ -90,15 +103,22 @@ export function cloudView(state:OpsState) {
       typeof m.plan.sourceInstruction==="string"&&
       cloudNeedsSource(m.plan.sourceInstruction)&&
       task?.spec.input?.text===m.plan.sourceInstruction;
+    const csvMissing=task?.spec.taskKind==="request-review"&&
+      typeof m.plan.sourceInstruction==="string"&&
+      cloudDashboardIntent(m.plan.sourceInstruction)&&
+      task?.spec.input?.text===m.plan.sourceInstruction;
     const location=chooseExecutionSite(
       task?.spec.taskKind??"request-review",m.plan.executionPreference??"auto",CLOUD_PILOT_SITES);
     return {id:m.plan.id,title:m.plan.title,createdAt:m.createdAt,
       revision:m.revision,progress,status:task?.status??"unknown",
-      sourceMissing,
+      sourceMissing,csvMissing,
       taskKind:task?.spec.taskKind??"unknown",
       execution:location,
       requestedOutcome:m.plan.sourceInstruction??null,
-      need:sourceMissing?{
+      need:csvMissing?{
+        status:"source-required",reason:"Er ontbreken CSV-gegevens. Voeg CSV met kolomnamen en proefrijen toe.",
+        workerId:"csv-dashboard-renderer",
+      }:sourceMissing?{
         status:"source-required",reason:"Er ontbreekt brontekst. Voeg de tekst toe om deze inspectie uit te voeren.",
         workerId:"text-inspector",
       }:need?{status:need.status,reason:need.reason,workerId:need.workerId}:null,
@@ -106,7 +126,12 @@ export function cloudView(state:OpsState) {
       owner:m.createdBy};
   });
   const worker=state.workers["text-inspector"];
-  return {missions,availableExecutionSites:CLOUD_PILOT_SITES,worker:worker?
+  const dashboardWorker=state.workers["csv-dashboard-renderer"];
+  return {missions,availableExecutionSites:CLOUD_PILOT_SITES,
+    dashboardWorker:dashboardWorker?{
+      id:dashboardWorker.contract.id,version:dashboardWorker.contract.version,
+      stage:dashboardWorker.stage,releaseEvidence:dashboardWorker.releaseEvidence??null,
+    }:null,worker:worker?
     {id:worker.contract.id,version:worker.contract.version,stage:worker.stage,
       releaseEvidence:worker.releaseEvidence??null}:null,
     journalLength:state.history.length,
@@ -134,11 +159,12 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
     push(person(actorId),{type:"mission.create",plan:{
       id,title,goal:instruction,
       ...(isRequest?{sourceInstruction:instruction,executionPreference}:{}),
-      tasks:[{id:"task-inspect",title:kind==="text-inspect"?"Tekstinspectie":"Nog niet ondersteunde opdracht",
+      tasks:[{id:"task-inspect",title:kind==="text-inspect"?"Tekstinspectie":
+        kind==="csv-dashboard"?"CSV-dashboard samenstellen":"Nog niet ondersteunde opdracht",
         taskKind:kind,effect:"local",
         dependsOn:[],input:{text:inputText}}],
     }});
-    result={missionId:id,stage:kind!=="text-inspect"?"unsupported":
+    result={missionId:id,stage:kind==="request-review"?"unsupported":
       placement.site==="cloud"?"queued":"awaiting-executor",
       taskKind:kind,execution:placement};
   }else{
@@ -153,20 +179,24 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
           action.executionPreference,CLOUD_PILOT_SITES)};
     }else{
     const task=m.tasks["task-inspect"];
-    if(!task||task.spec.taskKind!=="text-inspect"||
+    if(!task||!["text-inspect","csv-dashboard"].includes(task.spec.taskKind)||
        task.spec.effect!=="local"||blockingConstraints(m,task.spec.id).length)
-      throw new Error("Deze opdracht is niet geschikt voor deze tekstworker");
+      throw new Error("Deze opdracht is niet geschikt voor deze vaste worker");
     const location=chooseExecutionSite(task.spec.taskKind,
       m.plan.executionPreference??"auto",CLOUD_PILOT_SITES);
     if(location.site!=="cloud")
       throw new Error("De gekozen uitvoeromgeving is niet gekoppeld. Geen uitvoering of workerbouw gestart.");
+    const isDashboard=task.spec.taskKind==="csv-dashboard";
+    const workerId=isDashboard?"csv-dashboard-renderer":"text-inspector";
     if(action.type==="prepare"){
       if(task.status!=="queued"||m.paused||m.automation?.enabled)
         throw new Error("Opdracht is niet vrijgegeven voor workerbouw");
-      if(state.workers["text-inspector"])
+      if(state.workers[workerId])
         throw new Error("Er bestaat al een worker. Bekijk de toelatingsstatus.");
-      const proposal=proposeComposedWorker("text-inspector","Tekstinspectie");
-      const check=evaluateComposedFixture(proposal.contract);
+      const proposal=isDashboard?{contract:dashboardContract()}:
+        proposeComposedWorker("text-inspector","Tekstinspectie");
+      const check=isDashboard?evaluateDashboardFixtures(proposal.contract):
+        evaluateComposedFixture(proposal.contract);
       if(check.numerator!==check.denominator||check.denominator<3)
         throw new Error("De werkelijke fixtures zijn niet geslaagd");
       push(person(actorId),{type:"worker.register",contract:proposal.contract});
@@ -178,11 +208,11 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
         numerator:check.numerator,denominator:check.denominator,
         measuredAt:new Date().toISOString(),evidenceRef,
       }});
-      result={stage:"candidate-tested",workerId:"text-inspector",tests:check.denominator,
+      result={stage:"candidate-tested",workerId,tests:check.denominator,
         approvalRequired:true};
     }else if(action.type==="release"){
-      const w=state.workers["text-inspector"];
-      if(w?.stage!=="candidate"||!safeComposition(w.contract))
+      const w=state.workers[workerId];
+      if(w?.stage!=="candidate"||!(isDashboard?safeDashboardContract(w.contract):safeComposition(w.contract)))
         throw new Error("Geen passende geteste kandidaat voor toelating");
       const evidence=[...state.measurements].reverse().find(meas=>
         meas.workerId===w.contract.id&&meas.version===w.contract.version&&
@@ -193,12 +223,12 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
         version:w.contract.version,evidenceRef:evidence.evidenceRef});
       result={stage:"ready",workerId:w.contract.id,approvedBy:actorId};
     }else if(action.type==="run"){
-      const w=state.workers["text-inspector"];
-      if(w?.stage!=="ready"||!safeComposition(w.contract))
+      const w=state.workers[workerId];
+      if(w?.stage!=="ready"||!(isDashboard?safeDashboardContract(w.contract):safeComposition(w.contract)))
         throw new Error("Geen vrijgegeven, ondersteunde worker beschikbaar");
       if(task.status!=="queued"||m.paused||m.automation?.enabled)
         throw new Error("Opdracht is niet klaar voor uitvoering");
-      const selected=selectWorker({taskKind:"text-inspect"},state,{
+      const selected=selectWorker({taskKind:task.spec.taskKind},state,{
         adapterIds:[...inventory.adapterIds],capabilities:[],grantedPermissions:[],
         supportedModelSizes:["deterministic"],
       });
@@ -210,11 +240,16 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
       const runId="run-"+crypto.randomUUID().replaceAll("-","").slice(0,20);
       const inputHash=await digest(input);
       const started=new Date().toISOString(),stamp=Date.now();
-      const output=runPureTextAdapter("text-inspect",input);
+      const output=isDashboard?await (async()=>{
+        const data=buildCsvDashboard(inputText,m.plan.sourceInstruction??m.plan.title);
+        const html=renderCsvDashboardHtml(data);
+        const artifactSha256=await digestBytes(html);
+        return {...data,artifactSha256};
+      })():runPureTextAdapter("text-inspect",input);
       const outputHash=await digest(output);
       push({kind:"system",id:"system:mission-runner"},{type:"task.started",missionId:action.missionId,taskId:task.spec.id,
         run:{runId,workerId:w.contract.id,workerVersion:w.contract.version,
-          adapterId:"text-inspect",inputHash,startedAt:started,verification:"not-evaluated"}});
+          adapterId:task.spec.taskKind,inputHash,startedAt:started,verification:"not-evaluated"}});
       push({kind:"system",id:"system:mission-runner"},
         {type:"task.completed",missionId:action.missionId,taskId:task.spec.id,
           runId,finishedAt:new Date().toISOString(),elapsedMs:Math.max(0,Date.now()-stamp),
@@ -227,12 +262,12 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
   for(const envelope of events)next=applyOps(next,envelope);
   // Side-effect-free, explicitly requested text inspection may reuse an
   // already released worker. No implicit building, release or external action.
-  if(action.type==="submit"&&result.taskKind==="text-inspect"&&
+  if(action.type==="submit"&&["text-inspect","csv-dashboard"].includes(String(result.taskKind))&&
      result.stage==="queued"&&
-     selectWorker({taskKind:"text-inspect"},next,{
+     selectWorker({taskKind:String(result.taskKind)},next,{
        ...inventory,adapterIds:[...inventory.adapterIds],
        supportedModelSizes:[...inventory.supportedModelSizes],
-     }).selectedWorkerId==="text-inspector"){
+     }).selectedWorkerId===(result.taskKind==="csv-dashboard"?"csv-dashboard-renderer":"text-inspector")){
     const run=await cloudTransition(next,{type:"run",missionId:String(result.missionId)},actorId);
     events.push(...run.events);
     next=run.next;
@@ -243,6 +278,11 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
 export async function digest(value:unknown):Promise<string>{
   const bytes=new TextEncoder().encode(JSON.stringify(value));
   const hash=await crypto.subtle.digest("SHA-256",bytes);
+  return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+export async function digestBytes(text:string):Promise<string>{
+  const data=new TextEncoder().encode(text);
+  const hash=await crypto.subtle.digest("SHA-256",data);
   return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 export {emptyOps};
