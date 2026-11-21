@@ -193,7 +193,11 @@ export function renderCsvDashboardHtml(data:CsvDashboard):string {
        r.length!==data.columns.length||r.some(v=>typeof v!=="string"||v.length>450))||
      typeof data.title!=="string"||data.title.length>100)
     fail("Ongeldige gegevens voor een HTML-dashboard.");
-  const safe=JSON.stringify(data).replace(/</g,"\\u003c").replace(/>/g,"\\u003e")
+  // The saved hash is metadata, not part of the rendered HTML bytes.
+  const view:CsvDashboard={kind:"csv-dashboard-v1",title:data.title,
+    columns:data.columns,rows:data.rows,rowCount:data.rowCount,
+    categoryColumn:data.categoryColumn,numericColumn:data.numericColumn,note:data.note};
+  const safe=JSON.stringify(view).replace(/</g,"\\u003c").replace(/>/g,"\\u003e")
     .replace(/&/g,"\\u0026").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
   return '<!doctype html><html lang="nl"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width,initial-scale=1">'+
