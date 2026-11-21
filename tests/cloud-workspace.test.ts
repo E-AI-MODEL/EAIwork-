@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {applyOps,emptyOps} from "../packages/operations/src/registry.ts";
-import {cloudTransition,cloudView,validateCloudAction,digest} from "../packages/cloud/src/controller.ts";
+import {cloudTransition,cloudView,validateCloudAction,cloudRequestKind,digest} from "../packages/cloud/src/controller.ts";
 
 const owner="person:cloud-owner";
 const commit=async(state:any,input:unknown)=>{
@@ -73,7 +73,67 @@ test("Cloudflare worker cannot process private data without Access identity",()=
   assert.match(worker,/EAI_ACCESS_AUD/);
   assert.match(worker,/request\.headers\.get\("origin"\)!==url\.origin/);
   assert.match(worker,/journal hash mismatch/);
-  assert.match(cfg,/eaiwork-private/);
+  assert.match(cfg,/name:"eaiwork"/);
+  assert.match(cfg,/previewUrls:false/);
+  assert.match(cfg,/workersDev:true/);
   assert.doesNotMatch(cfg,/eaimodel\.nl\/\*/);
   assert.doesNotMatch(worker,/eval\(|new Function\(/);
+});
+
+test("Free instruction is preserved and an unsupported code request is never marked done",async()=>{
+  const instruction="Bouw een interactief dashboard met grafieken en filters.";
+  const result=await commit(emptyOps(),{type:"submit",instruction,sourceText:"voorbeelddataset"});
+  const id=result.result.missionId as string;
+  assert.equal(result.result.stage,"unsupported");
+  assert.equal(result.events.length,1);
+  assert.equal(result.next.missions[id].plan.sourceInstruction,instruction);
+  assert.equal(result.next.missions[id].tasks["task-inspect"].spec.taskKind,"request-review");
+  assert.equal(result.next.missions[id].tasks["task-inspect"].status,"queued");
+  const view=cloudView(result.next).missions[0];
+  assert.equal(view.requestedOutcome,instruction);
+  assert.equal(view.need?.status,"unsupported");
+  assert.equal(view.output,null);
+  await assert.rejects(commit(result.next,{type:"prepare",missionId:id}),/niet geschikt/);
+  await assert.rejects(commit(result.next,{type:"run",missionId:id}),/niet geschikt/);
+});
+test("Free text request reuses released native Builder worker and records a real run",async()=>{
+  let state=emptyOps();
+  const initial=await commit(state,{type:"create",title:"Eerste controle",text:"een"});
+  state=initial.next;const id=initial.result.missionId as string;
+  state=(await commit(state,{type:"prepare",missionId:id})).next;
+  state=(await commit(state,{type:"release",missionId:id})).next;
+  const work=await commit(state,{type:"submit",
+    instruction:"Tel de woorden, tekens en regels in deze tekst.",
+    sourceText:"  Een  tweede test\\r\\nMet drie regels. "});
+  assert.equal(work.result.stage,"done");
+  assert.deepEqual(work.events.map(e=>e.event.type),
+    ["mission.create","task.started","task.completed"]);
+  const mission=work.next.missions[work.result.missionId as string];
+  assert.equal(mission.tasks["task-inspect"].status,"done");
+  assert.equal(mission.tasks["task-inspect"].run?.verification,"not-evaluated");
+  assert.equal(cloudView(work.next).missions[0].progress.status,"complete");
+  assert.equal(cloudView(work.next).missions[0].need,null);
+});
+test("Intake rejects ambiguous instruction and never infers a code-building capability",async()=>{
+  assert.equal(cloudRequestKind("build","dit is brondata"),"request-review");
+  assert.equal(cloudRequestKind("Controleer of de Worker Builder werkt","Testtekst"),"request-review");
+  assert.equal(cloudRequestKind("Tel woorden in deze tekst",""),"request-review");
+  assert.equal(cloudRequestKind("Tel woorden in deze tekst","test"),"text-inspect");
+  const state=emptyOps();
+  for(const input of [
+    {type:"submit",instruction:"",sourceText:"test"},
+    {type:"submit",instruction:"A".repeat(1501)},
+    {type:"submit",instruction:"Opdracht",sourceText:"X".repeat(10001)},
+    {type:"submit",instruction:"Tel woorden",sourceText:"abc",publish:true},
+  ])await assert.rejects(commit(state,input));
+  assert.equal(state.history.length,0);
+});
+test("New private UI shows a single selected result and not a wall of raw JSON",()=>{
+  const ui=readFileSync(new URL("../packages/cloud/src/ui.ts",import.meta.url),"utf8");
+  assert.match(ui,/Wat wil je gedaan krijgen/);
+  assert.match(ui,/type:"submit"/);
+  assert.match(ui,/showDetails/);
+  assert.match(ui,/textContent/);
+  assert.match(ui,/Uitvoergegevens bekijken/);
+  assert.doesNotMatch(ui,/innerHTML/);
 });

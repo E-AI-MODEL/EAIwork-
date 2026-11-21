@@ -4,6 +4,8 @@ on:
     paths:
       - 'packages/cloud/**'
       - 'packages/operations/src/pure-text.ts'
+      - 'packages/operations/src/worker-needs.ts'
+      - 'packages/operations/src/orchestrator.ts'
       - 'packages/operations/src/execution.ts'
       - 'cloudflare.config.ts'
       - 'vite.config.ts'
