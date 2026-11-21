@@ -93,13 +93,14 @@ footer{display:none}
 }
 </style></head>
 <body><header><div class="head"><div class="brand">EAIwork <small>mijn werkruimte</small></div><span class="tag">Besloten · Cloudflare Access</span></div></header>
-<main><div class="intro"><div><h1>EAIwork</h1><p class="muted">Eén opdracht. EAIwork controleert welke worker die kan uitvoeren.</p></div></div>
+<main><div class="intro"><div><h1>Wat wil je gedaan krijgen?</h1><p class="muted">Eén opdracht. EAIwork controleert welke worker die kan uitvoeren.</p></div></div>
 <nav class="mobile-nav" aria-label="Werkruimte"><button class="mobile-tab" id="tab-create" type="button" aria-pressed="false" aria-controls="create-panel">Nieuwe opdracht</button><button class="mobile-tab" id="tab-work" type="button" aria-pressed="true" aria-controls="work-panel">Mijn werk</button></nav>
 <div id="layout" class="layout" data-mobile-view="work">
 <section id="create-panel" class="panel"><div class="panel-header"><h2>Nieuwe opdracht</h2><span class="tag">Gewone taal</span></div>
 <div class="panel-body"><p class="lead">Beschrijf wat je wilt bereiken. Het systeem registreert ook opdrachten die de huidige cloudversie nog niet kan uitvoeren, zonder ze als afgerond te markeren.</p>
 <form id="create"><label for="instruction">Wat wil je dat EAIwork doet?</label>
 <textarea id="instruction" maxlength="1500" required placeholder="Bijvoorbeeld: Tel de woorden, tekens en regels in mijn tekst. Of: Bouw een dashboard voor mijn gegevens."></textarea>
+<p class="hint" id="privacy-hint">Gebruik voorlopig alleen onschuldige testgegevens.</p>
 <details id="source-details"><summary>Tekst of gegevens toevoegen</summary><label for="source" class="hint">Alleen onschuldige testgegevens. Voor tekstinspectie is brontekst vereist.</label>
 <textarea id="source" maxlength="10000" placeholder="Plak hier de tekst waarop de opdracht betrekking heeft."></textarea></details>
 <div class="form-actions"><button type="submit" class="primary" id="submit">Opdracht vastleggen</button>
