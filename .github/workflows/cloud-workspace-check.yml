@@ -27,7 +27,7 @@ jobs:
         run: node --test tests/cloud-workspace.test.ts
       - name: Build worker using current Cloudflare CLI
         run: |
-          npm install --no-save cf@latest @cloudflare/vite-plugin@rc vite@latest
+          npm install --no-audit --no-fund
           npx cf build
       # This workflow never deploys, configures Cloudflare Access, or creates a
       # route on the existing eaimodel.nl website. The Access gate is fail-closed.
