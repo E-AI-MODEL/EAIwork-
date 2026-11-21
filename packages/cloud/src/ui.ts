@@ -51,6 +51,7 @@ pre{background:#f7faf7;border:1px solid #e3eae4;padding:12px;border-radius:8px;w
 a.artifact-link{display:inline-block;text-decoration:none;border:1px solid #c8dacd;border-radius:8px;padding:10px 13px;font-weight:650;font-size:12px;color:#24563a;background:#f5faf6}a.artifact-link:hover{background:#eaf2eb}
 .tiny-bar{display:grid;grid-template-columns:minmax(78px,110px) 1fr 45px;align-items:center;gap:6px;padding:6px 0;font-size:11px}.tiny-bar-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tiny-bar-track{height:9px;background:#e8f0e9;border-radius:3px;overflow:hidden}.tiny-bar-fill{height:100%;background:#4c8362}.tiny-bar-number{text-align:right;font-variant-numeric:tabular-nums}
 #example-csv{font-size:11px;color:#335f43;margin-top:9px}
+#csv-file{font-size:11px;padding:8px 0;max-width:100%;color:#53765c}
 .back-to-list{display:none}
 .mobile-nav{display:none}
 #work-message{padding:0 17px;font-size:11px;color:#2c6a4c}
@@ -114,6 +115,7 @@ footer{display:none}
 <p class="hint" id="privacy-hint">Gebruik voorlopig alleen onschuldige testgegevens.</p>
 <button type="button" id="example-csv">Vul een CSV-dashboardvoorbeeld in</button>
 <details id="source-details"><summary>Tekst of gegevens toevoegen</summary><label for="source" class="hint">Alleen onschuldige testgegevens. Voor tekstinspectie is brontekst vereist.</label>
+<input id="csv-file" type="file" accept=".csv,text/csv,text/plain" aria-label="Lees een CSV-bestand van dit apparaat">
 <textarea id="source" maxlength="10000" placeholder="Bijvoorbeeld: Afdeling;Waarde en op nieuwe regels Noord;12, Zuid;18."></textarea></details>
 <fieldset class="runtime-picker"><legend>Uitvoeren via</legend>
 <div class="runtime-options">
@@ -381,6 +383,27 @@ function updateRuntimeNote(){
 document.querySelectorAll('input[name="exec-location"]').forEach(input=>
   input.addEventListener("change",updateRuntimeNote));
 updateRuntimeNote();
+$("csv-file").addEventListener("change",async event=>{
+  const file=event.target.files?.[0];
+  if(!file)return;
+  if(file.size>20000){
+    note("CSV-bestand is te groot voor deze proef (maximaal 10.000 tekens).",true);
+    event.target.value="";return;
+  }
+  try{
+    const text=await file.text();
+    if(!text.trim()||text.length>10000){
+      note("CSV-bestand ontbreekt of is langer dan 10.000 tekens.",true);
+      return;
+    }
+    $("source").value=text;
+    $("source-details").open=true;
+    if(!$("instruction").value.trim())
+      $("instruction").value="Bouw een interactief dashboard van deze CSV-gegevens";
+    note("CSV is ingelezen op je apparaat. Je kunt de gegevens controleren voordat je de opdracht vastlegt.");
+  }catch{note("CSV-bestand kan niet worden gelezen.",true)}
+  finally{event.target.value=""}
+});
 $("example-csv").addEventListener("click",()=>{
   $("instruction").value="Bouw een interactief dashboard van deze CSV-gegevens";
   $("source-details").open=true;
