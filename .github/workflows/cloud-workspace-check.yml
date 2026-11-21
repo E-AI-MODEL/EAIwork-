@@ -5,6 +5,8 @@ on:
       - 'packages/cloud/**'
       - 'packages/operations/src/pure-text.ts'
       - 'packages/operations/src/worker-needs.ts'
+      - 'packages/operations/src/execution-site.ts'
+      - 'packages/operations/src/missions.ts'
       - 'packages/operations/src/orchestrator.ts'
       - 'packages/operations/src/execution.ts'
       - 'cloudflare.config.ts'
