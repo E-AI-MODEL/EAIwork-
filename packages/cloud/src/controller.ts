@@ -14,6 +14,7 @@ import {chooseExecutionSite,CLOUD_PILOT_SITES,type ExecutionPreference} from "..
 export type CloudAction=
   | {type:"create";title:string;text:string}
   | {type:"submit";instruction:string;sourceText?:string;executionPreference?:ExecutionPreference}
+  | {type:"route";missionId:string;expectedRevision:number;executionPreference:ExecutionPreference}
   | {type:"prepare";missionId:string}
   | {type:"release";missionId:string}
   | {type:"run";missionId:string};
@@ -61,6 +62,16 @@ export function validateCloudAction(value:unknown):CloudAction {
        typeof a.text!=="string"||!a.text.trim()||a.text.length>12000)
       return deny("Titel of tekst ontbreekt of is te lang");
     return {type:"create",title:a.title.trim(),text:a.text};
+  }
+  if(a.type==="route"){
+    if(Object.keys(a).some(k=>!["type","missionId","expectedRevision","executionPreference"].includes(k))||
+       typeof a.missionId!=="string"||!idPattern.test(a.missionId)||
+       !Number.isSafeInteger(a.expectedRevision)||Number(a.expectedRevision)<1||
+       typeof a.executionPreference!=="string"||
+       !["auto","local","cloud"].includes(a.executionPreference))
+      return deny("Ongeldige uitvoerkeuze of verouderde opdracht");
+    return {type:"route",missionId:a.missionId,expectedRevision:a.expectedRevision as number,
+      executionPreference:a.executionPreference as ExecutionPreference};
   }
   if(["prepare","release","run"].includes(String(a.type))&&
      Object.keys(a).length===2&&typeof a.missionId==="string"&&idPattern.test(a.missionId))
@@ -134,6 +145,13 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
     const m=state.missions[action.missionId];
     if(!m)throw new Error("Onbekende opdracht");
     if(m.createdBy!==actorId)throw new Error("Alleen de eigenaar kan deze opdracht wijzigen");
+    if(action.type==="route"){
+      push(person(actorId),{type:"mission.execution.select",missionId:action.missionId,
+        expectedRevision:action.expectedRevision,executionPreference:action.executionPreference});
+      result={stage:"route-selected",missionId:action.missionId,
+        execution:chooseExecutionSite(m.tasks["task-inspect"]?.spec.taskKind??"request-review",
+          action.executionPreference,CLOUD_PILOT_SITES)};
+    }else{
     const task=m.tasks["task-inspect"];
     if(!task||task.spec.taskKind!=="text-inspect"||
        task.spec.effect!=="local"||blockingConstraints(m,task.spec.id).length)
@@ -202,6 +220,7 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
           runId,finishedAt:new Date().toISOString(),elapsedMs:Math.max(0,Date.now()-stamp),
           output,outputHash});
       result={stage:"done",missionId:action.missionId,output,verification:"not-evaluated"};
+    }
     }
   }
   let next=state;
