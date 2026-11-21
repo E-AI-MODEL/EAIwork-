@@ -1,0 +1,32 @@
+name: cloud-workspace-check
+on:
+  pull_request:
+    paths:
+      - 'packages/cloud/**'
+      - 'packages/operations/src/pure-text.ts'
+      - 'packages/operations/src/execution.ts'
+      - 'cloudflare.config.ts'
+      - 'tests/cloud-workspace.test.ts'
+      - '.github/workflows/cloud-workspace-check.yml'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  cloud-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: Cloud controller tests
+        run: node --test tests/cloud-workspace.test.ts
+      - name: Build worker using current Cloudflare CLI
+        run: |
+          npm install --no-save --ignore-scripts cf@latest
+          npx cf build
+      # This workflow never deploys, configures Cloudflare Access, or creates a
+      # route on the existing eaimodel.nl website. The Access gate is fail-closed.
