@@ -32,7 +32,7 @@ test("CSV parser handles semicolon, comma, tab, quoting and BOM",()=>{
 test("CSV parser refuses ambiguous, malformed, oversized and non-tabular input",()=>{
   const invalid=[
     "", "Dit is geen CSV", "Naam;Naam\nA;B","A;B\nx",
-    'A;B\n"onafgesloten;42','A;B\n"af";x',
+    'A;B\n"onafgesloten;42','A;B\n"af"x;2',
     "A;B\n1;2;3","A;B\n1;2\n3",
     "A;B\n1;2\n".repeat(122),
     "A;B\n"+("x".repeat(451))+";y",
@@ -55,7 +55,6 @@ test("Fixed dashboard renderer produces self-contained interactive HTML without 
   assert.ok(!html.includes("<script>fetch(1)</script>"));
   assert.ok(html.includes("\\u003cscript\\u003efetch(1)\\u003c/script\\u003e"));
   assert.ok(!/https?:\/\//.test(html));
-  const src=html.split('<script>('+String("function dashboardRuntime"))[0];
   const matches=html.match(/<script>\((function dashboardRuntime[\s\S]*?)\)\(\);<\/script>/);
   assert.ok(matches);
   assert.doesNotThrow(()=>new Script('('+matches![1]+')()'));
@@ -110,6 +109,7 @@ test("Native EAIwork mission builds fixed dashboard worker, tests and releases a
   assert.match(String(run.output?.artifactSha256),/^[a-f0-9]{64}$/);
   const html=renderCsvDashboardHtml(run.output as any);
   assert.equal(await digestBytes(html),run.output?.artifactSha256);
+  assert.equal(await digestBytes(renderCsvDashboardHtml(run.output as any)),run.output?.artifactSha256);
   assert.equal(cloudView(state).missions[0].progress.status,"complete");
   assert.equal(cloudView(state).missions[0].output?.kind,"csv-dashboard-v1");
   const reused=await commit(state,{type:"submit",
@@ -132,7 +132,7 @@ test("Explicitly local dashboard request never executes on the available cloud a
   await assert.rejects(commit(created.next,{type:"run",missionId:id}),/niet gekoppeld/);
 });
 test("The old bare dashboard request retains its status and can receive source later",()=>{
-  assert.throws(()=>validateCloudAction({type:"submit",instruction}),/CSV/);
+  assert.equal(validateCloudAction({type:"submit",instruction}).type,"submit");
   assert.throws(()=>validateCloudAction({type:"submit",instruction,sourceText:"Dit is geen CSV"}),/CSV/);
   const action=validateCloudAction({type:"submit",instruction,sourceText:csv,executionPreference:"cloud"});
   assert.equal(action.type,"submit");
