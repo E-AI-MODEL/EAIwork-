@@ -1,6 +1,6 @@
 # EAIwork in de browser: eerste besloten Cloudflare-versie
 
-**Status:** besloten eerste cloudproef gepubliceerd op `https://eaiwork.vis-c9d.workers.dev/`; geslaagde aanmelden-en-uitvoeren-proef door de eigenaar nog niet bevestigd. De gegevensbeschermingscontrole voor vertrouwelijke informatie is nog niet afgerond. Geen Terminal, Docker of Ollama op de computer van de gebruiker.
+**Status:** besloten eerste cloudproef online op `https://eaiwork.vis-c9d.workers.dev/`. De eigenaar heeft de browserlogin gebruikt en vijf tekstinspecties afgerond. Verdere onafhankelijke beveiligings- en inhoudscontroles zijn nog niet uitgevoerd. De gegevensbeschermingscontrole voor vertrouwelijke informatie is nog niet afgerond. Geen Terminal, Docker of Ollama op de computer van de gebruiker.
 
 Deze service is een **apart** Cloudflare Worker-project, `eaiwork`, binnen het bestaande Cloudflare-account voor `eaimodel.nl`. De bestaande Theory7-site, DNS, e-mail en Worker `eai-html-galerij` veranderen **niet**. De service heeft een eigen `workers.dev`-URL, zonder route op het hoofddomein. Preview-URLs blijven uit.
 
@@ -8,13 +8,15 @@ Deze service is een **apart** Cloudflare Worker-project, `eaiwork`, binnen het b
 
 Vanuit één rustige browserpagina kun je:
 
-1. Een lokale tekstinspectie als missie vastleggen. Dit is **geen LLM-aanroep**.
+1. Een opdracht in gewone taal vastleggen, met optioneel brontekst. De oorspronkelijke instructie wordt ongewijzigd in de bestaande missie bewaard. Dit is **geen LLM-aanroep**. Alleen expliciete tekstinspecties met brontekst vallen onder de vaste, uitvoerbare tekstbewerking. Andere opdrachten krijgen een **geblokkeerde, niet-afgeronde** missie.
 2. Een ontbrekende `text-inspector` laten samenstellen met de **bestaande EAIwork Builder**, uit de vaste recepten `text-normalize` en `text-metrics`.
 3. Drie echte vaste fixtures laten uitvoeren. De reducer registreert kandidaat en meting afzonderlijk met een vertrouwde check-actor.
 4. De kandidaat **zelf** vrijgeven. De EAIwork-workerregistratie valideert de exacte workerversie en het meetbewijs.
-5. De tekstinspectie expliciet starten. De vertrouwde taakrunner registreert start en resultaat. De status blijft `verification: not-evaluated`.
+5. Een tekstinspectie starten. Bij een al vrijgegeven worker kan een nieuwe expliciete tekstinspectie direct worden uitgevoerd. De native taakrunner registreert start en resultaat. De status blijft `verification: not-evaluated`. De werkruimte toont één geselecteerde opdracht met voortgang, eenvoudige getallen en technische details alleen op verzoek.
 
-De controller importeert rechtstreeks de EAIwork-modules `missions.ts`, `registry.ts`, `selector.ts`, `builder.ts` en `pure-text.ts`. Er komt **geen tweede agent of scheduler** bij. De Node-runner en Cloudflare gebruiken dezelfde vaste tekstadapters. Buildercode krijgt geen shell, filesystem, publicatie, internettoegang of extra werkermap.
+De controller importeert rechtstreeks de EAIwork-modules `missions.ts`, `registry.ts`, `selector.ts`, `worker-needs.ts`, `builder.ts` en `pure-text.ts`. De Node-Orchestrator gebruikt exact dezelfde pure `worker-needs.ts` om tekorten aan uitvoerbare workers te herkennen. Er komt **geen tweede agent of scheduler** bij. De Node-runner en Cloudflare gebruiken dezelfde vaste tekstadapters. Buildercode krijgt geen shell, filesystem, publicatie, internettoegang of extra werkermap.
+
+Een vrij geformuleerde aanvraag zoals 'bouw een dashboard' wordt dus **niet** stilletjes omgezet in een teksttelling en ook niet als uitgevoerd gemarkeerd. De aanvraag wordt bewaard; de workerbehoefte is zichtbaar. Dat is een registratie en selectie, geen automatische planvorming of codegeneratie.
 
 Wat **niet** online is: de bestaande generieke Codeworker, Docker-projecttests, RepoSearch in een lokale checkout, Ollama, algemene workerbouw en automatische GitHub-merge. Die mogen niet als werkend worden gepresenteerd.
 
@@ -26,7 +28,7 @@ Wat **niet** online is: de bestaande generieke Codeworker, Docker-projecttests, 
 - De Durable Object-opslag heeft per eigenaar een besloten, replaybaar EAIwork-eventlog met hashketen; dit is **geen onafhankelijk ondertekend bewijslog**.
 - De app toont alleen gegevens aan de toegestane Cloudflare Access-gebruiker. Voor echte persoonsgegevens en schoolgegevens is nog geen afgeronde gegevensbeschermingsbeoordeling gemaakt. **Gebruik alleen onschuldige testgegevens.**
 - Standaard `EAI_ACCESS_AUD` en `EAI_ALLOWED_EMAIL` **niet ingesteld** betekent altijd HTTP 403, zelfs als iemand de URL weet.
-- Geen productiepublicatie vóór een geslaagde onafhankelijke toegangstest met juiste en onjuiste gebruiker, en controles op opslag, datalocatie en operationele kosten.
+- Dit is een beperkte privéproef, geen goedgekeurde productieomgeving voor vertrouwelijke data. Een niet-ingelogde sessie is getest; een onafhankelijke test met een tweede identiteit, opslagcontrole, datalocatie en operationele kosten zijn nog niet afgerond.
 
 ## Eerder aangetroffen accountstatus (21 november 2026)
 
@@ -35,17 +37,16 @@ Wat **niet** online is: de bestaande generieke Codeworker, Docker-projecttests, 
 - Cloudflare Zero Trust Free is inmiddels ingeschakeld. De zelfgehoste Access-app beveiligt alleen `eaiwork.vis-c9d.workers.dev` en laat voorlopig alleen het ingeschreven account `vis@emmauscollege.nl` toe. Niet-ingelogde verzoeken worden naar het Access-inlogscherm gestuurd.
 - Geen reden om DNS, de huidige Worker of de FTP-publicatie aan te passen.
 
-## Nog te controleren vóór een bruikbare online sessie
+## Huidige toegang en nog open controles
 
-Dit is een beheerhandeling in de **Cloudflare-webinterface**, niet op de Mac van de gebruiker:
+De beheerinrichting is uitgevoerd via Cloudflare. Nog te toetsen voordat echt werk kan worden toegelaten:
 
-1. Cloudflare Access inschakelen voor het bestaande account, zonder een bestaand domein om te zetten. De accountbeheerder moet daarbij zo nodig de toegangvoorwaarden en kosten controleren.
-2. De nieuwe Worker `eaiwork` uitsluitend via Cloudflare Access beschermen, met een toelatingsregel voor de gewenste gebruiker.
-3. In de Workerconfiguratie `EAI_ACCESS_AUD` op de door Cloudflare uitgegeven audience en `EAI_ALLOWED_EMAIL` op het beoogde account zetten. Nog niet in een publiek repositorybestand.
-4. De toegang toetsen met de juiste gebruiker, zonder sessie, via een andere gebruiker en met een andere Access audience.
-5. Pas daarna de besloten URL beschikbaar stellen. Een later routevoorstel voor `eaimodel.nl/work` vereist afzonderlijke controle om de bestaande Theory7-pagina niet te overschrijven.
+1. Cloudflare Access is actief en beperkt de URL tot het toegestane e-mailadres. De twee secret bindings zijn ingesteld. Preview-URLs zijn uitgezet.
+2. Een niet-ingelogde aanvraag krijgt het Access-inlogscherm. De eigenaar heeft via de browser de vaste tekstworker gebruikt.
+3. Controle met een afwijkende identiteit, foutief Access-audience, opslaglocatie, bewaring en kosten moet nog onafhankelijk plaatsvinden.
+4. Een later routevoorstel voor `eaimodel.nl/work` vereist afzonderlijke controle; de bestaande Theory7-pagina mag niet worden overschreven.
 
-De repo bevat de Cloudflare-configuratie `cloudflare.config.ts` volgens de actuele **cf**-CLI-indeling, met een SQLite-backed Durable Object. Cloudflare Deploy gebeurt niet automatisch vanaf een PR. De code moet eerst bouwen en een testbare versie opleveren; daarna kan deze via een gemachtigde Cloudflare-deployment gepubliceerd worden. Gebruik geen losse Worker die de Accesscontrole omzeilt.
+De repo bevat de Cloudflare-configuratie `cloudflare.config.ts` volgens de actuele **cf**-CLI-indeling, met een SQLite-backed Durable Object. Cloudflare Builds volgt de gekoppelde `main`-branch. Pull requests worden niet automatisch naar de publieke werkruimte uitgerold. Na samenvoegen en een geslaagde deploy moet de bestaande toegangscontrole opnieuw gecontroleerd worden. Een ingelogde browserproef blijft nodig. Gebruik geen losse Worker die de Accesscontrole omzeilt.
 
 ## Controles
 
