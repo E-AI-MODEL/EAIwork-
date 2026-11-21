@@ -8,68 +8,14 @@ import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {searchLocalRepository} from "./reposearch.ts";
+import {BUILTINS,safeComposition,composed,runPureTextAdapter,evaluateComposedFixture} from "./pure-text.ts";
 import type { OpsStore } from "./store.ts";
 import { selectWorker, type RuntimeInventory } from "./selector.ts";
 import { blockingConstraints, missionProgress, type MissionRecord } from "./missions.ts";
 import type { OpsEvent, OpsState } from "./registry.ts";
 
-export interface LocalAdapter {
-  id:string;
-  taskKind:string;
-  run(input:{text:string}):Record<string,unknown>;
-}
+export {runPureTextAdapter} from "./pure-text.ts";
 const digest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
-const normalize = (input:{text:string}) => {
-  const text=input.text.normalize("NFC").replace(/\r\n?/g,"\n").replace(/[ \t]+/g," ").trim();
-  return {text,changed:text!==input.text};
-};
-const metrics=(input:{text:string})=>({
-  text:input.text,
-  characters:[...input.text].length,
-  words:input.text.trim()?input.text.trim().split(/\s+/u).length:0,
-  lines:input.text?input.text.split("\n").length:0,
-});
-const composed=(input:{text:string})=>{
-  const cleaned=normalize(input);
-  return {...metrics({text:cleaned.text}),changed:cleaned.changed};
-};
-const safeComposition=(contract:{recipe?:{kind:string;steps:string[]};taskKinds:string[];
-  modelPolicy:{preferred:string};testSuite:string;tools:string[];requestedPermissions:string[]})=>
-  contract.recipe?.kind==="builtin-compose" &&
-  JSON.stringify(contract.recipe.steps)===JSON.stringify(["text-normalize","text-metrics"]) &&
-  JSON.stringify(contract.taskKinds)===JSON.stringify(["text-inspect"]) &&
-  contract.modelPolicy.preferred==="deterministic" &&
-  contract.testSuite==="builtin-compose-fixture-v1" &&
-  contract.tools.length===0 && contract.requestedPermissions.length===0;
-/** Inspect Markdown links without fetching content or asserting source quality. */
-const referenceExtract=(input:{text:string})=>{
-  const references:Array<{label:string;url:string}>=[];
-  let detected=0;
-  const pattern=/\[([^\]\r\n]{1,80})\]\((https?:\/\/[^\s)<>]{1,260})\)/g;
-  for(const match of input.text.matchAll(pattern)){
-    try{
-      const url=new URL(match[2]);
-      if(!["http:","https:"].includes(url.protocol)||url.username||url.password)continue;
-      detected++;
-      if(references.length<8)references.push({label:match[1],url:match[2]});
-    }catch{continue}
-  }
-  return {text:input.text,references,detected,truncated:detected>references.length,
-    review:"links-not-verified"};
-};
-const BUILTINS:Readonly<Record<string,LocalAdapter>> = Object.freeze({
-  "text-normalize":{id:"text-normalize",taskKind:"text-normalize",run:normalize},
-  "text-metrics":{id:"text-metrics",taskKind:"text-metrics",run:metrics},
-  "reference-extract":{id:"reference-extract",taskKind:"reference-extract",run:referenceExtract},
-});
-/** Only four fixed, local and side-effect-free text tasks are permitted. */
-export function runPureTextAdapter(kind:string,input:{text:string}):Record<string,unknown>{
-  if(!["text-normalize","text-metrics","text-inspect","reference-extract"].includes(kind)||
-     !input||typeof input.text!=="string"||input.text.length>12000)
-    throw new Error("unsupported pure text input or adapter");
-  return kind==="text-inspect" ? composed(structuredClone(input)) :
-    BUILTINS[kind].run(structuredClone(input));
-}
 export function evaluateBuiltin(id:string,contract:{
   id:string;version:string;taskKinds:string[];testSuite:string;
   modelPolicy:{preferred:string};tools:string[];requestedPermissions:string[];
@@ -77,15 +23,7 @@ export function evaluateBuiltin(id:string,contract:{
 }) {
   if(contract.recipe){
     if(id!==contract.id||!safeComposition(contract))throw new Error("untrusted fixed worker recipe");
-    const cases=[
-      {input:{text:"  Hallo  wereld\r\n"},expected:{text:"Hallo wereld",characters:12,words:2,lines:1,changed:true}},
-      {input:{text:"Een\nTwee"},expected:{text:"Een\nTwee",characters:8,words:2,lines:2,changed:false}},
-      {input:{text:""},expected:{text:"",characters:0,words:0,lines:0,changed:false}},
-    ];
-    const passed=cases.filter(x=>JSON.stringify(composed(x.input))===JSON.stringify(x.expected)).length;
-    return {numerator:passed,denominator:cases.length,metric:"fixture-pass",taskKind:"text-inspect",
-      dataset:"builtin-compose-fixture-v1",suiteVersion:"builtin-compose-fixture-v1",
-      cohort:"fixed-fixtures",note:"Only this fixed two-step recipe has been tested."};
+    return evaluateComposedFixture(contract as import("./registry.ts").WorkerContract);
   }
   if(id==="repo-search"){
     if(contract.id!=="repo-search"||!contract.taskKinds.includes("repo-search") ||
