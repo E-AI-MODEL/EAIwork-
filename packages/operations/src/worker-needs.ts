@@ -78,6 +78,8 @@ export function inspectMissionWorkerNeedsWithInventory(
     }
     if(task.taskKind==="text-inspect"&&!state.workers["text-inspector"]){
       row("buildable","text-inspector","Bestaande Builder kan twee vertrouwde lokale tekstbewerkingen combineren");
+    }else if(task.taskKind==="csv-dashboard"&&!state.workers["csv-dashboard-renderer"]){
+      row("buildable","csv-dashboard-renderer","Bestaande Builder kan vaste CSV-parser en HTML-renderer samenstellen en testen");
     }else{
       row("unsupported",null,"Geen geteste Builder-receptuur voor deze taaksoort");
     }
