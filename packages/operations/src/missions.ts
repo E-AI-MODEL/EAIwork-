@@ -129,6 +129,7 @@ export interface MissionRecord {
 }
 export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
+  | {type:"mission.execution.select";missionId:string;expectedRevision:number;executionPreference:"auto"|"local"|"cloud"}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
   | {type:"mission.release.submit";missionId:string;expectedRevision:number;candidate:ReleaseCandidate}
@@ -327,6 +328,23 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   }
   if(typeof e.missionId!=="string")fail("missing mission");
   const mission=missions[e.missionId];if(!mission)fail("unknown mission");
+  if(e.type==="mission.execution.select"){
+    if(actor.kind!=="person"||actor.id!==mission.createdBy)
+      fail("only the original mission owner may choose an execution site");
+    if(!Number.isSafeInteger(e.expectedRevision)||e.expectedRevision!==mission.revision)
+      fail("stale execution preference revision");
+    if(!["auto","local","cloud"].includes(e.executionPreference))
+      fail("invalid execution preference");
+    if((mission.plan.executionPreference??"auto")===e.executionPreference)
+      fail("execution preference already selected");
+    if(mission.paused||mission.automation?.enabled||mission.releaseDossier||
+       Object.values(mission.tasks).some(t=>t.status!=="queued"||t.run))
+      fail("execution preference may change only before any task starts");
+    mission.plan.executionPreference=e.executionPreference;
+    mission.revision++;
+    // Selecting a site never grants any new permission, worker, or test authority.
+    return;
+  }
   if(e.type==="mission.extend"){
     if(actor.kind!=="person"||actor.id!==mission.createdBy)
       fail("mission extension requires the original human approver");
