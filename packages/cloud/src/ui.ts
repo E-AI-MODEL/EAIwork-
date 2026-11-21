@@ -41,32 +41,66 @@ summary{color:#496d56;font-size:12px;cursor:pointer;line-height:1.6}
 pre{background:#f7faf7;border:1px solid #e3eae4;padding:12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;max-height:220px;overflow:auto}
 .worker{border-top:1px solid #e8eee9;padding:11px 20px;font-size:11px;color:#6c8575}
 .back-to-list{display:none}
+.mobile-nav{display:none}
+#work-message{padding:0 17px;font-size:11px;color:#2c6a4c}
+#work-message.error{color:#a4443a}
+#work-message:not(:empty){padding-top:9px;padding-bottom:9px;border-bottom:1px solid #edf1ed}
 .mission-option strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
 .mission-list .muted{padding:15px}
 .detail .detail-section:first-of-type{margin-top:10px}
 footer{margin:18px 0 0;padding-top:13px;border-top:1px solid #e3e9e4;font-size:11px;color:#88978a;line-height:1.6}
 @media(max-width:830px){
-main{padding:20px 14px 45px}.layout{grid-template-columns:1fr}.work-area{display:block;min-height:0}
+html,body{height:100%;overscroll-behavior:none}
+body{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+header{flex:none}
+.head{min-height:49px;padding:0 16px}
+.brand{font-size:14px}.brand small{font-size:10px;margin-left:7px}
+.tag{font-size:9px;padding:4px 7px}
+main{width:100%;max-width:none;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;padding:0}
+.intro{flex:none;display:block;padding:12px 16px 9px;margin:0}
+.intro h1{font-size:20px;margin:0;line-height:1.2}
+.intro .muted{display:none}
+.mobile-nav{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none;padding:5px 12px 8px;border-bottom:1px solid #e3ebe5}
+.mobile-tab{min-height:40px;padding:8px 9px;font-size:12px;border:0;background:transparent;color:#708277}
+.mobile-tab[aria-pressed="true"]{background:#e6f0e9;color:#255138}
+.layout{display:block;flex:1;min-height:0;overflow:hidden}
+.layout[data-mobile-view="create"] #work-panel{display:none}
+.layout[data-mobile-view="work"] #create-panel{display:none}
+.panel{height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:none;border:0;border-radius:0}
+.panel-header{padding:10px 16px;flex:none;min-height:46px}
+.panel-header .tag{display:none}
+.panel-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px}
+.panel-body .lead{display:none}
+textarea{min-height:100px;max-height:40dvh;resize:vertical;font-size:16px}
+#source{min-height:115px}
+label{margin:0 0 7px}
+.form-actions{margin-top:13px;gap:8px}
+.form-actions .hint{font-size:10px}
+#message{margin:10px 0 0}
+.work-area{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden}
 .work-area[data-pane="detail"] .mission-list{display:none}
 .work-area[data-pane="list"] .detail{display:none}
-.detail{max-height:none}.mission-list{max-height:420px;overflow:auto;border-right:0}
-.back-to-list{display:inline-flex;align-items:center;margin:0 0 17px}
-.mission-option{min-height:58px;padding:12px 16px}.head{padding:0 15px}
+.mission-list{flex:1;min-height:0;max-height:none;overflow-y:auto;border-right:0;overscroll-behavior:contain}
+.detail{flex:1;min-height:0;max-height:none;overflow-y:auto;overscroll-behavior:contain;padding:18px}
+.back-to-list{display:inline-flex;align-items:center;margin:0 0 14px}
+.mission-option{min-height:60px;padding:12px 16px}
+.worker{flex:none;padding:9px 16px;font-size:10px}
+footer{display:none}
 }
 @media(max-width:490px){
-.intro{display:block}.work-area{display:block}.mission-list{max-height:410px}
-.detail{padding:18px}.panel-body{padding:16px}.metrics{gap:5px}
-.panel-header{padding:14px 16px}.detail h3{font-size:15px}
+.detail h3{font-size:15px}
+.metrics{gap:5px}
 }
 </style></head>
 <body><header><div class="head"><div class="brand">EAIwork <small>mijn werkruimte</small></div><span class="tag">Besloten · Cloudflare Access</span></div></header>
-<main><div class="intro"><div><h1>Wat wil je gedaan krijgen?</h1><p class="muted">Eén opdracht. EAIwork controleert welke worker die kan uitvoeren.</p></div></div>
-<div class="layout">
-<section class="panel"><div class="panel-header"><h2>Nieuwe opdracht</h2><span class="tag">Gewone taal</span></div>
+<main><div class="intro"><div><h1>EAIwork</h1><p class="muted">Eén opdracht. EAIwork controleert welke worker die kan uitvoeren.</p></div></div>
+<nav class="mobile-nav" aria-label="Werkruimte"><button class="mobile-tab" id="tab-create" type="button" aria-pressed="false" aria-controls="create-panel">Nieuwe opdracht</button><button class="mobile-tab" id="tab-work" type="button" aria-pressed="true" aria-controls="work-panel">Mijn werk</button></nav>
+<div id="layout" class="layout" data-mobile-view="work">
+<section id="create-panel" class="panel"><div class="panel-header"><h2>Nieuwe opdracht</h2><span class="tag">Gewone taal</span></div>
 <div class="panel-body"><p class="lead">Beschrijf wat je wilt bereiken. Het systeem registreert ook opdrachten die de huidige cloudversie nog niet kan uitvoeren, zonder ze als afgerond te markeren.</p>
 <form id="create"><label for="instruction">Wat wil je dat EAIwork doet?</label>
 <textarea id="instruction" maxlength="1500" required placeholder="Bijvoorbeeld: Tel de woorden, tekens en regels in mijn tekst. Of: Bouw een dashboard voor mijn gegevens."></textarea>
-<details id="source-details"><summary>Tekst of gegevens toevoegen (optioneel)</summary><label for="source" class="hint">Alleen onschuldige testgegevens. Voor tekstinspectie is brontekst vereist.</label>
+<details id="source-details"><summary>Tekst of gegevens toevoegen</summary><label for="source" class="hint">Alleen onschuldige testgegevens. Voor tekstinspectie is brontekst vereist.</label>
 <textarea id="source" maxlength="10000" placeholder="Plak hier de tekst waarop de opdracht betrekking heeft."></textarea></details>
 <div class="form-actions"><button type="submit" class="primary" id="submit">Opdracht vastleggen</button>
 <span class="hint">Nieuwe workers worden niet zonder jouw toestemming vrijgegeven.</span></div></form>
@@ -74,8 +108,8 @@ main{padding:20px 14px 45px}.layout{grid-template-columns:1fr}.work-area{display
 <details><summary>Wat kan EAIwork nu online?</summary>
 <p class="muted">De vrijgegeven tekstworker kan tekst normaliseren en woorden, tekens en regels tellen. De bestaande Builder kan deze vaste worker samenstellen en drie tests draaien. Nieuwe code bouwen, websites publiceren en externe acties uitvoeren zijn nog niet aangesloten. EAIwork meldt dat als uitvoerblokkade, niet als voltooiing.</p></details>
 </div></section>
-<section class="panel"><div class="panel-header"><h2>Mijn werk</h2><button id="refresh" type="button">Ververs</button></div>
-<div id="workarea" class="work-area" data-pane="list"><nav id="tasks" class="mission-list" aria-label="Opdrachten"><p class="muted">Opdrachten ophalen...</p></nav>
+<section id="work-panel" class="panel"><div class="panel-header"><h2>Mijn werk</h2><button id="refresh" type="button">Ververs</button></div>
+<div id="work-message" role="status" aria-live="polite"></div><div id="workarea" class="work-area" data-pane="list"><nav id="tasks" class="mission-list" aria-label="Opdrachten"><p class="muted">Opdrachten ophalen...</p></nav>
 <div id="detail" class="detail" aria-live="polite"><p class="muted">Selecteer een opdracht voor voortgang en resultaat.</p></div></div>
 <div id="worker" class="worker"></div>
 </section>
@@ -85,9 +119,19 @@ main{padding:20px 14px 45px}.layout{grid-template-columns:1fr}.work-area{display
 export const javascript=String.raw`"use strict";
 const $=id=>document.getElementById(id);
 const tasks=$("tasks"),detail=$("detail"),worker=$("worker"),message=$("message");
-let busy=false,last=null,selectedId=null,mobilePane="list";
+let busy=false,last=null,selectedId=null,mobilePane="list",mobileView="work";
+function showMobile(view){
+  mobileView=view;
+  $("layout").dataset.mobileView=view;
+  $("tab-create").setAttribute("aria-pressed",String(view==="create"));
+  $("tab-work").setAttribute("aria-pressed",String(view==="work"));
+}
 const el=(tag,txt,cls)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=String(txt);if(cls)e.className=cls;return e};
-function note(txt,error=false){message.textContent=txt;message.className=error?"error":""}
+function note(txt,error=false){
+  message.textContent=txt;message.className=error?"error":"";
+  $("work-message").textContent=txt;
+  $("work-message").className=error?"error":"";
+}
 async function request(path,action){
   const r=await fetch(path,{method:action?"POST":"GET",credentials:"same-origin",
     headers:action?{"Content-Type":"application/json"}:{},
@@ -138,10 +182,10 @@ function result(m){
   detail.append(h);
 }
 function requestSource(m){
+  showMobile("create");
   $("instruction").value=m.requestedOutcome||m.title;
   $("source-details").open=true;
   $("source").focus();
-  $("create").scrollIntoView({behavior:"smooth",block:"start"});
   note("Voeg de brontekst toe. De eerdere onvolledige opdracht blijft bewaard.");
 }
 function showDetails(m,w){
@@ -150,12 +194,12 @@ function showDetails(m,w){
   back.type="button";
   back.addEventListener("click",()=>{
     mobilePane="list";render(last);
-    $("workarea").scrollIntoView({behavior:"smooth",block:"start"});
+    $("workarea").scrollTop=0;
   });
   detail.append(back);
   if(!m){detail.append(el("p","Selecteer een opdracht voor voortgang en resultaat.","muted"));return}
   detail.append(el("h3",m.title),el("span",status(m),"stage"));
-  if(m.requestedOutcome){
+  if(m.requestedOutcome&&m.requestedOutcome!==m.title){
     const req=el("section",undefined,"detail-section");
     req.append(el("h2","Jouw opdracht"),el("p",m.requestedOutcome));detail.append(req);
   }
@@ -183,6 +227,7 @@ function showDetails(m,w){
 function render(data){
   if(!data)return;
   last=data;tasks.replaceChildren();worker.replaceChildren();
+  showMobile(mobileView);
   $("workarea").dataset.pane=mobilePane;
   const ms=data.missions||[],w=data.worker;
   if(!selectedId||!ms.some(m=>m.id===selectedId))selectedId=ms[0]?.id||null;
@@ -193,8 +238,8 @@ function render(data){
     b.append(el("strong",m.title),el("span",status(m),"status"));
     b.addEventListener("click",()=>{
       selectedId=m.id;mobilePane="detail";render(last);
-      if(window.matchMedia("(max-width: 830px)").matches)
-        $("workarea").scrollIntoView({behavior:"smooth",block:"start"});
+      showMobile("work");
+      detail.scrollTop=0;
     });tasks.append(b);
   }
   if(ms.length)showDetails(ms.find(m=>m.id===selectedId),w);
@@ -207,6 +252,12 @@ async function refresh(silent=false){
   catch(e){note(String(e.message||e),true)}
 }
 $("refresh").addEventListener("click",()=>refresh());
+$("tab-create").addEventListener("click",()=>showMobile("create"));
+$("tab-work").addEventListener("click",()=>{
+  mobilePane="list";
+  showMobile("work");
+  render(last);
+});
 $("create").addEventListener("submit",async ev=>{
   ev.preventDefault();if(busy)return;
   busy=true;note("Opdracht vastleggen...");
@@ -215,7 +266,7 @@ $("create").addEventListener("submit",async ev=>{
     const data=await request("/api/action",{type:"submit",
       instruction:$("instruction").value,sourceText:$("source").value});
     selectedId=data.result.missionId;
-    mobilePane="detail";render(data.state);
+    mobilePane="detail";showMobile("work");render(data.state);
     $("instruction").value="";$("source").value="";
     note(data.result.stage==="unsupported"?
       "Opdracht opgeslagen. De huidige cloudversie kan deze nog niet uitvoeren.":
@@ -230,4 +281,5 @@ $("create").addEventListener("submit",async ev=>{
   }
   finally{busy=false;$("submit").disabled=false}
 });
+showMobile("work");
 refresh();`;
