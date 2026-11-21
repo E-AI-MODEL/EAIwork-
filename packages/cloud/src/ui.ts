@@ -2,7 +2,7 @@
  * Quiet, first-step browser UI. Text is added using textContent, never as HTML.
  * A protected Cloudflare session is mandatory before this asset is served.
  */
-export const html=String.raw\`<!doctype html>
+export const html=String.raw`<!doctype html>
 <html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EAIwork · Besloten werkruimte</title>
 <style>
@@ -41,9 +41,9 @@ footer{margin-top:34px;border-top:1px solid #e0e6e0;padding-top:14px;color:#7d8d
 <div id="worker"></div>
 </section></div>
 <footer>Technische afronding is geen onafhankelijk bewijs van inhoudelijke juistheid. Alleen jouw beveiligde Cloudflare-sessie geeft toegang tot deze gegevens.</footer></main>
-<script src="/app.js" defer></script></body></html>\`;
+<script src="/app.js" defer></script></body></html>`;
 
-export const javascript=String.raw\`"use strict";
+export const javascript=String.raw`"use strict";
 const $=(id)=>document.getElementById(id);
 const tasks=$("tasks"),worker=$("worker"),message=$("message");
 let busy=false;
@@ -123,4 +123,4 @@ $("create").addEventListener("submit",async ev=>{
  finally{busy=false}
 });
 refresh();
-\`;
+`;
