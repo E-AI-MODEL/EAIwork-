@@ -29,8 +29,10 @@ const person=(actorId:string)=>({kind:"person" as const,id:actorId});
 export const cloudDashboardIntent=(instruction:string):boolean=>
   /\b(dashboard|dashboards)\b/i.test(instruction)&&
   /\b(bouw|maak|genereer|ontwikkel|creëer|creeer)\b/i.test(instruction);
+export const cloudCsvCandidate=(source:string):boolean=>
+  typeof source==="string"&&/[\r\n]/.test(source)&&/[,;\t]/.test(source.split(/[\r\n]/,1)[0]);
 export function cloudRequestKind(instruction:string,sourceText=""):"text-inspect"|"csv-dashboard"|"request-review"{
-  if(cloudDashboardIntent(instruction)&&sourceText.trim())return "csv-dashboard";
+  if(cloudDashboardIntent(instruction)&&cloudCsvCandidate(sourceText))return "csv-dashboard";
   const text=instruction.toLowerCase();
   const safeTextIntent=/\b(inspecteer|tekstinspectie|tel(?:len)?\s+(?:(?:de|het)\s+)?(?:aantal\s+)?(?:woorden|tekens|regels)|hoeveel\s+(?:woorden|tekens|regels)|analyseer\s+(?:de|dit|mijn|een)\s+tekst|controleer\s+(?:de|dit|mijn|een)\s+tekst)\b/i;
   const differentTask=/\b(bouw|bouwen|maak|maken|ontwikkel|programmeer|publiceer|verstuur|mail|verwijder|github|dashboard|website|app|code|deploy|worker|shell|terminal)\b/i;
@@ -60,7 +62,7 @@ export function validateCloudAction(value:unknown):CloudAction {
     // A request without CSV remains a queued, non-executed native mission.
     // Historical requests and freeform planning are never silently rejected.
     if(cloudDashboardIntent(a.instruction)&&
-       typeof a.sourceText==="string"&&a.sourceText.trim())
+       typeof a.sourceText==="string"&&cloudCsvCandidate(a.sourceText))
       parseDashboardCsv(a.sourceText);
     return {type:"submit",instruction:a.instruction.trim(),
       ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{}),
