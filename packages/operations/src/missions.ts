@@ -294,8 +294,9 @@ export function validateMissionExtension(mission:MissionRecord,plan:MissionPlan,
     validateMissionPlan(plan);
     const old=mission.plan;
     if(old.id!==plan.id||old.title!==plan.title||old.goal!==plan.goal||
-       old.sourceInstruction!==plan.sourceInstruction)
-      fail("an extension must preserve the original mission instruction");
+       old.sourceInstruction!==plan.sourceInstruction||
+       (old.executionPreference??"auto")!==(plan.executionPreference??"auto"))
+      fail("an extension must preserve the original mission instruction and execution preference");
     if(plan.tasks.length<=old.tasks.length||
        old.tasks.some((task,i)=>JSON.stringify(plan.tasks[i])!==JSON.stringify(task)))
       fail("an extension may only append tasks, never rewrite existing work");
