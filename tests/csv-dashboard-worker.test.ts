@@ -133,7 +133,8 @@ test("Explicitly local dashboard request never executes on the available cloud a
 });
 test("The old bare dashboard request retains its status and can receive source later",()=>{
   assert.equal(validateCloudAction({type:"submit",instruction}).type,"submit");
-  assert.throws(()=>validateCloudAction({type:"submit",instruction,sourceText:"Dit is geen CSV"}),/CSV/);
+  assert.equal(validateCloudAction({type:"submit",instruction,sourceText:"Dit is geen CSV"}).type,"submit");
+  assert.throws(()=>validateCloudAction({type:"submit",instruction,sourceText:"Naam;Score\nA"}),/CSV/);
   const action=validateCloudAction({type:"submit",instruction,sourceText:csv,executionPreference:"cloud"});
   assert.equal(action.type,"submit");
 });
