@@ -10,7 +10,9 @@ import * as entrypoint from "./packages/cloud/src/worker.ts" with {type:"cf-work
  */
 export default defineConfig({
   worker:{
-    name:"eaiwork-private",
+    name:"eaiwork",
+    workersDev:true,
+    previewUrls:false,
     entrypoint,
     compatibilityDate:"2026-11-21",
     compatibilityFlags:["enable_ctx_exports"],
