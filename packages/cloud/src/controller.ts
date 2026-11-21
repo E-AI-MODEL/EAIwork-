@@ -57,11 +57,11 @@ export function validateCloudAction(value:unknown):CloudAction {
     if(cloudNeedsSource(a.instruction)&&
        (typeof a.sourceText!=="string"||!a.sourceText.trim()))
       return deny("Voor deze tekstcontrole ontbreekt de brontekst. Voeg eerst een tekst toe.");
-    if(cloudDashboardIntent(a.instruction)){
-      if(typeof a.sourceText!=="string"||!a.sourceText.trim())
-        return deny("Voor het dashboard ontbreekt CSV met kolomnamen en minstens één gegevensrij. Plak eerst proefgegevens.");
+    // A request without CSV remains a queued, non-executed native mission.
+    // Historical requests and freeform planning are never silently rejected.
+    if(cloudDashboardIntent(a.instruction)&&
+       typeof a.sourceText==="string"&&a.sourceText.trim())
       parseDashboardCsv(a.sourceText);
-    }
     return {type:"submit",instruction:a.instruction.trim(),
       ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{}),
       ...(a.executionPreference===undefined?{}:
