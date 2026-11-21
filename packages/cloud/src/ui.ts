@@ -40,9 +40,24 @@ summary{color:#496d56;font-size:12px;cursor:pointer;line-height:1.6}
 .metric{border:1px solid #e1e9e3;border-radius:9px;padding:12px 9px}.metric strong{font-size:21px;font-weight:650;letter-spacing:-.035em;display:block}.metric span{font-size:10px;color:#7d9184}
 pre{background:#f7faf7;border:1px solid #e3eae4;padding:12px;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;max-height:220px;overflow:auto}
 .worker{border-top:1px solid #e8eee9;padding:11px 20px;font-size:11px;color:#6c8575}
+.back-to-list{display:none}
+.mission-option strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.mission-list .muted{padding:15px}
+.detail .detail-section:first-of-type{margin-top:10px}
 footer{margin:18px 0 0;padding-top:13px;border-top:1px solid #e3e9e4;font-size:11px;color:#88978a;line-height:1.6}
-@media(max-width:830px){main{padding:20px 14px 45px}.layout{grid-template-columns:1fr}.work-area{min-height:0}.detail{max-height:none}.mission-list{max-height:280px}.head{padding:0 15px}}
-@media(max-width:490px){.intro{display:block}.work-area{grid-template-columns:1fr}.mission-list{border-right:0;border-bottom:1px solid #e9eeea;max-height:215px}.detail{padding:18px}.panel-body{padding:16px}.metrics{gap:5px}}
+@media(max-width:830px){
+main{padding:20px 14px 45px}.layout{grid-template-columns:1fr}.work-area{display:block;min-height:0}
+.work-area[data-pane="detail"] .mission-list{display:none}
+.work-area[data-pane="list"] .detail{display:none}
+.detail{max-height:none}.mission-list{max-height:420px;overflow:auto;border-right:0}
+.back-to-list{display:inline-flex;align-items:center;margin:0 0 17px}
+.mission-option{min-height:58px;padding:12px 16px}.head{padding:0 15px}
+}
+@media(max-width:490px){
+.intro{display:block}.work-area{display:block}.mission-list{max-height:410px}
+.detail{padding:18px}.panel-body{padding:16px}.metrics{gap:5px}
+.panel-header{padding:14px 16px}.detail h3{font-size:15px}
+}
 </style></head>
 <body><header><div class="head"><div class="brand">EAIwork <small>mijn werkruimte</small></div><span class="tag">Besloten · Cloudflare Access</span></div></header>
 <main><div class="intro"><div><h1>Wat wil je gedaan krijgen?</h1><p class="muted">Eén opdracht. EAIwork controleert welke worker die kan uitvoeren.</p></div></div>
@@ -60,7 +75,7 @@ footer{margin:18px 0 0;padding-top:13px;border-top:1px solid #e3e9e4;font-size:1
 <p class="muted">De vrijgegeven tekstworker kan tekst normaliseren en woorden, tekens en regels tellen. De bestaande Builder kan deze vaste worker samenstellen en drie tests draaien. Nieuwe code bouwen, websites publiceren en externe acties uitvoeren zijn nog niet aangesloten. EAIwork meldt dat als uitvoerblokkade, niet als voltooiing.</p></details>
 </div></section>
 <section class="panel"><div class="panel-header"><h2>Mijn werk</h2><button id="refresh" type="button">Ververs</button></div>
-<div class="work-area"><nav id="tasks" class="mission-list" aria-label="Opdrachten"><p class="muted">Opdrachten ophalen...</p></nav>
+<div id="workarea" class="work-area" data-pane="list"><nav id="tasks" class="mission-list" aria-label="Opdrachten"><p class="muted">Opdrachten ophalen...</p></nav>
 <div id="detail" class="detail" aria-live="polite"><p class="muted">Selecteer een opdracht voor voortgang en resultaat.</p></div></div>
 <div id="worker" class="worker"></div>
 </section>
@@ -70,7 +85,7 @@ footer{margin:18px 0 0;padding-top:13px;border-top:1px solid #e3e9e4;font-size:1
 export const javascript=String.raw`"use strict";
 const $=id=>document.getElementById(id);
 const tasks=$("tasks"),detail=$("detail"),worker=$("worker"),message=$("message");
-let busy=false,last=null,selectedId=null;
+let busy=false,last=null,selectedId=null,mobilePane="list";
 const el=(tag,txt,cls)=>{const e=document.createElement(tag);if(txt!==undefined)e.textContent=String(txt);if(cls)e.className=cls;return e};
 function note(txt,error=false){message.textContent=txt;message.className=error?"error":""}
 async function request(path,action){
@@ -84,7 +99,8 @@ async function request(path,action){
 function status(m){
   if(m.status==="done")return "Technisch afgerond";
   if(m.status==="failed")return "Uitvoering mislukt";
-  if(m.need?.status==="unsupported")return "Nog niet uitvoerbaar";
+  if(m.sourceMissing||m.need?.status==="source-required")return "Brontekst ontbreekt";
+  if(m.need?.status==="unsupported")return "Geen geschikte worker";
   if(m.need?.status==="condition-blocked")return "Wacht op beoordeling";
   if(m.need?.status==="buildable")return "Worker ontbreekt";
   if(m.need?.status==="awaiting-release")return "Wacht op jouw vrijgave";
@@ -121,8 +137,22 @@ function result(m){
   h.append(el("p","Technisch uitgevoerd. Niet onafhankelijk inhoudelijk beoordeeld."));
   detail.append(h);
 }
+function requestSource(m){
+  $("instruction").value=m.requestedOutcome||m.title;
+  $("source-details").open=true;
+  $("source").focus();
+  $("create").scrollIntoView({behavior:"smooth",block:"start"});
+  note("Voeg de brontekst toe. De eerdere onvolledige opdracht blijft bewaard.");
+}
 function showDetails(m,w){
   detail.replaceChildren();
+  const back=el("button","Terug naar opdrachten","back-to-list");
+  back.type="button";
+  back.addEventListener("click",()=>{
+    mobilePane="list";render(last);
+    $("workarea").scrollIntoView({behavior:"smooth",block:"start"});
+  });
+  detail.append(back);
   if(!m){detail.append(el("p","Selecteer een opdracht voor voortgang en resultaat.","muted"));return}
   detail.append(el("h3",m.title),el("span",status(m),"stage"));
   if(m.requestedOutcome){
@@ -131,8 +161,13 @@ function showDetails(m,w){
   }
   if(m.status==="done"){result(m);return}
   const next=el("section",undefined,"detail-section");next.append(el("h2","Uitvoering"));
-  if(m.need?.status==="unsupported"){
-    next.append(el("p","EAIwork heeft de opdracht vastgelegd, maar kan haar nog niet uitvoeren. Er is geen vrijgegeven worker of geteste Builder-receptuur voor dit soort werk. Er is niets gebouwd of gepubliceerd."));
+  if(m.sourceMissing||m.need?.status==="source-required"){
+    next.append(el("p","De opdracht is bewaard, maar de te onderzoeken tekst ontbreekt. De tekstworker is beschikbaar; voeg de brontekst toe om een nieuwe, uitvoerbare controle te starten."));
+    const actions=el("div",undefined,"actions");
+    const b=el("button","Brontekst toevoegen","primary");
+    b.type="button";b.addEventListener("click",()=>requestSource(m));actions.append(b);next.append(actions);
+  }else if(m.need?.status==="unsupported"){
+    next.append(el("p","De opdracht is bewaard, maar deze cloudversie kan dit soort werk nog niet uitvoeren. Er is geen geschikte uitvoerbare Codeworker of geteste Builder-receptuur. Er is niets gebouwd of gepubliceerd."));
   }else{
     next.append(el("p",m.need?.reason||"Wacht op de volgende uitvoeringsstap."));
     if(m.taskKind==="text-inspect"){
@@ -148,6 +183,7 @@ function showDetails(m,w){
 function render(data){
   if(!data)return;
   last=data;tasks.replaceChildren();worker.replaceChildren();
+  $("workarea").dataset.pane=mobilePane;
   const ms=data.missions||[],w=data.worker;
   if(!selectedId||!ms.some(m=>m.id===selectedId))selectedId=ms[0]?.id||null;
   if(!ms.length){tasks.append(el("p","Nog geen opdrachten.","muted"));showDetails(null,w)}
@@ -155,7 +191,11 @@ function render(data){
     const b=el("button",undefined,"mission-option"+(m.id===selectedId?" selected":""));
     b.type="button";b.setAttribute("aria-current",m.id===selectedId?"true":"false");
     b.append(el("strong",m.title),el("span",status(m),"status"));
-    b.addEventListener("click",()=>{selectedId=m.id;render(last)});tasks.append(b);
+    b.addEventListener("click",()=>{
+      selectedId=m.id;mobilePane="detail";render(last);
+      if(window.matchMedia("(max-width: 830px)").matches)
+        $("workarea").scrollIntoView({behavior:"smooth",block:"start"});
+    });tasks.append(b);
   }
   if(ms.length)showDetails(ms.find(m=>m.id===selectedId),w);
   worker.textContent=w?
@@ -175,14 +215,19 @@ $("create").addEventListener("submit",async ev=>{
     const data=await request("/api/action",{type:"submit",
       instruction:$("instruction").value,sourceText:$("source").value});
     selectedId=data.result.missionId;
-    render(data.state);
+    mobilePane="detail";render(data.state);
     $("instruction").value="";$("source").value="";
     note(data.result.stage==="unsupported"?
       "Opdracht opgeslagen. De huidige cloudversie kan deze nog niet uitvoeren.":
       data.result.stage==="done"?
         "Tekstinspectie uitgevoerd met de reeds vrijgegeven worker.":
         "Opdracht opgeslagen. Bekijk de volgende stap bij Mijn werk.");
-  }catch(e){note(String(e.message||e),true)}
+  }catch(e){
+    const msg=String(e.message||e);note(msg,true);
+    if(msg.includes("brontekst")){
+      $("source-details").open=true;$("source").focus();
+    }
+  }
   finally{busy=false;$("submit").disabled=false}
 });
 refresh();`;

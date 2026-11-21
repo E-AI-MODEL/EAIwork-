@@ -2,7 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {applyOps,emptyOps} from "../packages/operations/src/registry.ts";
-import {cloudTransition,cloudView,validateCloudAction,cloudRequestKind,digest} from "../packages/cloud/src/controller.ts";
+import {cloudTransition,cloudView,validateCloudAction,cloudRequestKind,cloudNeedsSource,digest} from "../packages/cloud/src/controller.ts";
 
 const owner="person:cloud-owner";
 const commit=async(state:any,input:unknown)=>{
@@ -135,5 +135,43 @@ test("New private UI shows a single selected result and not a wall of raw JSON",
   assert.match(ui,/showDetails/);
   assert.match(ui,/textContent/);
   assert.match(ui,/Uitvoergegevens bekijken/);
+  assert.doesNotMatch(ui,/innerHTML/);
+});
+
+test("Missing source is rejected before creating an incomplete text inspection",async()=>{
+  assert.equal(cloudNeedsSource("Tel de woorden, tekens en regels in mijn tekst."),true);
+  assert.equal(cloudNeedsSource("Bouw een dashboard met Excelgegevens."),false);
+  const state=emptyOps();
+  await assert.rejects(commit(state,{type:"submit",
+    instruction:"Tel de woorden, tekens en regels in mijn tekst."}),/brontekst/);
+  await assert.rejects(commit(state,{type:"submit",
+    instruction:"Tel de woorden in mijn tekst.",sourceText:"   "}),/brontekst/);
+  assert.equal(Object.keys(state.missions).length,0);
+});
+test("Older incomplete text missions are correctly labeled source-required",()=>{
+  const instruction="Tel de woorden, tekens en regels in mijn tekst.";
+  const state=applyOps(emptyOps(),{
+    id:"event-test-legacy",at:"2026-11-21T08:00:00.000Z",
+    actor:{kind:"person",id:owner},
+    event:{type:"mission.create",plan:{
+      id:"mission-legacy-incomplete",title:instruction,goal:instruction,
+      sourceInstruction:instruction,
+      tasks:[{id:"task-inspect",title:"Nog niet ondersteunde opdracht",
+        taskKind:"request-review",effect:"local",dependsOn:[],input:{text:instruction}}]
+    }}
+  });
+  const row=cloudView(state).missions[0];
+  assert.equal(row.status,"queued");
+  assert.equal(row.sourceMissing,true);
+  assert.equal(row.need?.status,"source-required");
+  assert.equal(row.output,null);
+});
+test("Mobile missions show either the list or the selected detail, with return action",()=>{
+  const ui=readFileSync(new URL("../packages/cloud/src/ui.ts",import.meta.url),"utf8");
+  assert.match(ui,/data-pane="list"/);
+  assert.match(ui,/data-pane="detail"/);
+  assert.match(ui,/Terug naar opdrachten/);
+  assert.match(ui,/Brontekst toevoegen/);
+  assert.match(ui,/Brontekst ontbreekt/);
   assert.doesNotMatch(ui,/innerHTML/);
 });

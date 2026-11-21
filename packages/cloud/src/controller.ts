@@ -29,6 +29,9 @@ export function cloudRequestKind(instruction:string,sourceText=""):"text-inspect
   return sourceText.trim()&&safeTextIntent.test(text)&&!differentTask.test(text)
     ?"text-inspect":"request-review";
 }
+/** A text-only request without its source is incomplete, not a worker failure. */
+export const cloudNeedsSource=(instruction:string):boolean=>
+  cloudRequestKind(instruction,"testtekst")==="text-inspect";
 const checker={kind:"check" as const,id:"check:builtins"};
 const event=(actor:OpsEnvelope["actor"],e:OpsEvent):OpsEnvelope=>
   ({id:"event-"+crypto.randomUUID(),at:new Date().toISOString(),actor,event:e});
@@ -42,6 +45,9 @@ export function validateCloudAction(value:unknown):CloudAction {
       (a.sourceText!==undefined&&
         (typeof a.sourceText!=="string"||a.sourceText.length>10000)))
       return deny("Beschrijf de opdracht in maximaal 1500 tekens en voeg eventueel een tekst toe");
+    if(cloudNeedsSource(a.instruction)&&
+       (typeof a.sourceText!=="string"||!a.sourceText.trim()))
+      return deny("Voor deze tekstcontrole ontbreekt de brontekst. Voeg eerst een tekst toe.");
     return {type:"submit",instruction:a.instruction.trim(),
       ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{})};
   }
@@ -65,11 +71,19 @@ export function cloudView(state:OpsState) {
       ...inventory,adapterIds:[...inventory.adapterIds],
       supportedModelSizes:[...inventory.supportedModelSizes],
     }).needs.find(n=>n.taskId===task?.spec.id)??null;
+    const sourceMissing=task?.spec.taskKind==="request-review"&&
+      typeof m.plan.sourceInstruction==="string"&&
+      cloudNeedsSource(m.plan.sourceInstruction)&&
+      task?.spec.input?.text===m.plan.sourceInstruction;
     return {id:m.plan.id,title:m.plan.title,createdAt:m.createdAt,
       revision:m.revision,progress,status:task?.status??"unknown",
+      sourceMissing,
       taskKind:task?.spec.taskKind??"unknown",
       requestedOutcome:m.plan.sourceInstruction??null,
-      need:need?{status:need.status,reason:need.reason,workerId:need.workerId}:null,
+      need:sourceMissing?{
+        status:"source-required",reason:"Er ontbreekt brontekst. Voeg de tekst toe om deze inspectie uit te voeren.",
+        workerId:"text-inspector",
+      }:need?{status:need.status,reason:need.reason,workerId:need.workerId}:null,
       output:task?.run?.output??null,verification:task?.run?.verification??null,
       owner:m.createdBy};
   });
