@@ -69,7 +69,10 @@ Vervolg: een geïsoleerde Codeworker-run via Cloudflare Sandbox of een gecontrol
 Vanaf de vaste CSV-dashboarduitbreiding kan een gebruiker op de telefoon een opdracht
 zoals *Bouw een interactief dashboard van deze CSV-gegevens* combineren met
 proefdata. Plak een kopregel plus minimaal één gegevensrij met komma,
-puntkomma of tab als scheidingsteken. Een echte `.xlsx`-upload of algemene
+puntkomma of tab als scheidingsteken. Op een telefoon kun je ook
+via de bestandskiezer een klein CSV-bestand uit de lokale Bestanden-app
+inlezen; pas bij het vastleggen worden de gegevens naar de afgeschermde
+EAIwork-werkruimte verzonden. Een echte `.xlsx`-upload of algemene
 instructie-naar-code generatie wordt niet ondersteund.
 
 De controleerbare route gebruikt het bestaande missiemodel, de centrale
