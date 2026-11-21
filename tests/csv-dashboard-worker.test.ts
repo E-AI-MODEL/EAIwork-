@@ -148,6 +148,8 @@ test("Private artifact endpoint remains behind Access and serves hash-checked sa
   assert.match(worker,/attachment; filename/);
   const ui=readFileSync(new URL("../packages/cloud/src/ui.ts",import.meta.url),"utf8");
   assert.match(ui,/Vul een CSV-dashboardvoorbeeld in/);
+  assert.match(ui,/id="csv-file" type="file" accept=".csv,text\/csv,text\/plain"/);
+  assert.match(ui,/await file\.text\(\)/);
   assert.match(ui,/Open interactief voorbeeld/);
   assert.match(ui,/Download HTML/);
   assert.doesNotMatch(ui,/innerHTML/);
