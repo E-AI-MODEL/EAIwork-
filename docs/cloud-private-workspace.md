@@ -6,6 +6,15 @@ Deze service is een **apart** Cloudflare Worker-project, `eaiwork`, binnen het b
 
 ## Bewust afgebakende werkproef
 
+De eigenaar kiest per nieuwe opdracht `auto`, `local` of `cloud`. Die
+keuze wordt opgeslagen in de bestaande missie en verleent zelf geen
+uitvoerrechten. De cloudtekstworker is aangesloten. Een lokale executor is
+nog niet gekoppeld, en cloudcode-uitvoering is niet ingericht. Een verzoek
+voor een ontbrekende uitvoerplek blijft staan: geen automatische fallback
+tegen de keuze van de gebruiker in. Zie
+[Uitvoering lokaal of cloud](execution-local-cloud.md) voor contract,
+beveiligingsafspraken en de nog ontbrekende uitvoerverbindingen.
+
 Vanuit één rustige browserpagina kun je:
 
 1. Een opdracht in gewone taal vastleggen, met optioneel brontekst. De oorspronkelijke instructie wordt ongewijzigd in de bestaande missie bewaard. Dit is **geen LLM-aanroep**. Alleen expliciete tekstinspecties met brontekst vallen onder de vaste, uitvoerbare tekstbewerking. Andere opdrachten krijgen een **geblokkeerde, niet-afgeronde** missie.
@@ -14,11 +23,11 @@ Vanuit één rustige browserpagina kun je:
 4. De kandidaat **zelf** vrijgeven. De EAIwork-workerregistratie valideert de exacte workerversie en het meetbewijs.
 5. Een tekstinspectie starten. Bij een al vrijgegeven worker kan een nieuwe expliciete tekstinspectie direct worden uitgevoerd. De native taakrunner registreert start en resultaat. De status blijft `verification: not-evaluated`. De werkruimte toont één geselecteerde opdracht met voortgang, eenvoudige getallen en technische details alleen op verzoek.
 
-De controller importeert rechtstreeks de EAIwork-modules `missions.ts`, `registry.ts`, `selector.ts`, `worker-needs.ts`, `builder.ts` en `pure-text.ts`. De Node-Orchestrator gebruikt exact dezelfde pure `worker-needs.ts` om tekorten aan uitvoerbare workers te herkennen. Er komt **geen tweede agent of scheduler** bij. De Node-runner en Cloudflare gebruiken dezelfde vaste tekstadapters. Buildercode krijgt geen shell, filesystem, publicatie, internettoegang of extra werkermap.
+De controller importeert rechtstreeks de EAIwork-modules `missions.ts`, `registry.ts`, `selector.ts`, `worker-needs.ts`, `execution-site.ts`, `builder.ts` en `pure-text.ts`. De Node-Orchestrator gebruikt exact dezelfde pure `worker-needs.ts` om tekorten aan uitvoerbare workers te herkennen. Er komt **geen tweede agent of scheduler** bij. De Node-runner en Cloudflare gebruiken dezelfde vaste tekstadapters. Buildercode krijgt geen shell, filesystem, publicatie, internettoegang of extra werkermap.
 
 Een vrij geformuleerde aanvraag zoals 'bouw een dashboard' wordt dus **niet** stilletjes omgezet in een teksttelling en ook niet als uitgevoerd gemarkeerd. De aanvraag wordt bewaard; de workerbehoefte is zichtbaar. Dat is een registratie en selectie, geen automatische planvorming of codegeneratie.
 
-Wat **niet** online is: de bestaande generieke Codeworker, Docker-projecttests, RepoSearch in een lokale checkout, Ollama, algemene workerbouw en automatische GitHub-merge. Die mogen niet als werkend worden gepresenteerd.
+Wat **niet** online is: de bestaande generieke Codeworker, Docker-projecttests, RepoSearch in een lokale checkout, Ollama, een geauthenticeerde verbinding met een lokale executor, een cloud-Codeworker, algemene workerbouw en automatische GitHub-merge. Containers zijn in het huidige Cloudflare-account niet beschikbaar; de API verwijst naar Workers Paid. Die mogen niet als werkend worden gepresenteerd.
 
 ## Beveiliging
 
