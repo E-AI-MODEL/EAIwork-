@@ -224,6 +224,41 @@ function showDetails(m,w){
     m.execution?.requested==="cloud"?"Cloud, geen adapter":"Automatisch, geen geschikte uitvoerder"
   ),"muted");
   detail.append(loc);
+  if(m.status==="queued"&&m.execution){
+    const placement=el("section",undefined,"detail-section");
+    const heading=el("h2","Uitvoerplek wijzigen");
+    placement.append(heading);
+    const form=el("fieldset",undefined,"runtime-picker");
+    const choices=el("div",undefined,"runtime-options");
+    const choiceName="site-"+m.id;
+    const buttons=[];
+    for(const [value,label] of [["auto","Automatisch"],["local","Lokaal"],["cloud","Cloud"]]){
+      const wrap=el("label",undefined);
+      const input=el("input");input.type="radio";input.name=choiceName;input.value=value;
+      input.checked=m.execution.requested===value;
+      wrap.append(input,document.createTextNode(label));choices.append(wrap);buttons.push(input);
+    }
+    const save=el("button","Uitvoerplek opslaan","primary");
+    save.type="button";save.disabled=true;
+    buttons.forEach(input=>input.addEventListener("change",()=>{
+      save.disabled=busy||!buttons.some(i=>i.checked&&i.value!==m.execution.requested);
+    }));
+    save.addEventListener("click",async()=>{
+      if(busy)return;
+      const wanted=buttons.find(i=>i.checked)?.value;
+      if(!wanted||wanted===m.execution.requested)return;
+      busy=true;save.disabled=true;note("Uitvoerplek aanpassen...");
+      try{
+        const d=await request("/api/action",{type:"route",missionId:m.id,
+          expectedRevision:m.revision,executionPreference:wanted});
+        render(d.state);
+        note("Keuze bewaard. Een uitvoerder wordt hierdoor nog niet gestart.");
+      }catch(e){note(String(e.message||e),true)}
+      finally{busy=false;await refresh(true)}
+    });
+    form.append(choices);placement.append(form,save);
+    detail.append(placement);
+  }
   if(m.requestedOutcome&&m.requestedOutcome!==m.title){
     const req=el("section",undefined,"detail-section");
     req.append(el("h2","Jouw opdracht"),el("p",m.requestedOutcome));detail.append(req);
