@@ -209,7 +209,7 @@ function renderPromptChoices(){
     b.className="prompt-choice";b.setAttribute("aria-pressed",String(selectedPromptId===p.id));
     const title=document.createElement("strong");title.textContent=p.title;
     const info=document.createElement("small");
-    info.textContent=p.summary+" · "+(p.supported?"Beschikbaar":"Nog niet uitvoerbaar");
+    info.textContent=p.summary+" · "+(p.supported?"Template aanwezig":"Nog niet uitvoerbaar");
     b.append(title,info);
     b.addEventListener("click",()=>usePrompt(p));box.append(b);
   }
@@ -517,7 +517,7 @@ $("csv-file").addEventListener("change",async event=>{
 $("example-csv").addEventListener("click",()=>{
   const preset=PROMPT_STARTERS.find(x=>x.id==="csv-dashboard");
   if(preset){$("instruction").value=preset.instruction;selectedPromptId=preset.id;renderPromptChoices();}
-  $("instruction").value="Bouw een interactief dashboard van deze CSV-gegevens";
+  $("prompt-feedback").textContent="Voorbeeldprompt en CSV ingevuld. Bekijk de tekst voordat je de opdracht vastlegt.";
   $("source-details").open=true;
   $("source").value="Afdeling;Maand;Aantal\nNoord;Januari;12\nZuid;Januari;18\nWest;Januari;9\nNoord;Februari;16\nZuid;Februari;21\nWest;Februari;14";
   $("instruction").focus();
@@ -551,6 +551,8 @@ $("create").addEventListener("submit",async ev=>{
     setMissionFilter("all");
     mobilePane="detail";showMobile("work");render(data.state);
     $("instruction").value="";$("source").value="";
+    selectedPromptId=null;renderPromptChoices();
+    $("prompt-feedback").textContent="Kies een nieuwe prompt of schrijf zelf.";
     note(data.result.stage==="unsupported"?
       "Opdracht opgeslagen. Er is nog geen passende Codeworker beschikbaar.":
       data.result.stage==="awaiting-executor"?
