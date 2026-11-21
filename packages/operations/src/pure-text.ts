@@ -56,7 +56,7 @@ export function runPureTextAdapter(kind:string,input:{text:string}):Record<strin
     BUILTINS[kind].run(structuredClone(input));
 }
 export function evaluateComposedFixture(contract:WorkerContract){
-  if(contract.id!=="text-inspector"||!safeComposition(contract))
+  if(!safeComposition(contract))
     throw new Error("untrusted fixed worker recipe");
   const cases=[
     {input:{text:"  Hallo  wereld\r\n"},expected:{text:"Hallo wereld",characters:12,words:2,lines:1,changed:true}},
