@@ -6,6 +6,7 @@ on:
       - 'packages/operations/src/pure-text.ts'
       - 'packages/operations/src/execution.ts'
       - 'cloudflare.config.ts'
+      - 'vite.config.ts'
       - 'tests/cloud-workspace.test.ts'
       - '.github/workflows/cloud-workspace-check.yml'
   workflow_dispatch: {}
@@ -26,7 +27,7 @@ jobs:
         run: node --test tests/cloud-workspace.test.ts
       - name: Build worker using current Cloudflare CLI
         run: |
-          npm install --no-save --ignore-scripts cf@latest
+          npm install --no-save cf@latest @cloudflare/vite-plugin@rc vite@latest
           npx cf build
       # This workflow never deploys, configures Cloudflare Access, or creates a
       # route on the existing eaimodel.nl website. The Access gate is fail-closed.
