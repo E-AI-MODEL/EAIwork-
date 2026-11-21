@@ -24,7 +24,7 @@ const person=(actorId:string)=>({kind:"person" as const,id:actorId});
 /** A bounded, explicit intent check. Never interpret a title like "build" as executable code. */
 export function cloudRequestKind(instruction:string,sourceText=""):"text-inspect"|"request-review"{
   const text=instruction.toLowerCase();
-  const safeTextIntent=/\b(inspecteer|tekstinspectie|tel(?:len)?\s+(?:het\s+)?(?:aantal\s+)?(?:woorden|tekens|regels)|hoeveel\s+(?:woorden|tekens|regels)|analyseer\s+(?:de|dit|mijn|een)\s+tekst|controleer\s+(?:de|dit|mijn|een)\s+tekst)\b/i;
+  const safeTextIntent=/\b(inspecteer|tekstinspectie|tel(?:len)?\s+(?:(?:de|het)\s+)?(?:aantal\s+)?(?:woorden|tekens|regels)|hoeveel\s+(?:woorden|tekens|regels)|analyseer\s+(?:de|dit|mijn|een)\s+tekst|controleer\s+(?:de|dit|mijn|een)\s+tekst)\b/i;
   const differentTask=/\b(bouw|bouwen|maak|maken|ontwikkel|programmeer|publiceer|verstuur|mail|verwijder|github|dashboard|website|app|code|deploy|worker|shell|terminal)\b/i;
   return sourceText.trim()&&safeTextIntent.test(text)&&!differentTask.test(text)
     ?"text-inspect":"request-review";
