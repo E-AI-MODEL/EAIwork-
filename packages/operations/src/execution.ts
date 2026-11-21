@@ -124,6 +124,7 @@ export function runMissionStep(store:OpsStore,missionId:string,maximum=4,repoSea
   const state=store.snapshot();
   const mission=state.missions[missionId];
   if(!mission)fail("unknown mission");
+  if(mission.plan.executionPreference==="cloud")fail("cloud-designated mission cannot run on the local executor");
   if(mission.paused)fail("mission paused");
   const ready=mission.plan.tasks.filter(spec=>
     mission.tasks[spec.id].status==="queued" &&
