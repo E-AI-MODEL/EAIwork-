@@ -362,9 +362,9 @@ function render(data){
     });tasks.append(b);
   }
   if(ms.length)showDetails(ms.find(m=>m.id===selectedId),w);
-  worker.textContent=w?
-    "Worker: "+w.id+" · "+(w.stage==="ready"?"Vrijgegeven":w.stage==="candidate"?"Geteste kandidaat":"Niet beschikbaar"):
-    "Er is nog geen worker vrijgegeven.";
+  worker.textContent="Tekst: "+(w?.stage==="ready"?"vrijgegeven":"niet vrijgegeven")+
+    " · CSV-dashboard: "+(data.dashboardWorker?.stage==="ready"?"vrijgegeven":
+      data.dashboardWorker?.stage==="candidate"?"getest, vrijgave nodig":"niet vrijgegeven");
 }
 async function refresh(silent=false){
   try{const data=await request("/api/state");render(data);if(!silent)note("")}
@@ -375,12 +375,19 @@ function updateRuntimeNote(){
   $("runtime-note").textContent=mode==="local"?
     "Lokaal is nog niet met deze browserwerkruimte verbonden. EAIwork bewaart de opdracht en start niets in de cloud.":
     mode==="cloud"?
-    "De cloudtekstworker werkt. De geïsoleerde cloud-Codeworker is nog niet aangesloten.":
-    "EAIwork kiest uitsluitend een toegestane, verbonden uitvoerder. Op dit moment is alleen de cloudtekstworker beschikbaar.";
+    "De cloudtekstworker en de vaste CSV-dashboardtemplate kunnen werken. De algemene Codeworker is nog niet aangesloten.":
+    "De cloudtekstworker en de vaste CSV-dashboardtemplate zijn mogelijk. EAIwork gebruikt alleen geteste, vrijgegeven workers.";
 }
 document.querySelectorAll('input[name="exec-location"]').forEach(input=>
   input.addEventListener("change",updateRuntimeNote));
 updateRuntimeNote();
+$("example-csv").addEventListener("click",()=>{
+  $("instruction").value="Bouw een interactief dashboard van deze CSV-gegevens";
+  $("source-details").open=true;
+  $("source").value="Afdeling;Maand;Aantal\nNoord;Januari;12\nZuid;Januari;18\nWest;Januari;9\nNoord;Februari;16\nZuid;Februari;21\nWest;Februari;14";
+  $("instruction").focus();
+  note("Voorbeeld ingevuld. Kies Cloud of Automatisch en leg de opdracht vast.");
+});
 $("refresh").addEventListener("click",()=>refresh());
 $("tab-create").addEventListener("click",()=>showMobile("create"));
 $("tab-work").addEventListener("click",()=>{
@@ -404,11 +411,13 @@ $("create").addEventListener("submit",async ev=>{
       data.result.stage==="awaiting-executor"?
         "Opdracht opgeslagen. De gekozen uitvoeromgeving is nog niet aangesloten.":
       data.result.stage==="done"?
-        "Tekstinspectie uitgevoerd met de reeds vrijgegeven worker.":
+        data.result.taskKind==="csv-dashboard"?
+          "HTML-dashboard samengesteld met de geteste template. Open het voorbeeld of download het bestand.":
+          "Tekstinspectie uitgevoerd met de reeds vrijgegeven worker.":
         "Opdracht opgeslagen. Bekijk de volgende stap bij Mijn werk.");
   }catch(e){
     const msg=String(e.message||e);note(msg,true);
-    if(msg.includes("brontekst")){
+    if(msg.includes("brontekst")||msg.includes("CSV")){
       $("source-details").open=true;$("source").focus();
     }
   }
