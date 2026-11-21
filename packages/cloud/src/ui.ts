@@ -17,6 +17,14 @@ h1{font-size:clamp(22px,3vw,30px);letter-spacing:-.043em;margin:0 0 5px;line-hei
 label{display:block;color:#4b6758;font-size:11px;font-weight:670;margin:0 0 8px}
 textarea{display:block;width:100%;border:1px solid #d7e3d9;border-radius:9px;padding:13px;background:#fbfcfb;color:#243c30;font-size:13px;line-height:1.6;resize:vertical;min-height:148px}
 textarea::placeholder{color:#91a296}#source{min-height:122px;margin-top:12px}
+.runtime-picker{border:0;margin:13px 0 0;padding:0;min-width:0}
+.runtime-picker legend{font-size:11px;font-weight:700;color:#506a59;margin-bottom:8px}
+.runtime-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.runtime-options label{display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer;border:1px solid #d6e2d9;background:#fff;border-radius:8px;padding:10px 5px;font-size:12px;font-weight:570;text-align:center;margin:0}
+.runtime-options input{position:absolute;opacity:0;width:1px;height:1px}
+.runtime-options label:has(input:checked){background:#eaf3ec;border-color:#72a082;color:#26543b;font-weight:750}
+.runtime-options label:has(input:focus-visible){outline:2px solid #256950;outline-offset:2px}
+.runtime-note{margin:8px 0 0;font-size:11px;color:#718579;line-height:1.55}
 button{border:1px solid #cbdccf;border-radius:8px;background:#fff;color:#264535;padding:9px 13px;cursor:pointer;font-weight:650;font-size:12px;min-height:35px;transition:background .18s}
 button:hover:not(:disabled){background:#f2f7f3}button:disabled{opacity:.5;cursor:not-allowed}
 button.primary{background:#27553d;border-color:#27553d;color:#fff}button.primary:hover:not(:disabled){background:#1e4832}
@@ -103,6 +111,12 @@ footer{display:none}
 <p class="hint" id="privacy-hint">Gebruik voorlopig alleen onschuldige testgegevens.</p>
 <details id="source-details"><summary>Tekst of gegevens toevoegen</summary><label for="source" class="hint">Alleen onschuldige testgegevens. Voor tekstinspectie is brontekst vereist.</label>
 <textarea id="source" maxlength="10000" placeholder="Plak hier de tekst waarop de opdracht betrekking heeft."></textarea></details>
+<fieldset class="runtime-picker"><legend>Uitvoeren via</legend>
+<div class="runtime-options">
+<label><input type="radio" name="exec-location" value="auto" checked>Automatisch</label>
+<label><input type="radio" name="exec-location" value="local">Lokaal</label>
+<label><input type="radio" name="exec-location" value="cloud">Cloud</label>
+</div><p id="runtime-note" class="runtime-note">EAIwork gebruikt alleen beschikbare, toegestane uitvoerders. Momenteel is uitsluitend de cloudtekstworker aangesloten.</p></fieldset>
 <div class="form-actions"><button type="submit" class="primary" id="submit">Opdracht vastleggen</button>
 <span class="hint">Nieuwe workers worden niet zonder jouw toestemming vrijgegeven.</span></div></form>
 <div id="message" role="status" aria-live="polite"></div>
@@ -145,6 +159,10 @@ function status(m){
   if(m.status==="done")return "Technisch afgerond";
   if(m.status==="failed")return "Uitvoering mislukt";
   if(m.sourceMissing||m.need?.status==="source-required")return "Brontekst ontbreekt";
+  if(m.execution?.status==="site-unavailable")return m.execution.requested==="local"?
+    "Lokale uitvoerder niet gekoppeld":"Cloud-uitvoerder niet gekoppeld";
+  if(m.execution?.status==="worker-unavailable"&&
+     m.execution.requested==="local")return "Lokaal geen geschikte worker";
   if(m.need?.status==="unsupported")return "Geen geschikte worker";
   if(m.need?.status==="condition-blocked")return "Wacht op beoordeling";
   if(m.need?.status==="buildable")return "Worker ontbreekt";
@@ -200,6 +218,47 @@ function showDetails(m,w){
   detail.append(back);
   if(!m){detail.append(el("p","Selecteer een opdracht voor voortgang en resultaat.","muted"));return}
   detail.append(el("h3",m.title),el("span",status(m),"stage"));
+  const loc=el("p","Uitvoering: "+(
+    m.execution?.site==="cloud"?"Cloud":
+    m.execution?.site==="local"?"Lokaal":m.execution?.requested==="local"?"Lokaal, niet gekoppeld":
+    m.execution?.requested==="cloud"?"Cloud, geen adapter":"Automatisch, geen geschikte uitvoerder"
+  ),"muted");
+  detail.append(loc);
+  if(m.status==="queued"&&m.execution){
+    const placement=el("section",undefined,"detail-section");
+    const heading=el("h2","Uitvoerplek wijzigen");
+    placement.append(heading);
+    const form=el("fieldset",undefined,"runtime-picker");
+    const choices=el("div",undefined,"runtime-options");
+    const choiceName="site-"+m.id;
+    const buttons=[];
+    for(const [value,label] of [["auto","Automatisch"],["local","Lokaal"],["cloud","Cloud"]]){
+      const wrap=el("label",undefined);
+      const input=el("input");input.type="radio";input.name=choiceName;input.value=value;
+      input.checked=m.execution.requested===value;
+      wrap.append(input,document.createTextNode(label));choices.append(wrap);buttons.push(input);
+    }
+    const save=el("button","Uitvoerplek opslaan","primary");
+    save.type="button";save.disabled=true;
+    buttons.forEach(input=>input.addEventListener("change",()=>{
+      save.disabled=busy||!buttons.some(i=>i.checked&&i.value!==m.execution.requested);
+    }));
+    save.addEventListener("click",async()=>{
+      if(busy)return;
+      const wanted=buttons.find(i=>i.checked)?.value;
+      if(!wanted||wanted===m.execution.requested)return;
+      busy=true;save.disabled=true;note("Uitvoerplek aanpassen...");
+      try{
+        const d=await request("/api/action",{type:"route",missionId:m.id,
+          expectedRevision:m.revision,executionPreference:wanted});
+        render(d.state);
+        note("Keuze bewaard. Een uitvoerder wordt hierdoor nog niet gestart.");
+      }catch(e){note(String(e.message||e),true)}
+      finally{busy=false;await refresh(true)}
+    });
+    form.append(choices);placement.append(form,save);
+    detail.append(placement);
+  }
   if(m.requestedOutcome&&m.requestedOutcome!==m.title){
     const req=el("section",undefined,"detail-section");
     req.append(el("h2","Jouw opdracht"),el("p",m.requestedOutcome));detail.append(req);
@@ -211,11 +270,14 @@ function showDetails(m,w){
     const actions=el("div",undefined,"actions");
     const b=el("button","Brontekst toevoegen","primary");
     b.type="button";b.addEventListener("click",()=>requestSource(m));actions.append(b);next.append(actions);
+  }else if(m.execution?.site===null){
+    next.append(el("p",(m.execution.reason||"Geen veilige uitvoeromgeving beschikbaar.")+
+      " De opdracht blijft bewaard. Er is geen lokale taak gestart, geen cloudcode uitgevoerd en niets gepubliceerd."));
   }else if(m.need?.status==="unsupported"){
     next.append(el("p","De opdracht is bewaard, maar deze cloudversie kan dit soort werk nog niet uitvoeren. Er is geen geschikte uitvoerbare Codeworker of geteste Builder-receptuur. Er is niets gebouwd of gepubliceerd."));
   }else{
     next.append(el("p",m.need?.reason||"Wacht op de volgende uitvoeringsstap."));
-    if(m.taskKind==="text-inspect"){
+    if(m.taskKind==="text-inspect"&&m.execution?.site==="cloud"){
       const actions=el("div",undefined,"actions");
       if(!w)actions.append(button("Worker samenstellen en testen","prepare",m.id));
       else if(w.stage==="candidate")actions.append(button("Geteste worker vrijgeven","release",m.id));
@@ -252,6 +314,17 @@ async function refresh(silent=false){
   try{const data=await request("/api/state");render(data);if(!silent)note("")}
   catch(e){note(String(e.message||e),true)}
 }
+function updateRuntimeNote(){
+  const mode=document.querySelector('input[name="exec-location"]:checked')?.value||"auto";
+  $("runtime-note").textContent=mode==="local"?
+    "Lokaal is nog niet met deze browserwerkruimte verbonden. EAIwork bewaart de opdracht en start niets in de cloud.":
+    mode==="cloud"?
+    "De cloudtekstworker werkt. De geïsoleerde cloud-Codeworker is nog niet aangesloten.":
+    "EAIwork kiest uitsluitend een toegestane, verbonden uitvoerder. Op dit moment is alleen de cloudtekstworker beschikbaar.";
+}
+document.querySelectorAll('input[name="exec-location"]').forEach(input=>
+  input.addEventListener("change",updateRuntimeNote));
+updateRuntimeNote();
 $("refresh").addEventListener("click",()=>refresh());
 $("tab-create").addEventListener("click",()=>showMobile("create"));
 $("tab-work").addEventListener("click",()=>{
@@ -265,12 +338,15 @@ $("create").addEventListener("submit",async ev=>{
   $("submit").disabled=true;
   try{
     const data=await request("/api/action",{type:"submit",
-      instruction:$("instruction").value,sourceText:$("source").value});
+      instruction:$("instruction").value,sourceText:$("source").value,
+      executionPreference:document.querySelector('input[name="exec-location"]:checked')?.value||"auto"});
     selectedId=data.result.missionId;
     mobilePane="detail";showMobile("work");render(data.state);
     $("instruction").value="";$("source").value="";
     note(data.result.stage==="unsupported"?
-      "Opdracht opgeslagen. De huidige cloudversie kan deze nog niet uitvoeren.":
+      "Opdracht opgeslagen. Er is nog geen passende Codeworker beschikbaar.":
+      data.result.stage==="awaiting-executor"?
+        "Opdracht opgeslagen. De gekozen uitvoeromgeving is nog niet aangesloten.":
       data.result.stage==="done"?
         "Tekstinspectie uitgevoerd met de reeds vrijgegeven worker.":
         "Opdracht opgeslagen. Bekijk de volgende stap bij Mijn werk.");

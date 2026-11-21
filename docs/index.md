@@ -5,6 +5,7 @@ Begin bij de [README](../README.md). Dit overzicht koppelt de onderdelen aan de 
 - **Bewijsregels:** [atomaire beweringen](atomic-claim-contract.md), [ontwerp voor herkomst en bevestiging](../proposals/0001-independence-and-proven.md), [controle van de bewijskern](alignment/bouwronde-2026-11-13.md), [veiligheidsgrenzen](../SECURITY.md).
 - **Uitvoering en lokale codeproef:** [bouwplan](first-product-roadmap-2026-11-11.md), [Docker-projecttests](local-project-suite-smoke.md), [opdrachten en uitvoerders](mission-execution-v0.1.md), [model- en workerversies](worker-versions-and-evidence-links.md).
 - **Ontbrekende workers:** [Builder-koppeling met vacatures, echte fixtures en menselijke vrijgave](orchestrator-builder.md). Dit is een beperkte lokale samenstellingsproef, geen algemene codegenerator.
+- **Uitvoerplek:** [één EAIwork met keuze voor lokaal, cloud of automatisch](execution-local-cloud.md). Beschrijft de huidige technische aansluiting en de ontbrekende executors zonder fictieve codebouw.
 - **Controle van uitgifte:** [release-dossier](release-dossier-v0.1.md), [GitHub-run controleren](github-ci-verification-v0.1.md), [controle van artifactbytes](github-actions-artifact-v0.1.md).
 - **Onderzoek en metingen:** [Ollama-contracten en metingen per aanroep](ollama-call-contracts.md), [modelvergelijking](atom-vs-whole-comparison.md), [bevroren validatie](frozen-cross-domain-validation.md), [onderzoeksgrenzen](validation-3b-7b-after-action.md).
 - **Versies:** [wijzigingen](../CHANGELOG.md), [v0.1.0](releases/v0.1.0.md).

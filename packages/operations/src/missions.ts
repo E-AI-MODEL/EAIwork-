@@ -35,6 +35,8 @@ export interface MissionPhase {
   taskIds:string[];
 }
 export interface MissionPlan {
+  /** Owner-selected site preference, NOT an authorization or an execution grant. */
+  executionPreference?:"auto"|"local"|"cloud";
   /** The original request is preserved unchanged; no model may rewrite it. */
   sourceInstruction?:string;
   constraints?:MissionConstraint[];
@@ -127,6 +129,7 @@ export interface MissionRecord {
 }
 export type MissionEvent =
   | {type:"mission.create";plan:MissionPlan}
+  | {type:"mission.execution.select";missionId:string;expectedRevision:number;executionPreference:"auto"|"local"|"cloud"}
   | {type:"mission.pause";missionId:string}
   | {type:"mission.extend";missionId:string;expectedRevision:number;plan:MissionPlan}
   | {type:"mission.release.submit";missionId:string;expectedRevision:number;candidate:ReleaseCandidate}
@@ -193,6 +196,8 @@ export function validateReleaseCandidate(candidate:ReleaseCandidate):void {
 export function validateMissionPlan(plan:MissionPlan):void {
   if(!plain(plan)||typeof plan.id!=="string"||!ID.test(plan.id))fail("invalid mission id");
   bounded(plan.title,"mission title",160);bounded(plan.goal,"mission goal",1500);
+  if(plan.executionPreference!==undefined&&
+     !["auto","local","cloud"].includes(plan.executionPreference))fail("invalid execution preference");
   if(!Array.isArray(plan.tasks)||plan.tasks.length<1||plan.tasks.length>32)fail("mission must have 1-32 tasks");
   const ids=new Set<string>();
   for(const task of plan.tasks){
@@ -289,8 +294,9 @@ export function validateMissionExtension(mission:MissionRecord,plan:MissionPlan,
     validateMissionPlan(plan);
     const old=mission.plan;
     if(old.id!==plan.id||old.title!==plan.title||old.goal!==plan.goal||
-       old.sourceInstruction!==plan.sourceInstruction)
-      fail("an extension must preserve the original mission instruction");
+       old.sourceInstruction!==plan.sourceInstruction||
+       (old.executionPreference??"auto")!==(plan.executionPreference??"auto"))
+      fail("an extension must preserve the original mission instruction and execution preference");
     if(plan.tasks.length<=old.tasks.length||
        old.tasks.some((task,i)=>JSON.stringify(plan.tasks[i])!==JSON.stringify(task)))
       fail("an extension may only append tasks, never rewrite existing work");
@@ -323,6 +329,23 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
   }
   if(typeof e.missionId!=="string")fail("missing mission");
   const mission=missions[e.missionId];if(!mission)fail("unknown mission");
+  if(e.type==="mission.execution.select"){
+    if(actor.kind!=="person"||actor.id!==mission.createdBy)
+      fail("only the original mission owner may choose an execution site");
+    if(!Number.isSafeInteger(e.expectedRevision)||e.expectedRevision!==mission.revision)
+      fail("stale execution preference revision");
+    if(!["auto","local","cloud"].includes(e.executionPreference))
+      fail("invalid execution preference");
+    if((mission.plan.executionPreference??"auto")===e.executionPreference)
+      fail("execution preference already selected");
+    if(mission.paused||mission.automation?.enabled||mission.releaseDossier||
+       Object.values(mission.tasks).some(t=>t.status!=="queued"||t.run))
+      fail("execution preference may change only before any task starts");
+    mission.plan.executionPreference=e.executionPreference;
+    mission.revision++;
+    // Selecting a site never grants any new permission, worker, or test authority.
+    return;
+  }
   if(e.type==="mission.extend"){
     if(actor.kind!=="person"||actor.id!==mission.createdBy)
       fail("mission extension requires the original human approver");
@@ -454,6 +477,7 @@ export function applyMissionEvent(missions:Record<string,MissionRecord>,e:Missio
     if(e.resumeAfterRestart!==undefined&&typeof e.resumeAfterRestart!=="boolean")
       fail("invalid restart continuation consent");
     if(mission.paused||mission.automation?.enabled)fail("mission paused or automation already active");
+    if(mission.plan.executionPreference==="cloud")fail("cloud-designated mission cannot be scheduled on the local executor");
     if(e.executionMode!==undefined &&
        !["local-scheduler","remote-text"].includes(e.executionMode))
       fail("invalid automation execution mode");

@@ -5,11 +5,15 @@ on:
       - 'packages/cloud/**'
       - 'packages/operations/src/pure-text.ts'
       - 'packages/operations/src/worker-needs.ts'
+      - 'packages/operations/src/execution-site.ts'
+      - 'packages/operations/src/missions.ts'
+      - 'packages/operations/src/executor-channel.ts'
       - 'packages/operations/src/orchestrator.ts'
       - 'packages/operations/src/execution.ts'
       - 'cloudflare.config.ts'
       - 'vite.config.ts'
       - 'tests/cloud-workspace.test.ts'
+      - 'tests/execution-placement.test.ts'
       - '.github/workflows/cloud-workspace-check.yml'
   workflow_dispatch: {}
 permissions:
@@ -26,7 +30,7 @@ jobs:
         with:
           node-version: 22
       - name: Cloud controller tests
-        run: node --test tests/cloud-workspace.test.ts
+        run: node --test tests/cloud-workspace.test.ts tests/execution-placement.test.ts
       - name: Build worker using current Cloudflare CLI
         run: |
           npm install --no-audit --no-fund

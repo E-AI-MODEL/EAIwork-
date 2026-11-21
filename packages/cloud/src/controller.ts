@@ -9,10 +9,12 @@ import {evaluateComposedFixture,runPureTextAdapter,safeComposition} from "../../
 import {missionProgress,blockingConstraints} from "../../operations/src/missions.ts";
 import {selectWorker} from "../../operations/src/selector.ts";
 import {inspectMissionWorkerNeedsWithInventory} from "../../operations/src/worker-needs.ts";
+import {chooseExecutionSite,CLOUD_PILOT_SITES,type ExecutionPreference} from "../../operations/src/execution-site.ts";
 
 export type CloudAction=
   | {type:"create";title:string;text:string}
-  | {type:"submit";instruction:string;sourceText?:string}
+  | {type:"submit";instruction:string;sourceText?:string;executionPreference?:ExecutionPreference}
+  | {type:"route";missionId:string;expectedRevision:number;executionPreference:ExecutionPreference}
   | {type:"prepare";missionId:string}
   | {type:"release";missionId:string}
   | {type:"run";missionId:string};
@@ -40,8 +42,9 @@ export function validateCloudAction(value:unknown):CloudAction {
   if(!value||typeof value!=="object"||Array.isArray(value))return deny("Ongeldige opdracht");
   const a=value as Record<string,unknown>;
   if(a.type==="submit"){
-    if(Object.keys(a).some(k=>!["type","instruction","sourceText"].includes(k))||
+    if(Object.keys(a).some(k=>!["type","instruction","sourceText","executionPreference"].includes(k))||
       typeof a.instruction!=="string"||!a.instruction.trim()||a.instruction.length>1500||
+      (a.executionPreference!==undefined&&!["auto","local","cloud"].includes(String(a.executionPreference)))||
       (a.sourceText!==undefined&&
         (typeof a.sourceText!=="string"||a.sourceText.length>10000)))
       return deny("Beschrijf de opdracht in maximaal 1500 tekens en voeg eventueel een tekst toe");
@@ -49,7 +52,9 @@ export function validateCloudAction(value:unknown):CloudAction {
        (typeof a.sourceText!=="string"||!a.sourceText.trim()))
       return deny("Voor deze tekstcontrole ontbreekt de brontekst. Voeg eerst een tekst toe.");
     return {type:"submit",instruction:a.instruction.trim(),
-      ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{})};
+      ...(typeof a.sourceText==="string"?{sourceText:a.sourceText}:{}),
+      ...(a.executionPreference===undefined?{}:
+        {executionPreference:a.executionPreference as ExecutionPreference})};
   }
   if(a.type==="create"){
     if(Object.keys(a).some(k=>!["type","title","text"].includes(k))||
@@ -57,6 +62,16 @@ export function validateCloudAction(value:unknown):CloudAction {
        typeof a.text!=="string"||!a.text.trim()||a.text.length>12000)
       return deny("Titel of tekst ontbreekt of is te lang");
     return {type:"create",title:a.title.trim(),text:a.text};
+  }
+  if(a.type==="route"){
+    if(Object.keys(a).some(k=>!["type","missionId","expectedRevision","executionPreference"].includes(k))||
+       typeof a.missionId!=="string"||!idPattern.test(a.missionId)||
+       !Number.isSafeInteger(a.expectedRevision)||Number(a.expectedRevision)<1||
+       typeof a.executionPreference!=="string"||
+       !["auto","local","cloud"].includes(a.executionPreference))
+      return deny("Ongeldige uitvoerkeuze of verouderde opdracht");
+    return {type:"route",missionId:a.missionId,expectedRevision:a.expectedRevision as number,
+      executionPreference:a.executionPreference as ExecutionPreference};
   }
   if(["prepare","release","run"].includes(String(a.type))&&
      Object.keys(a).length===2&&typeof a.missionId==="string"&&idPattern.test(a.missionId))
@@ -75,10 +90,13 @@ export function cloudView(state:OpsState) {
       typeof m.plan.sourceInstruction==="string"&&
       cloudNeedsSource(m.plan.sourceInstruction)&&
       task?.spec.input?.text===m.plan.sourceInstruction;
+    const location=chooseExecutionSite(
+      task?.spec.taskKind??"request-review",m.plan.executionPreference??"auto",CLOUD_PILOT_SITES);
     return {id:m.plan.id,title:m.plan.title,createdAt:m.createdAt,
       revision:m.revision,progress,status:task?.status??"unknown",
       sourceMissing,
       taskKind:task?.spec.taskKind??"unknown",
+      execution:location,
       requestedOutcome:m.plan.sourceInstruction??null,
       need:sourceMissing?{
         status:"source-required",reason:"Er ontbreekt brontekst. Voeg de tekst toe om deze inspectie uit te voeren.",
@@ -88,7 +106,7 @@ export function cloudView(state:OpsState) {
       owner:m.createdBy};
   });
   const worker=state.workers["text-inspector"];
-  return {missions,worker:worker?
+  return {missions,availableExecutionSites:CLOUD_PILOT_SITES,worker:worker?
     {id:worker.contract.id,version:worker.contract.version,stage:worker.stage,
       releaseEvidence:worker.releaseEvidence??null}:null,
     journalLength:state.history.length,
@@ -108,26 +126,40 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
     const id="mission-"+crypto.randomUUID().replaceAll("-","").slice(0,20);
     const isRequest=action.type==="submit";
     const kind=isRequest?cloudRequestKind(action.instruction,action.sourceText):"text-inspect";
+    const executionPreference=isRequest?(action.executionPreference??"auto"):"cloud";
+    const placement=chooseExecutionSite(kind,executionPreference,CLOUD_PILOT_SITES);
     const instruction=isRequest?action.instruction:"Voer een deterministische tekstinspectie uit";
     const title=isRequest?instruction.split("\n")[0].slice(0,120):action.title;
     const inputText=isRequest?(action.sourceText||instruction):action.text;
     push(person(actorId),{type:"mission.create",plan:{
       id,title,goal:instruction,
-      ...(isRequest?{sourceInstruction:instruction}:{}),
+      ...(isRequest?{sourceInstruction:instruction,executionPreference}:{}),
       tasks:[{id:"task-inspect",title:kind==="text-inspect"?"Tekstinspectie":"Nog niet ondersteunde opdracht",
         taskKind:kind,effect:"local",
         dependsOn:[],input:{text:inputText}}],
     }});
-    result={missionId:id,stage:kind==="text-inspect"?"queued":"unsupported",
-      taskKind:kind};
+    result={missionId:id,stage:kind!=="text-inspect"?"unsupported":
+      placement.site==="cloud"?"queued":"awaiting-executor",
+      taskKind:kind,execution:placement};
   }else{
     const m=state.missions[action.missionId];
     if(!m)throw new Error("Onbekende opdracht");
     if(m.createdBy!==actorId)throw new Error("Alleen de eigenaar kan deze opdracht wijzigen");
+    if(action.type==="route"){
+      push(person(actorId),{type:"mission.execution.select",missionId:action.missionId,
+        expectedRevision:action.expectedRevision,executionPreference:action.executionPreference});
+      result={stage:"route-selected",missionId:action.missionId,
+        execution:chooseExecutionSite(m.tasks["task-inspect"]?.spec.taskKind??"request-review",
+          action.executionPreference,CLOUD_PILOT_SITES)};
+    }else{
     const task=m.tasks["task-inspect"];
     if(!task||task.spec.taskKind!=="text-inspect"||
        task.spec.effect!=="local"||blockingConstraints(m,task.spec.id).length)
-      throw new Error("Deze opdracht is niet geschikt voor deze lokale worker");
+      throw new Error("Deze opdracht is niet geschikt voor deze tekstworker");
+    const location=chooseExecutionSite(task.spec.taskKind,
+      m.plan.executionPreference??"auto",CLOUD_PILOT_SITES);
+    if(location.site!=="cloud")
+      throw new Error("De gekozen uitvoeromgeving is niet gekoppeld. Geen uitvoering of workerbouw gestart.");
     if(action.type==="prepare"){
       if(task.status!=="queued"||m.paused||m.automation?.enabled)
         throw new Error("Opdracht is niet vrijgegeven voor workerbouw");
@@ -189,12 +221,14 @@ export async function cloudTransition(state:OpsState,input:unknown,actorId:strin
           output,outputHash});
       result={stage:"done",missionId:action.missionId,output,verification:"not-evaluated"};
     }
+    }
   }
   let next=state;
   for(const envelope of events)next=applyOps(next,envelope);
   // Side-effect-free, explicitly requested text inspection may reuse an
   // already released worker. No implicit building, release or external action.
   if(action.type==="submit"&&result.taskKind==="text-inspect"&&
+     result.stage==="queued"&&
      selectWorker({taskKind:"text-inspect"},next,{
        ...inventory,adapterIds:[...inventory.adapterIds],
        supportedModelSizes:[...inventory.supportedModelSizes],

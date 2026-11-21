@@ -41,6 +41,7 @@ export function prepareMissingWorker(
   const current=store.snapshot();
   const mission=current.missions[missionId];
   if(!mission)throw new Error("unknown mission");
+  if(mission.plan.executionPreference==="cloud")throw new Error("cloud-designated mission cannot build a local worker");
   if(typeof options.requestedBy!=="string"||!options.requestedBy.trim()||
      mission.createdBy!==options.requestedBy)
     throw new Error("only mission owner may prepare workers");

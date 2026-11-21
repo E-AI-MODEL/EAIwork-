@@ -2,6 +2,7 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {applyOps,emptyOps} from "../packages/operations/src/registry.ts";
+import {chooseExecutionSite,CLOUD_PILOT_SITES} from "../packages/operations/src/execution-site.ts";
 import {cloudTransition,cloudView,validateCloudAction,cloudRequestKind,cloudNeedsSource,digest} from "../packages/cloud/src/controller.ts";
 
 const owner="person:cloud-owner";
@@ -193,5 +194,79 @@ test("Mobile workspace fits the viewport and switches between real task and crea
   assert.match(ui.javascript,/showMobile\("work"\)/);
   assert.match(ui.javascript,/mobilePane="detail";showMobile\("work"\);render\(data\.state\)/);
   assert.match(ui.html,/Gebruik voorlopig alleen onschuldige testgegevens/);
+  assert.doesNotMatch(ui.javascript,/innerHTML/);
+});
+
+test("Owner may choose local, cloud or auto, but preference cannot grant authority",async()=>{
+  const task="text-inspect";
+  assert.equal(chooseExecutionSite(task,"cloud",CLOUD_PILOT_SITES).site,"cloud");
+  assert.equal(chooseExecutionSite(task,"auto",CLOUD_PILOT_SITES).site,"cloud");
+  assert.equal(chooseExecutionSite(task,"local",CLOUD_PILOT_SITES).site,null);
+  assert.equal(chooseExecutionSite(task,"local",CLOUD_PILOT_SITES).status,"site-unavailable");
+  assert.equal(chooseExecutionSite("request-review","auto",CLOUD_PILOT_SITES).site,null);
+  assert.equal(chooseExecutionSite("request-review","cloud",CLOUD_PILOT_SITES).site,null);
+  assert.throws(()=>chooseExecutionSite(task,"remote" as any,CLOUD_PILOT_SITES));
+  assert.throws(()=>chooseExecutionSite(task,"auto",[{id:"cloud",connected:true,taskKinds:[task]},
+    {id:"cloud",connected:true,taskKinds:[task]}]));
+  // A local-first policy is only effective if the trusted host reports an
+  // actually attached local executor. Client hints do not create one.
+  const pilot=[{id:"local" as const,connected:true,taskKinds:[task]},
+    {id:"cloud" as const,connected:true,taskKinds:[task]}];
+  assert.equal(chooseExecutionSite(task,"auto",pilot).site,"local");
+  assert.equal(chooseExecutionSite(task,"cloud",pilot).site,"cloud");
+});
+test("Local-only browser mission waits without cloud execution even with a released worker",async()=>{
+  let state=emptyOps();
+  let first=await commit(state,{type:"create",title:"De vrijgegeven worker",text:"een"});
+  state=first.next;const id=first.result.missionId as string;
+  state=(await commit(state,{type:"prepare",missionId:id})).next;
+  state=(await commit(state,{type:"release",missionId:id})).next;
+  const instruction="Tel de woorden in deze tekst";
+  const created=await commit(state,{type:"submit",instruction,sourceText:"Een test",
+    executionPreference:"local"});
+  const id2=created.result.missionId as string;
+  assert.equal(created.result.stage,"awaiting-executor");
+  assert.deepEqual(created.events.map(e=>e.event.type),["mission.create"]);
+  assert.equal(created.next.missions[id2].plan.executionPreference,"local");
+  assert.equal(created.next.missions[id2].tasks["task-inspect"].status,"queued");
+  const view=cloudView(created.next).missions.find(m=>m.id===id2)!;
+  assert.equal(view.execution.site,null);
+  assert.equal(view.execution.status,"site-unavailable");
+  assert.equal(view.output,null);
+  await assert.rejects(commit(created.next,{type:"run",missionId:id2}),/niet gekoppeld/);
+  await assert.rejects(commit(created.next,{type:"prepare",missionId:id2}),/niet gekoppeld/);
+  assert.equal(state.history.length+1,created.next.history.length);
+});
+test("Explicit cloud missions still reuse the registered, tested text worker",async()=>{
+  let state=emptyOps();
+  const created=await commit(state,{type:"create",title:"Bouw fixture",text:"een"});
+  state=created.next;
+  state=(await commit(state,{type:"prepare",missionId:created.result.missionId as string})).next;
+  state=(await commit(state,{type:"release",missionId:created.result.missionId as string})).next;
+  const ran=await commit(state,{type:"submit",
+    instruction:"Tel de woorden in deze tekst",sourceText:"Een en twee",
+    executionPreference:"cloud"});
+  assert.equal(ran.result.stage,"done");
+  assert.deepEqual(ran.events.map(e=>e.event.type),["mission.create","task.started","task.completed"]);
+  const mission=cloudView(ran.next).missions[0];
+  assert.equal(mission.execution.site,"cloud");
+  assert.equal(mission.output?.words,3);
+  assert.equal(mission.verification,"not-evaluated");
+});
+test("Execution mode in the browser is a request preference, not a trusted executor claim",async()=>{
+  const state=emptyOps();
+  for(const input of [
+    {type:"submit",instruction:"Bouw een dashboard",executionPreference:"cloud",
+      runner:{verified:true}},
+    {type:"submit",instruction:"Bouw een dashboard",executionPreference:"remote"},
+    {type:"submit",instruction:"Bouw een dashboard",executionPreference:true},
+    {type:"submit",instruction:"Bouw een dashboard",executionPreference:null},
+  ])await assert.rejects(commit(state,input));
+  assert.equal(Object.keys(state.missions).length,0);
+  const ui=await import("../packages/cloud/src/ui.ts");
+  assert.match(ui.html,/name="exec-location" value="auto"/);
+  assert.match(ui.html,/name="exec-location" value="local"/);
+  assert.match(ui.html,/name="exec-location" value="cloud"/);
+  assert.match(ui.javascript,/executionPreference:document\.querySelector/);
   assert.doesNotMatch(ui.javascript,/innerHTML/);
 });
