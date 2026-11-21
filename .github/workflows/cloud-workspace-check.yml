@@ -17,6 +17,7 @@ on:
       - 'tests/cloud-workspace.test.ts'
       - 'tests/execution-placement.test.ts'
       - 'tests/csv-dashboard-worker.test.ts'
+      - 'tests/prompt-selection.test.ts'
       - '.github/workflows/cloud-workspace-check.yml'
   workflow_dispatch: {}
 permissions:
@@ -33,7 +34,7 @@ jobs:
         with:
           node-version: 22
       - name: Cloud controller tests
-        run: node --test tests/cloud-workspace.test.ts tests/execution-placement.test.ts tests/csv-dashboard-worker.test.ts
+        run: node --test tests/cloud-workspace.test.ts tests/execution-placement.test.ts tests/csv-dashboard-worker.test.ts tests/prompt-selection.test.ts
       - name: Build worker using current Cloudflare CLI
         run: |
           npm install --no-audit --no-fund
