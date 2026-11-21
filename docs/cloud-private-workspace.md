@@ -101,3 +101,33 @@ AVG-goedkeuring voor persoonsgegevens, geen geverifieerde statistische
 betekenis van de weergegeven waarden, geen live synchronisatie met Excel,
 geen generieke Codeworker en geen automatisch online publiceren van de
 geleverde HTML. De HTML is bedoeld als een lokaal te openen demonstratiebestand.
+
+
+## Selecteerbare promptfilters in de mobiele werkruimte
+
+De gebruiker kan onder **Nieuwe opdracht** nu een voorbeeldprompt selecteren in
+plaats van alles vanaf nul te typen. De beperkte bibliotheek biedt de filters
+**Alles, Data, Tekst, Software** en een aanvullende keuze voor huidige
+uitvoerbaarheid. De gekozen prompt verschijnt in het bestaande vrije
+opdrachtveld en blijft bewerkbaar. Voor CSV en tekst wordt de broninvoer geopend.
+De gebruiker moet altijd zelf op **Opdracht vastleggen** drukken. Het kiezen
+van een prompt verleent geen rechten en voert niets uit.
+
+De presets staan in `packages/cloud/src/prompt-starters.ts`. Zij zijn
+datagedreven en bevatten geen ingevoerde prompts van een model. Het label
+'template aanwezig' betekent dat de bestaande tekst- of CSV-Builderroute
+aanwezig is; vrijgave van een nieuwe worker kan nog nodig zijn. Software- en
+RepoSearch-prompts worden als **nog niet uitvoerbaar** aangeboden en als gewone,
+niet-uitgevoerde missie bewaard. Het selecteren van een prompt verandert geen
+beschikbaarheid, bewijsstatus of uitvoerbeleid.
+
+Onder **Mijn werk** kunnen bestaande opdrachten met **Alle**, **Open**,
+**Afgerond** en **Wacht** worden gefilterd. Een zoekveld doorzoekt titels en
+oorspronkelijke opdrachttaal. Het filter werkt alleen in de browser; originele
+opdrachten, hun werkerversies en de Durable Object-gebeurtenissen worden niet
+aangepast. Bij een nieuwe opdracht wordt het overzicht tijdelijk op **Alle**
+gezet, zodat het nieuwe resultaat direct zichtbaar is.
+
+De bibliotheek is een eerste compacte verzameling voor de private proef,
+geen dynamische AI-promptgenerator. De rechten, echte workerselectie en
+inhoudelijke verificatie worden uitsluitend door de server bepaald.
