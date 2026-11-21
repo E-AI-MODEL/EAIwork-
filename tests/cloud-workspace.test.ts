@@ -73,7 +73,9 @@ test("Cloudflare worker cannot process private data without Access identity",()=
   assert.match(worker,/EAI_ACCESS_AUD/);
   assert.match(worker,/request\.headers\.get\("origin"\)!==url\.origin/);
   assert.match(worker,/journal hash mismatch/);
-  assert.match(cfg,/eaiwork-private/);
+  assert.match(cfg,/name:"eaiwork"/);
+  assert.match(cfg,/previewUrls:false/);
+  assert.match(cfg,/workersDev:true/);
   assert.doesNotMatch(cfg,/eaimodel\.nl\/\*/);
   assert.doesNotMatch(worker,/eval\(|new Function\(/);
 });
